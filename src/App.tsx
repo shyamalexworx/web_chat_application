@@ -22,7 +22,6 @@ import { KeyboardShortcutsModal } from './components/modals/KeyboardShortcutsMod
 import { TranslationModal } from './components/modals/TranslationModal';
 import { GoogleMeetModal } from './components/modals/GoogleMeetModal';
 import { SecurityModal } from './components/modals/SecurityModal';
-import { SupabaseConnectModal } from './components/modals/SupabaseConnectModal';
 import { ToastContainer } from './components/toast/ToastContainer';
 import { AuthPage } from './components/auth/AuthPage';
 
@@ -32,8 +31,6 @@ const ChatDashboard: React.FC = () => {
     activeThreadMessage,
     isRightPanelOpen,
     isAIAssistantOpen,
-    isSupabaseModalOpen,
-    setIsSupabaseModalOpen,
   } = useChat();
 
   // Lock window and document scrolling so nested containers never shift ancestor layout
@@ -104,11 +101,7 @@ const ChatDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* Global Modals & Notifications accessible everywhere */}
-      <SupabaseConnectModal
-        isOpen={isSupabaseModalOpen}
-        onClose={() => setIsSupabaseModalOpen(false)}
-      />
+      {/* Global Notifications accessible everywhere */}
       <ToastContainer />
     </>
   );

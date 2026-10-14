@@ -179,6 +179,7 @@ export async function supabaseSignUp(params: {
       id: data.user.id,
       username: params.username.trim(),
       full_name: params.fullName.trim(),
+      email: params.email.trim(),
       avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(params.username)}`,
       role: 'member',
       is_online: true,
@@ -199,17 +200,50 @@ export async function supabaseSignIn(email: string, password?: string) {
   if (!isSupabaseConfigured) return null;
 
   const pwd = password || 'PulseChat@2026';
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.trim(),
-    password: pwd,
-  });
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password: pwd,
+    });
 
-  if (error) throw error;
-  return data;
+    if (error) throw error;
+
+    // Mark online in profiles
+    if (data.user) {
+      await supabase.from('profiles').update({ is_online: true, last_seen: new Date().toISOString() }).eq('id', data.user.id);
+    }
+
+    return data;
+  } catch (err: any) {
+    // If Supabase project has "Confirm email" enabled, fall back to profiles record
+    if (err.message?.toLowerCase().includes('email not confirmed')) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', email.trim())
+        .maybeSingle();
+
+      if (prof) {
+        return {
+          user: {
+            id: prof.id,
+            email: prof.email || email.trim(),
+            user_metadata: { full_name: prof.full_name, username: prof.username },
+          },
+          session: null,
+          unconfirmedEmail: true,
+        } as any;
+      }
+    }
+    throw err;
+  }
 }
 
-export async function supabaseSignOut() {
+export async function supabaseSignOut(userId?: string) {
   if (!isSupabaseConfigured) return;
+  if (userId) {
+    await supabase.from('profiles').update({ is_online: false, last_seen: new Date().toISOString() }).eq('id', userId);
+  }
   await supabase.auth.signOut();
 }
 

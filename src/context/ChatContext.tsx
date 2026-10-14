@@ -68,8 +68,6 @@ interface ChatContextType {
   // Supabase Cloud State
   isSupabaseConfigured: boolean;
   isSupabaseConnected: boolean;
-  isSupabaseModalOpen: boolean;
-  setIsSupabaseModalOpen: (open: boolean) => void;
 
   // Workspaces
   workspaces: Workspace[];
@@ -265,7 +263,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
-  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(isSupabaseConfigured);
 
   // Listen to dynamic Supabase config changes
@@ -601,12 +598,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setCurrentUserId(uid);
             setIsAuthenticated(true);
             localStorage.setItem('pulsechat_auth', 'true');
-            addToast(`Signed in with Supabase!`, 'success');
+            addToast(`Welcome back!`, 'success');
             return true;
           }
         } catch (err: any) {
-          console.warn('Supabase signIn error:', err);
-          addToast(`Supabase: ${err.message || 'Invalid credentials'}`, 'error');
+          console.warn('Sign in error:', err);
+          addToast(err.message || 'Invalid email or password', 'error');
           return false;
         }
       }
@@ -672,12 +669,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setCurrentUserId(uid);
             setIsAuthenticated(true);
             localStorage.setItem('pulsechat_auth', 'true');
-            addToast(`Account created on Supabase! Welcome, ${cleanName}!`, 'success');
+            addToast(`Welcome to PulseChat, ${cleanName}!`, 'success');
             return true;
           }
         } catch (err: any) {
-          console.warn('Supabase signUp error:', err);
-          addToast(`Supabase: ${err.message || 'Registration failed'}`, 'error');
+          console.warn('Sign up error:', err);
+          addToast(err.message || 'Registration failed', 'error');
           return false;
         }
       }
@@ -706,12 +703,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = useCallback(() => {
     if (isSupabaseConfigured) {
-      supabaseSignOut().catch(() => {});
+      supabaseSignOut(currentUserId).catch(() => {});
     }
     setIsAuthenticated(false);
     localStorage.setItem('pulsechat_auth', 'false');
     addToast('Logged out successfully', 'info');
-  }, [addToast]);
+  }, [currentUserId, addToast]);
 
   // Active Workspace
   const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || workspaces[0] || INITIAL_WORKSPACES[0];
@@ -1413,8 +1410,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         isSupabaseConfigured,
         isSupabaseConnected,
-        isSupabaseModalOpen,
-        setIsSupabaseModalOpen,
 
         searchQuery,
         setSearchQuery,

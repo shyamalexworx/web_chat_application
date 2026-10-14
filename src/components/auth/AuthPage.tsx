@@ -3,7 +3,7 @@ import { useChat } from '../../context/ChatContext';
 import { InteractivePerspectiveGrid } from './InteractivePerspectiveGrid';
 
 export const AuthPage: React.FC = () => {
-  const { login, register, addToast, isSupabaseConfigured, setIsSupabaseModalOpen } = useChat();
+  const { login, register, addToast } = useChat();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
@@ -74,23 +74,6 @@ export const AuthPage: React.FC = () => {
     <div className="fixed inset-0 h-full w-full overflow-y-auto select-none z-50">
       <InteractivePerspectiveGrid className="min-h-full flex flex-col items-center justify-start sm:justify-center p-4 sm:p-6 md:p-8">
         <div className="w-full max-w-[430px] my-auto py-8">
-          {/* Supabase Cloud Connection Indicator Pill */}
-          <div className="flex justify-end mb-3">
-            <button
-              type="button"
-              onClick={() => setIsSupabaseModalOpen(true)}
-              className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium border backdrop-blur-md shadow-md transition-all cursor-pointer ${
-                isSupabaseConfigured
-                  ? 'bg-[#10B981]/15 text-[#34D399] border-[#10B981]/40 hover:bg-[#10B981]/25'
-                  : 'bg-[#F59E0B]/15 text-[#FBBF24] border-[#F59E0B]/40 hover:bg-[#F59E0B]/25'
-              }`}
-              title="Click to view or edit Supabase database credentials"
-            >
-              <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-[#10B981] animate-pulse' : 'bg-[#F59E0B]'}`} />
-              <span>{isSupabaseConfigured ? 'Supabase Cloud: Connected' : 'Supabase: Click to Connect'}</span>
-            </button>
-          </div>
-
           {/* Glassmorphic Container matching website palette & typography */}
           <div className="bg-[#0E1118]/85 backdrop-blur-2xl border border-[#252B36]/90 rounded-2xl p-6 sm:p-8 shadow-2xl shadow-black/90 relative overflow-hidden">
             {/* Subtle top edge accent glow */}

@@ -595,16 +595,29 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const res = await supabaseSignIn(cleanEmail, password);
           if (res?.user) {
             const uid = res.user.id;
+            const userName = res.user.user_metadata?.full_name || cleanEmail.split('@')[0];
+            const userHandle = res.user.user_metadata?.username || cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+            const loggedInUser: User = {
+              id: uid,
+              name: userName,
+              username: userHandle,
+              email: cleanEmail,
+              avatar: res.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(userHandle)}`,
+              role: 'member',
+              title: 'Product Engineer',
+              isOnline: true,
+              joinedDate: 'Joined recently',
+            };
+            setUsers((prev) => [loggedInUser, ...prev.filter((u) => u.id !== uid)]);
             setCurrentUserId(uid);
             setIsAuthenticated(true);
             localStorage.setItem('pulsechat_auth', 'true');
-            addToast(`Welcome back!`, 'success');
+            localStorage.setItem('pulsechat_current_user', uid);
+            addToast(`Welcome back, ${userName}!`, 'success');
             return true;
           }
         } catch (err: any) {
-          console.warn('Sign in error:', err);
-          addToast(err.message || 'Invalid email or password', 'error');
-          return false;
+          console.warn('Sign in notice:', err);
         }
       }
 
@@ -669,6 +682,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setCurrentUserId(uid);
             setIsAuthenticated(true);
             localStorage.setItem('pulsechat_auth', 'true');
+            localStorage.setItem('pulsechat_current_user', uid);
             addToast(`Welcome to PulseChat, ${cleanName}!`, 'success');
             return true;
           }

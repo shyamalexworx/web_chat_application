@@ -50,7 +50,7 @@ export const AuthPage: React.FC = () => {
     try {
       const success = await register(name.trim(), email.trim(), username, password.trim());
       if (!success) {
-        setError('Registration failed. Check your Supabase configuration or try another email.');
+        setError('Unable to register. Please check your details and try again.');
       }
     } finally {
       setIsSubmitting(false);

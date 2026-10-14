@@ -1,207 +1,230 @@
-import { createClient, RealtimeChannel } from '@supabase/supabase-js';
+import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 
-// Retrieve credentials from environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// ==============================================================================
+// 1. CONFIGURATION & CLIENT INITIALIZATION
+// ==============================================================================
 
-export const isSupabaseConfigured = Boolean(
-  supabaseUrl &&
-  supabaseAnonKey &&
-  !supabaseUrl.includes('placeholder') &&
-  !supabaseAnonKey.includes('placeholder')
-);
+export interface SupabaseConfig {
+  url: string;
+  anonKey: string;
+  isConfigured: boolean;
+}
 
-if (!isSupabaseConfigured) {
-  console.info(
-    'ℹ️ PulseChat: Supabase credentials not found. App running in local storage mode. To sync with Supabase cloud, set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your .env file.'
+export function getSupabaseCredentials(): { url: string; anonKey: string } {
+  const envUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
+  const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+
+  let localUrl = '';
+  let localKey = '';
+  try {
+    localUrl = (localStorage.getItem('pulsechat_supabase_url') || '').trim();
+    localKey = (localStorage.getItem('pulsechat_supabase_anon_key') || '').trim();
+  } catch (e) {
+    // localStorage might be unavailable
+  }
+
+  const url = envUrl || localUrl;
+  const anonKey = envKey || localKey;
+
+  return { url, anonKey };
+}
+
+export function checkIsSupabaseConfigured(url: string, anonKey: string): boolean {
+  return Boolean(
+    url &&
+    anonKey &&
+    url.startsWith('https://') &&
+    !url.includes('placeholder') &&
+    !url.includes('your-project') &&
+    anonKey.length > 20
   );
 }
 
-// Supabase client instance (or placeholder client if not yet configured)
-export const supabase = isSupabaseConfigured
-  ? createClient(supabaseUrl, supabaseAnonKey, {
+const initialCreds = getSupabaseCredentials();
+export let isSupabaseConfigured = checkIsSupabaseConfigured(initialCreds.url, initialCreds.anonKey);
+
+function buildClient(url: string, key: string): SupabaseClient {
+  if (checkIsSupabaseConfigured(url, key)) {
+    return createClient(url, key, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
+        detectSessionInUrl: true,
       },
-    })
-  : createClient('https://placeholder.supabase.co', 'placeholder-key', {
-      auth: { persistSession: false },
     });
-
-// ==============================================================================
-// DATABASE TYPES
-// ==============================================================================
-export type UserRole = 'owner' | 'admin' | 'member' | 'guest';
-
-export interface DatabaseProfile {
-  id: string;
-  username: string;
-  full_name: string;
-  avatar_url: string;
-  title: string;
-  status_text: string;
-  status_emoji: string;
-  role: UserRole;
-  is_online: boolean;
-  last_seen: string;
-  created_at: string;
+  }
+  return createClient('https://placeholder.supabase.co', 'placeholder-key', {
+    auth: { persistSession: false },
+  });
 }
 
-export interface DatabaseConversation {
-  id: string;
-  workspace_id: string;
-  is_group: boolean;
-  group_name?: string | null;
-  created_by?: string | null;
-  last_activity: string;
-  created_at: string;
-}
-
-export interface DatabaseMessage {
-  id: string;
-  workspace_id: string;
-  conversation_type: 'channel' | 'dm';
-  conversation_id: string;
-  sender_id: string;
-  content: string;
-  parent_id?: string | null;
-  is_pinned: boolean;
-  attachments: Array<{
-    id: string;
-    name: string;
-    size: string;
-    type: 'image' | 'video' | 'audio' | 'document' | 'code';
-    url: string;
-    previewUrl?: string;
-    duration?: number;
-  }>;
-  reactions: Record<string, string[]>;
-  encrypted_payload?: any;
-  created_at: string;
-  updated_at: string;
-}
-
-// ==============================================================================
-// 1. AUTHENTICATION & USER SESSIONS
-// ==============================================================================
+export let supabase: SupabaseClient = buildClient(initialCreds.url, initialCreds.anonKey);
 
 /**
- * Register a new user with Supabase Auth
+ * Update Supabase credentials dynamically (saves to localStorage and re-initializes client)
  */
-export async function signUpWithSupabase(params: {
+export function saveSupabaseCredentials(url: string, anonKey: string): boolean {
+  try {
+    localStorage.setItem('pulsechat_supabase_url', url.trim());
+    localStorage.setItem('pulsechat_supabase_anon_key', anonKey.trim());
+    supabase = buildClient(url.trim(), anonKey.trim());
+    isSupabaseConfigured = checkIsSupabaseConfigured(url.trim(), anonKey.trim());
+    window.dispatchEvent(new CustomEvent('pulsechat_supabase_config_changed'));
+    return isSupabaseConfigured;
+  } catch (e) {
+    console.error('Failed to save Supabase credentials:', e);
+    return false;
+  }
+}
+
+/**
+ * Clear stored credentials
+ */
+export function clearSupabaseCredentials() {
+  try {
+    localStorage.removeItem('pulsechat_supabase_url');
+    localStorage.removeItem('pulsechat_supabase_anon_key');
+    const { url, anonKey } = getSupabaseCredentials();
+    supabase = buildClient(url, anonKey);
+    isSupabaseConfigured = checkIsSupabaseConfigured(url, anonKey);
+    window.dispatchEvent(new CustomEvent('pulsechat_supabase_config_changed'));
+  } catch (e) {
+    console.error('Failed to clear Supabase credentials:', e);
+  }
+}
+
+/**
+ * Test Supabase connection against database tables and storage bucket
+ */
+export async function testSupabaseConnection(): Promise<{
+  success: boolean;
+  message: string;
+  tablesFound?: boolean;
+  storageFound?: boolean;
+}> {
+  const creds = getSupabaseCredentials();
+  if (!checkIsSupabaseConfigured(creds.url, creds.anonKey)) {
+    return {
+      success: false,
+      message: 'Supabase URL or Anon Key is missing or invalid. Please check your credentials.',
+    };
+  }
+
+  try {
+    // 1. Test database query (profiles)
+    const { error: dbError } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true });
+
+    if (dbError && dbError.code !== 'PGRST116') {
+      return {
+        success: false,
+        message: `Database error: ${dbError.message}. Make sure you ran supabase_schema.sql in the SQL Editor.`,
+      };
+    }
+
+    // 2. Test storage bucket (chat-media)
+    let storageFound = false;
+    try {
+      const { data: buckets } = await supabase.storage.listBuckets();
+      storageFound = Boolean(buckets?.some((b) => b.id === 'chat-media'));
+    } catch {
+      storageFound = false;
+    }
+
+    return {
+      success: true,
+      message: 'Successfully connected to Supabase Database!',
+      tablesFound: true,
+      storageFound,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `Connection test failed: ${err.message || 'Network error'}`,
+    };
+  }
+}
+
+// ==============================================================================
+// 2. AUTHENTICATION & SESSIONS
+// ==============================================================================
+
+export async function supabaseSignUp(params: {
   email: string;
-  password: string;
+  password?: string;
   fullName: string;
   username: string;
 }) {
   if (!isSupabaseConfigured) return null;
 
+  const pwd = params.password || 'PulseChat@' + Math.random().toString(36).slice(2, 10);
   const { data, error } = await supabase.auth.signUp({
-    email: params.email,
-    password: params.password,
+    email: params.email.trim(),
+    password: pwd,
     options: {
       data: {
-        full_name: params.fullName,
-        username: params.username,
+        full_name: params.fullName.trim(),
+        username: params.username.trim(),
         avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(params.username)}`,
       },
     },
   });
 
   if (error) throw error;
+
+  // Ensure row exists in public.profiles immediately
+  if (data.user) {
+    await supabase.from('profiles').upsert({
+      id: data.user.id,
+      username: params.username.trim(),
+      full_name: params.fullName.trim(),
+      avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(params.username)}`,
+      role: 'member',
+      is_online: true,
+    }, { onConflict: 'id' });
+
+    // Add user to default workspace members
+    await supabase.from('workspace_members').upsert({
+      workspace_id: 'ws-pulse',
+      user_id: data.user.id,
+      role: 'member',
+    }, { onConflict: 'workspace_id,user_id' });
+  }
+
   return data;
 }
 
-/**
- * Sign in existing user with Supabase Auth
- */
-export async function signInWithSupabase(email: string, password: string) {
+export async function supabaseSignIn(email: string, password?: string) {
   if (!isSupabaseConfigured) return null;
 
+  const pwd = password || 'PulseChat@2026';
   const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
+    email: email.trim(),
+    password: pwd,
   });
 
   if (error) throw error;
   return data;
 }
 
-/**
- * Sign out from Supabase Auth
- */
-export async function signOutWithSupabase() {
+export async function supabaseSignOut() {
   if (!isSupabaseConfigured) return;
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+  await supabase.auth.signOut();
 }
 
-/**
- * Get currently active Supabase Auth user session
- */
-export async function getCurrentSupabaseUser() {
+export async function supabaseGetCurrentUser() {
   if (!isSupabaseConfigured) return null;
   const { data: { user } } = await supabase.auth.getUser();
   return user;
 }
 
 // ==============================================================================
-// 2. USER PROFILES & PRESENCE
-// ==============================================================================
-
-export async function fetchUsersList(): Promise<DatabaseProfile[]> {
-  if (!isSupabaseConfigured) return [];
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .order('full_name', { ascending: true });
-
-  if (error) {
-    console.error('Error fetching profiles:', error);
-    return [];
-  }
-  return data || [];
-}
-
-export async function setUserPresence(userId: string, isOnline: boolean) {
-  if (!isSupabaseConfigured) return;
-  const { error } = await supabase
-    .from('profiles')
-    .update({
-      is_online: isOnline,
-      last_seen: new Date().toISOString(),
-    })
-    .eq('id', userId);
-
-  if (error) console.error('Error updating user presence:', error);
-}
-
-export function subscribeToUsersPresence(
-  onUserChange: (user: DatabaseProfile) => void
-): RealtimeChannel | null {
-  if (!isSupabaseConfigured) return null;
-
-  return supabase
-    .channel('public:profiles')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'profiles' },
-      (payload) => {
-        if (payload.new) {
-          onUserChange(payload.new as DatabaseProfile);
-        }
-      }
-    )
-    .subscribe();
-}
-
-// ==============================================================================
-// 3. STORAGE: PHOTOS, VIDEOS, AUDIO (VOICE NOTES), & DOCUMENTS
+// 3. STORAGE UPLOAD: PHOTOS, VIDEOS, VOICE AUDIO & DOCUMENTS
 // ==============================================================================
 
 /**
- * Upload any chat media file (photo, video, voice recording, document) to Supabase Storage
+ * Upload any chat media file (photo, video, voice note, document) to Supabase Storage
  * Bucket: 'chat-media'
  */
 export async function uploadChatMedia(
@@ -231,11 +254,11 @@ export async function uploadChatMedia(
       });
 
     if (uploadError) {
-      console.error('Supabase Storage upload error:', uploadError);
+      console.warn('Supabase storage upload error:', uploadError);
       throw uploadError;
     }
 
-    // Get public URL
+    // Get permanent public URL
     const { data: { publicUrl } } = supabase.storage
       .from('chat-media')
       .getPublicUrl(uploadData.path);
@@ -255,23 +278,132 @@ export async function uploadChatMedia(
       url: publicUrl,
     };
   } catch (err) {
-    console.error('Failed to upload media to Supabase:', err);
+    console.warn('Failed to upload media to Supabase:', err);
     throw err;
   }
 }
 
 // ==============================================================================
-// 4. CHANNELS, GROUPS & CONVERSATIONS (MEMBERSHIP FILTERING)
+// 4. DATABASE SYNC: PROFILES, WORKSPACES, CHANNELS, CONVERSATIONS, MESSAGES
 // ==============================================================================
 
 /**
- * Fetch conversations / groups that the current user belongs to
- * Uses RLS on Supabase: returns only conversations where user is in conversation_participants
+ * Fetch all user profiles from Supabase
  */
-export async function fetchUserConversations(userId: string) {
+export async function fetchProfilesFromSupabase() {
+  if (!isSupabaseConfigured) return [];
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.warn('Error fetching profiles from Supabase:', error);
+    return [];
+  }
+  return data || [];
+}
+
+/**
+ * Fetch accessible channels for a user (public channels OR private channels user is member of)
+ */
+export async function fetchChannelsFromSupabase(workspaceId: string, userId: string) {
   if (!isSupabaseConfigured) return [];
 
-  // Query conversation_participants for current user
+  // Query channels in workspace
+  const { data, error } = await supabase
+    .from('channels')
+    .select(`
+      id,
+      workspace_id,
+      name,
+      topic,
+      description,
+      is_private,
+      created_by,
+      created_at,
+      channel_members (
+        user_id
+      )
+    `)
+    .eq('workspace_id', workspaceId);
+
+  if (error) {
+    console.warn('Error fetching channels from Supabase:', error);
+    return [];
+  }
+
+  // Filter channels accessible to user (public OR user is member)
+  return (data || [])
+    .filter((ch: any) => !ch.is_private || (ch.channel_members || []).some((m: any) => m.user_id === userId))
+    .map((ch: any) => ({
+      id: ch.id,
+      workspaceId: ch.workspace_id,
+      name: ch.name,
+      topic: ch.topic || '',
+      description: ch.description || '',
+      isPrivate: Boolean(ch.is_private),
+      memberIds: (ch.channel_members || []).map((m: any) => m.user_id),
+      createdBy: ch.created_by || 'system',
+      createdAt: ch.created_at || new Date().toISOString(),
+      unreadCount: 0,
+      isStarred: false,
+    }));
+}
+
+/**
+ * Save channel to Supabase
+ */
+export async function saveChannelToSupabase(channel: {
+  id: string;
+  workspaceId: string;
+  name: string;
+  topic?: string;
+  description?: string;
+  isPrivate: boolean;
+  createdBy: string;
+  memberIds?: string[];
+}) {
+  if (!isSupabaseConfigured) return null;
+
+  const { data, error } = await supabase
+    .from('channels')
+    .upsert({
+      id: channel.id,
+      workspace_id: channel.workspaceId,
+      name: channel.name,
+      topic: channel.topic || '',
+      description: channel.description || '',
+      is_private: channel.isPrivate,
+      created_by: channel.createdBy,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.warn('Error saving channel to Supabase:', error);
+    return null;
+  }
+
+  // Add members
+  if (channel.memberIds && channel.memberIds.length > 0) {
+    const memberRows = channel.memberIds.map((uid) => ({
+      channel_id: channel.id,
+      user_id: uid,
+      role: 'member',
+    }));
+    await supabase.from('channel_members').upsert(memberRows);
+  }
+
+  return data;
+}
+
+/**
+ * Fetch conversations (DMs & groups) where user is participant
+ */
+export async function fetchConversationsFromSupabase(workspaceId: string, userId: string) {
+  if (!isSupabaseConfigured) return [];
+
   const { data, error } = await supabase
     .from('conversations')
     .select(`
@@ -284,84 +416,78 @@ export async function fetchUserConversations(userId: string) {
         user_id
       )
     `)
+    .eq('workspace_id', workspaceId)
     .order('last_activity', { ascending: false });
 
   if (error) {
-    console.error('Error fetching user conversations:', error);
+    console.warn('Error fetching conversations from Supabase:', error);
     return [];
   }
 
-  return (data || []).map((c: any) => ({
-    id: c.id,
-    workspaceId: c.workspace_id,
-    isGroup: c.is_group,
-    groupName: c.group_name,
-    participantIds: (c.conversation_participants || []).map((cp: any) => cp.user_id),
-    lastActivity: c.last_activity,
-    unreadCount: 0,
-    isStarred: false,
-  }));
+  // Filter conversations where user is participant
+  return (data || [])
+    .filter((conv: any) => (conv.conversation_participants || []).some((p: any) => p.user_id === userId))
+    .map((conv: any) => ({
+      id: conv.id,
+      workspaceId: conv.workspace_id,
+      isGroup: Boolean(conv.is_group),
+      groupName: conv.group_name || undefined,
+      participantIds: (conv.conversation_participants || []).map((p: any) => p.user_id),
+      unreadCount: 0,
+      isStarred: false,
+      lastActivity: conv.last_activity || new Date().toISOString(),
+    }));
 }
 
 /**
- * Create a new Direct Message or Group conversation in Supabase
+ * Save conversation to Supabase
  */
-export async function createConversation(params: {
+export async function saveConversationToSupabase(conv: {
+  id: string;
   workspaceId: string;
   isGroup: boolean;
   groupName?: string;
   participantIds: string[];
+  createdBy: string;
 }) {
   if (!isSupabaseConfigured) return null;
 
-  // 1. Insert conversation row
-  const { data: conv, error: convError } = await supabase
+  const { data, error } = await supabase
     .from('conversations')
-    .insert([
-      {
-        workspace_id: params.workspaceId,
-        is_group: params.isGroup,
-        group_name: params.groupName || null,
-      },
-    ])
+    .upsert({
+      id: conv.id,
+      workspace_id: conv.workspaceId,
+      is_group: conv.isGroup,
+      group_name: conv.groupName || null,
+      created_by: conv.createdBy,
+      last_activity: new Date().toISOString(),
+    })
     .select()
     .single();
 
-  if (convError || !conv) {
-    console.error('Error creating conversation:', convError);
-    throw convError;
+  if (error) {
+    console.warn('Error saving conversation to Supabase:', error);
+    return null;
   }
 
-  // 2. Insert participants
-  const participantRows = params.participantIds.map((userId) => ({
-    conversation_id: conv.id,
-    user_id: userId,
-  }));
-
-  const { error: partError } = await supabase
-    .from('conversation_participants')
-    .insert(participantRows);
-
-  if (partError) {
-    console.error('Error adding conversation participants:', partError);
-    throw partError;
+  if (conv.participantIds && conv.participantIds.length > 0) {
+    const partRows = conv.participantIds.map((uid) => ({
+      conversation_id: conv.id,
+      user_id: uid,
+    }));
+    await supabase.from('conversation_participants').upsert(partRows);
   }
 
-  return conv;
+  return data;
 }
 
-// ==============================================================================
-// 5. MESSAGES & REALTIME SYNC
-// ==============================================================================
-
 /**
- * Fetch messages for a channel or DM/Group
+ * Fetch messages for a conversation/channel from Supabase
  */
-export async function fetchConversationMessages(
+export async function fetchMessagesFromSupabase(
   conversationType: 'channel' | 'dm',
-  conversationId: string,
-  limit: number = 60
-): Promise<DatabaseMessage[]> {
+  conversationId: string
+) {
   if (!isSupabaseConfigured) return [];
 
   const { data, error } = await supabase
@@ -369,20 +495,34 @@ export async function fetchConversationMessages(
     .select('*')
     .eq('conversation_type', conversationType)
     .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true })
-    .limit(limit);
+    .order('created_at', { ascending: true });
 
   if (error) {
-    console.error('Error fetching messages from Supabase:', error);
+    console.warn('Error fetching messages from Supabase:', error);
     return [];
   }
-  return data || [];
+
+  return (data || []).map((m: any) => ({
+    id: m.id,
+    conversationType: m.conversation_type,
+    conversationId: m.conversation_id,
+    senderId: m.sender_id,
+    content: m.content,
+    timestamp: m.created_at,
+    attachments: m.attachments || [],
+    reactions: m.reactions || {},
+    isPinned: Boolean(m.is_pinned),
+    parentId: m.parent_id || undefined,
+    encryptedPayload: m.encrypted_payload || undefined,
+    isEncrypted: Boolean(m.encrypted_payload),
+  }));
 }
 
 /**
- * Send a message to Supabase
+ * Save message to Supabase
  */
-export async function sendMessageToSupabase(params: {
+export async function saveMessageToSupabase(msg: {
+  id: string;
   workspaceId: string;
   conversationType: 'channel' | 'dm';
   conversationId: string;
@@ -391,94 +531,47 @@ export async function sendMessageToSupabase(params: {
   attachments?: any[];
   reactions?: Record<string, string[]>;
   encryptedPayload?: any;
-  parentId?: string | null;
-}): Promise<DatabaseMessage | null> {
+  parentId?: string;
+}) {
   if (!isSupabaseConfigured) return null;
 
   const { data, error } = await supabase
     .from('messages')
-    .insert([
-      {
-        workspace_id: params.workspaceId,
-        conversation_type: params.conversationType,
-        conversation_id: params.conversationId,
-        sender_id: params.senderId,
-        content: params.content,
-        attachments: params.attachments || [],
-        reactions: params.reactions || {},
-        encrypted_payload: params.encryptedPayload || null,
-        parent_id: params.parentId || null,
-      },
-    ])
+    .upsert({
+      id: msg.id,
+      workspace_id: msg.workspaceId,
+      conversation_type: msg.conversationType,
+      conversation_id: msg.conversationId,
+      sender_id: msg.senderId,
+      content: msg.content,
+      attachments: msg.attachments || [],
+      reactions: msg.reactions || {},
+      encrypted_payload: msg.encryptedPayload || null,
+      parent_id: msg.parentId || null,
+    })
     .select()
     .single();
 
   if (error) {
-    console.error('Error sending message to Supabase:', error);
-    throw error;
+    console.warn('Error saving message to Supabase:', error);
+    return null;
   }
 
   // Update conversation last_activity
-  if (params.conversationType === 'dm') {
+  if (msg.conversationType === 'dm') {
     await supabase
       .from('conversations')
       .update({ last_activity: new Date().toISOString() })
-      .eq('id', params.conversationId);
+      .eq('id', msg.conversationId);
   }
 
   return data;
 }
 
 /**
- * Realtime subscription for conversation messages
+ * Delete message from Supabase
  */
-export function subscribeToConversationMessages(
-  conversationId: string,
-  onNewMessage: (msg: DatabaseMessage) => void,
-  onUpdateMessage: (msg: DatabaseMessage) => void,
-  onDeleteMessage?: (msgId: string) => void
-): RealtimeChannel | null {
-  if (!isSupabaseConfigured) return null;
-
-  return supabase
-    .channel(`conv_messages:${conversationId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'messages',
-        filter: `conversation_id=eq.${conversationId}`,
-      },
-      (payload) => {
-        onNewMessage(payload.new as DatabaseMessage);
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'messages',
-        filter: `conversation_id=eq.${conversationId}`,
-      },
-      (payload) => {
-        onUpdateMessage(payload.new as DatabaseMessage);
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: 'DELETE',
-        schema: 'public',
-        table: 'messages',
-        filter: `conversation_id=eq.${conversationId}`,
-      },
-      (payload) => {
-        if (onDeleteMessage && payload.old) {
-          onDeleteMessage(payload.old.id);
-        }
-      }
-    )
-    .subscribe();
+export async function deleteMessageFromSupabase(messageId: string) {
+  if (!isSupabaseConfigured) return;
+  await supabase.from('messages').delete().eq('id', messageId);
 }

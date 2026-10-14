@@ -28,6 +28,8 @@ export const TopNavigation: React.FC = () => {
     activeWorkspace,
     addToast,
     t,
+    isSupabaseConfigured,
+    setIsSupabaseModalOpen,
   } = useChat();
 
   const [notifMenuOpen, setNotifMenuOpen] = useState(false);
@@ -334,6 +336,20 @@ export const TopNavigation: React.FC = () => {
 
       {/* Right side controls */}
       <div className="flex items-center space-x-2 relative">
+        {/* Supabase Cloud Database Status Button */}
+        <button
+          onClick={() => setIsSupabaseModalOpen(true)}
+          className={`flex items-center space-x-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
+            isSupabaseConfigured
+              ? 'bg-[#10B981]/15 hover:bg-[#10B981]/25 border-[#10B981]/30 text-[#34D399]'
+              : 'bg-[#F59E0B]/15 hover:bg-[#F59E0B]/25 border-[#F59E0B]/30 text-[#FBBF24]'
+          }`}
+          title="Supabase Database Connection & Storage"
+        >
+          <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-[#10B981] animate-pulse' : 'bg-[#F59E0B]'}`} />
+          <span className="hidden md:inline">{isSupabaseConfigured ? 'Supabase' : 'Connect DB'}</span>
+        </button>
+
         {/* Google Meet Trigger Button */}
         <button
           onClick={startGoogleMeet}

@@ -3,36 +3,58 @@ import { useChat } from '../../context/ChatContext';
 import { InteractivePerspectiveGrid } from './InteractivePerspectiveGrid';
 
 export const AuthPage: React.FC = () => {
-  const { login, register, addToast } = useChat();
+  const { login, register, addToast, isSupabaseConfigured, setIsSupabaseModalOpen } = useChat();
 
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     if (!email.trim()) {
       setError('Please enter your email.');
       return;
     }
-    const success = login(email.trim());
-    if (!success) {
-      setError('Invalid credentials.');
+    if (!password.trim()) {
+      setError('Please enter your password.');
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const success = await login(email.trim(), password.trim());
+      if (!success) {
+        setError('Invalid credentials or authentication error.');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!name.trim() || !email.trim()) {
+    if (!name.trim() || !email.trim() || !password.trim()) {
       setError('All fields are required.');
       return;
     }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      return;
+    }
     const username = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'member';
-    register(name.trim(), email.trim(), username);
+    setIsSubmitting(true);
+    try {
+      const success = await register(name.trim(), email.trim(), username, password.trim());
+      if (!success) {
+        setError('Registration failed. Check your Supabase configuration or try another email.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSocialAuth = (provider: string) => {
@@ -52,6 +74,23 @@ export const AuthPage: React.FC = () => {
     <div className="fixed inset-0 h-full w-full overflow-y-auto select-none z-50">
       <InteractivePerspectiveGrid className="min-h-full flex flex-col items-center justify-start sm:justify-center p-4 sm:p-6 md:p-8">
         <div className="w-full max-w-[430px] my-auto py-8">
+          {/* Supabase Cloud Connection Indicator Pill */}
+          <div className="flex justify-end mb-3">
+            <button
+              type="button"
+              onClick={() => setIsSupabaseModalOpen(true)}
+              className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-full text-xs font-medium border backdrop-blur-md shadow-md transition-all cursor-pointer ${
+                isSupabaseConfigured
+                  ? 'bg-[#10B981]/15 text-[#34D399] border-[#10B981]/40 hover:bg-[#10B981]/25'
+                  : 'bg-[#F59E0B]/15 text-[#FBBF24] border-[#F59E0B]/40 hover:bg-[#F59E0B]/25'
+              }`}
+              title="Click to view or edit Supabase database credentials"
+            >
+              <span className={`w-2 h-2 rounded-full ${isSupabaseConfigured ? 'bg-[#10B981] animate-pulse' : 'bg-[#F59E0B]'}`} />
+              <span>{isSupabaseConfigured ? 'Supabase Cloud: Connected' : 'Supabase: Click to Connect'}</span>
+            </button>
+          </div>
+
           {/* Glassmorphic Container matching website palette & typography */}
           <div className="bg-[#0E1118]/85 backdrop-blur-2xl border border-[#252B36]/90 rounded-2xl p-6 sm:p-8 shadow-2xl shadow-black/90 relative overflow-hidden">
             {/* Subtle top edge accent glow */}
@@ -146,9 +185,21 @@ export const AuthPage: React.FC = () => {
           <div className="pt-1">
             <button
               type="submit"
-              className="w-full h-11 bg-[#F5F7FA] hover:bg-white text-[#0B0D12] text-sm font-semibold rounded-lg transition-all shadow-sm active:scale-[0.99] cursor-pointer"
+              disabled={isSubmitting}
+              className={`w-full h-11 bg-[#F5F7FA] hover:bg-white text-[#0B0D12] text-sm font-semibold rounded-lg transition-all shadow-sm active:scale-[0.99] flex items-center justify-center space-x-2 ${
+                isSubmitting ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'
+              }`}
             >
-              {mode === 'login' ? 'Sign in' : 'Create account'}
+              {isSubmitting && (
+                <div className="w-4 h-4 border-2 border-[#0B0D12] border-t-transparent rounded-full animate-spin" />
+              )}
+              <span>
+                {isSubmitting
+                  ? 'Connecting...'
+                  : mode === 'login'
+                  ? 'Sign in'
+                  : 'Create account'}
+              </span>
             </button>
           </div>
         </form>

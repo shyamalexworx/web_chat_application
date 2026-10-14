@@ -23,6 +23,21 @@ import { soundFX } from '../utils/audio';
 import { translateText, getTranslation } from '../utils/translation';
 import { encryptMessage } from '../utils/crypto';
 import { sanitizeInput, rateLimiter } from '../utils/security';
+import {
+  isSupabaseConfigured,
+  supabase,
+  supabaseSignUp,
+  supabaseSignIn,
+  supabaseSignOut,
+  fetchProfilesFromSupabase,
+  fetchChannelsFromSupabase,
+  saveChannelToSupabase,
+  fetchConversationsFromSupabase,
+  saveConversationToSupabase,
+  fetchMessagesFromSupabase,
+  saveMessageToSupabase,
+  deleteMessageFromSupabase,
+} from '../lib/supabase';
 
 const STORAGE_KEY_PREFIX = 'pulsechat_v5_';
 
@@ -44,11 +59,17 @@ interface ChatContextType {
   setCurrentUser: (user: User) => void;
   switchUser: (userId: string) => void;
   isAuthenticated: boolean;
-  login: (email: string) => boolean;
-  register: (name: string, email: string, username: string) => boolean;
+  login: (email: string, password?: string) => Promise<boolean> | boolean;
+  register: (name: string, email: string, username: string, password?: string) => Promise<boolean> | boolean;
   logout: () => void;
   updateCurrentUserProfile: (updates: Partial<User>) => void;
   users: User[];
+
+  // Supabase Cloud State
+  isSupabaseConfigured: boolean;
+  isSupabaseConnected: boolean;
+  isSupabaseModalOpen: boolean;
+  setIsSupabaseModalOpen: (open: boolean) => void;
 
   // Workspaces
   workspaces: Workspace[];
@@ -244,6 +265,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+  const [isSupabaseConnected, setIsSupabaseConnected] = useState(isSupabaseConfigured);
+
+  // Listen to dynamic Supabase config changes
+  useEffect(() => {
+    const handleConfigChange = () => {
+      setIsSupabaseConnected(isSupabaseConfigured);
+    };
+    window.addEventListener('pulsechat_supabase_config_changed', handleConfigChange);
+    return () => window.removeEventListener('pulsechat_supabase_config_changed', handleConfigChange);
+  }, []);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -358,55 +390,324 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addToast('Profile updated successfully', 'success');
   }, [currentUserId, addToast]);
 
-  const login = useCallback((email: string) => {
-    const existing = users.find((u) => u.email.toLowerCase() === email.toLowerCase());
-    if (existing) {
-      setCurrentUserId(existing.id);
+  // Supabase Cloud Realtime Data Loader & Subscription
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    let isMounted = true;
+    const syncFromSupabase = async () => {
+      try {
+        // 1. Session check
+        const { data: { session } } = await supabase.auth.getSession();
+        let uid = currentUserId;
+        if (session?.user) {
+          uid = session.user.id;
+          if (isMounted) {
+            setCurrentUserId(uid);
+            setIsAuthenticated(true);
+            localStorage.setItem('pulsechat_auth', 'true');
+          }
+        }
+
+        // 2. Fetch Profiles from Supabase
+        const remoteProfiles = await fetchProfilesFromSupabase();
+        if (isMounted && remoteProfiles.length > 0) {
+          const mappedUsers: User[] = remoteProfiles.map((p) => ({
+            id: p.id,
+            name: p.full_name || p.username,
+            username: p.username,
+            email: p.username + '@pulsechat.io',
+            avatar: p.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(p.username)}`,
+            role: p.role || 'member',
+            title: p.title || 'Product Engineer',
+            isOnline: Boolean(p.is_online),
+            joinedDate: 'Joined recently',
+          }));
+          setUsers(mappedUsers);
+        }
+
+        // 3. Fetch Channels for workspace & user
+        const remoteChannels = await fetchChannelsFromSupabase(activeWorkspaceId, uid);
+        if (isMounted && remoteChannels.length > 0) {
+          setChannels(remoteChannels);
+        }
+
+        // 4. Fetch Conversations (DMs & Groups) for user
+        if (uid) {
+          const remoteDMs = await fetchConversationsFromSupabase(activeWorkspaceId, uid);
+          if (isMounted && remoteDMs.length > 0) {
+            setDms(remoteDMs);
+          }
+        }
+
+        // 5. Fetch Messages for active view
+        const remoteMsgs = await fetchMessagesFromSupabase(activeView.type, activeView.id);
+        if (isMounted && remoteMsgs.length > 0) {
+          setMessages((prev) => {
+            const map = new Map(prev.map((m) => [m.id, m]));
+            remoteMsgs.forEach((m) => map.set(m.id, m));
+            return Array.from(map.values());
+          });
+        }
+      } catch (err) {
+        console.warn('Initial Supabase sync error:', err);
+      }
+    };
+
+    syncFromSupabase();
+
+    // Realtime channel across messages, channels, conversations, profiles
+    const channel = supabase
+      .channel('pulsechat_live_realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          const row = payload.new as any;
+          const incomingMsg: Message = {
+            id: row.id,
+            conversationType: row.conversation_type,
+            conversationId: row.conversation_id,
+            senderId: row.sender_id,
+            content: row.content,
+            timestamp: row.created_at,
+            attachments: row.attachments || [],
+            reactions: row.reactions || {},
+            isPinned: Boolean(row.is_pinned),
+            parentId: row.parent_id || undefined,
+            encryptedPayload: row.encrypted_payload || undefined,
+            isEncrypted: Boolean(row.encrypted_payload),
+          };
+
+          if (isMounted) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === incomingMsg.id)) return prev;
+              return [...prev, incomingMsg];
+            });
+            if (row.sender_id !== currentUserId) {
+              soundFX.playMessageReceived();
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        (payload) => {
+          const row = payload.new as any;
+          if (isMounted) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === row.id
+                  ? {
+                      ...m,
+                      content: row.content,
+                      isPinned: Boolean(row.is_pinned),
+                      reactions: row.reactions || {},
+                      attachments: row.attachments || [],
+                    }
+                  : m
+              )
+            );
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'messages' },
+        (payload) => {
+          const row = payload.old as any;
+          if (row?.id && isMounted) {
+            setMessages((prev) => prev.filter((m) => m.id !== row.id));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'channels' },
+        async () => {
+          if (isMounted) {
+            const updated = await fetchChannelsFromSupabase(activeWorkspaceId, currentUserId);
+            if (updated.length > 0) setChannels(updated);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversations' },
+        async () => {
+          if (isMounted) {
+            const updated = await fetchConversationsFromSupabase(activeWorkspaceId, currentUserId);
+            if (updated.length > 0) setDms(updated);
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles' },
+        async () => {
+          if (isMounted) {
+            const updated = await fetchProfilesFromSupabase();
+            if (updated.length > 0) {
+              const mappedUsers: User[] = updated.map((p) => ({
+                id: p.id,
+                name: p.full_name || p.username,
+                username: p.username,
+                email: p.username + '@pulsechat.io',
+                avatar: p.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(p.username)}`,
+                role: p.role || 'member',
+                title: p.title || 'Product Engineer',
+                isOnline: Boolean(p.is_online),
+                joinedDate: 'Joined recently',
+              }));
+              setUsers(mappedUsers);
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [activeWorkspaceId, currentUserId]);
+
+  // Load conversation messages on conversation switch
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    let isMounted = true;
+    fetchMessagesFromSupabase(activeView.type, activeView.id).then((remoteMsgs) => {
+      if (isMounted && remoteMsgs.length > 0) {
+        setMessages((prev) => {
+          const map = new Map(prev.map((m) => [m.id, m]));
+          remoteMsgs.forEach((m) => map.set(m.id, m));
+          return Array.from(map.values());
+        });
+      }
+    });
+    return () => { isMounted = false; };
+  }, [activeView.type, activeView.id]);
+
+  const login = useCallback(
+    async (email: string, password?: string) => {
+      const cleanEmail = email.trim();
+
+      if (isSupabaseConfigured) {
+        try {
+          const res = await supabaseSignIn(cleanEmail, password);
+          if (res?.user) {
+            const uid = res.user.id;
+            setCurrentUserId(uid);
+            setIsAuthenticated(true);
+            localStorage.setItem('pulsechat_auth', 'true');
+            addToast(`Signed in with Supabase!`, 'success');
+            return true;
+          }
+        } catch (err: any) {
+          console.warn('Supabase signIn error:', err);
+          addToast(`Supabase: ${err.message || 'Invalid credentials'}`, 'error');
+          return false;
+        }
+      }
+
+      // Local fallback
+      const existing = users.find((u) => u.email.toLowerCase() === cleanEmail.toLowerCase());
+      if (existing) {
+        setCurrentUserId(existing.id);
+        setIsAuthenticated(true);
+        localStorage.setItem('pulsechat_auth', 'true');
+        addToast(`Welcome back, ${existing.name}!`, 'success');
+        return true;
+      }
+      const newUser: User = {
+        id: 'user-' + Date.now(),
+        name: cleanEmail.split('@')[0],
+        username: cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, ''),
+        email: cleanEmail,
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        role: 'member',
+        title: 'Product Engineer',
+        isOnline: true,
+        joinedDate: 'Just now',
+      };
+      setUsers((prev) => [...prev, newUser]);
+      setCurrentUserId(newUser.id);
       setIsAuthenticated(true);
       localStorage.setItem('pulsechat_auth', 'true');
-      addToast(`Welcome back, ${existing.name}!`, 'success');
+      addToast(`Account created. Welcome to PulseChat!`, 'success');
       return true;
-    }
-    const newUser: User = {
-      id: 'user-' + Date.now(),
-      name: email.split('@')[0],
-      username: email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, ''),
-      email,
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-      role: 'member',
-      title: 'Product Engineer',
-      isOnline: true,
-      joinedDate: 'Just now',
-    };
-    setUsers((prev) => [...prev, newUser]);
-    setCurrentUserId(newUser.id);
-    setIsAuthenticated(true);
-    localStorage.setItem('pulsechat_auth', 'true');
-    addToast(`Account created. Welcome to PulseChat!`, 'success');
-    return true;
-  }, [users, addToast]);
+    },
+    [users, addToast]
+  );
 
-  const register = useCallback((name: string, email: string, username: string) => {
-    const newUser: User = {
-      id: 'user-' + Date.now(),
-      name,
-      username: username.toLowerCase().replace(/[^a-z0-9]/g, ''),
-      email,
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-      role: 'member',
-      title: 'Fullstack Engineer',
-      isOnline: true,
-      joinedDate: 'Just now',
-    };
-    setUsers((prev) => [...prev, newUser]);
-    setCurrentUserId(newUser.id);
-    setIsAuthenticated(true);
-    localStorage.setItem('pulsechat_auth', 'true');
-    addToast(`Welcome to PulseChat, ${name}!`, 'success');
-    return true;
-  }, [addToast]);
+  const register = useCallback(
+    async (name: string, email: string, username: string, password?: string) => {
+      const cleanEmail = email.trim();
+      const cleanName = name.trim();
+      const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || 'member';
+
+      if (isSupabaseConfigured) {
+        try {
+          const res = await supabaseSignUp({
+            email: cleanEmail,
+            password,
+            fullName: cleanName,
+            username: cleanUsername,
+          });
+          if (res?.user) {
+            const uid = res.user.id;
+            const newUser: User = {
+              id: uid,
+              name: cleanName,
+              username: cleanUsername,
+              email: cleanEmail,
+              avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`,
+              role: 'member',
+              title: 'Fullstack Engineer',
+              isOnline: true,
+              joinedDate: 'Today',
+            };
+            setUsers((prev) => [newUser, ...prev.filter((u) => u.id !== uid)]);
+            setCurrentUserId(uid);
+            setIsAuthenticated(true);
+            localStorage.setItem('pulsechat_auth', 'true');
+            addToast(`Account created on Supabase! Welcome, ${cleanName}!`, 'success');
+            return true;
+          }
+        } catch (err: any) {
+          console.warn('Supabase signUp error:', err);
+          addToast(`Supabase: ${err.message || 'Registration failed'}`, 'error');
+          return false;
+        }
+      }
+
+      // Local fallback
+      const newUser: User = {
+        id: 'user-' + Date.now(),
+        name: cleanName,
+        username: cleanUsername,
+        email: cleanEmail,
+        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`,
+        role: 'member',
+        title: 'Fullstack Engineer',
+        isOnline: true,
+        joinedDate: 'Just now',
+      };
+      setUsers((prev) => [...prev, newUser]);
+      setCurrentUserId(newUser.id);
+      setIsAuthenticated(true);
+      localStorage.setItem('pulsechat_auth', 'true');
+      addToast(`Welcome to PulseChat, ${cleanName}!`, 'success');
+      return true;
+    },
+    [addToast]
+  );
 
   const logout = useCallback(() => {
+    if (isSupabaseConfigured) {
+      supabaseSignOut().catch(() => {});
+    }
     setIsAuthenticated(false);
     localStorage.setItem('pulsechat_auth', 'false');
     addToast('Logged out successfully', 'info');
@@ -498,6 +799,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setChannels((prev) => [...prev, newChannel]);
       setActiveView({ type: 'channel', id: newChannel.id });
       addToast(`Channel #${cleanName} created!`, 'success');
+
+      if (isSupabaseConfigured) {
+        saveChannelToSupabase({
+          id: newChannel.id,
+          workspaceId: activeWorkspaceId,
+          name: newChannel.name,
+          topic: newChannel.topic,
+          description: newChannel.description,
+          isPrivate: newChannel.isPrivate,
+          createdBy: currentUserId,
+          memberIds: newChannel.memberIds,
+        }).catch((err) => console.warn('Supabase saveChannel error:', err));
+      }
+
       return newChannel;
     },
     [activeWorkspaceId, currentUserId, addToast]
@@ -561,6 +876,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setDms((prev) => [newDM, ...prev]);
     setActiveView({ type: 'dm', id: newDM.id });
     addToast('Conversation started', 'info');
+
+    if (isSupabaseConfigured) {
+      saveConversationToSupabase({
+        id: newDM.id,
+        workspaceId: activeWorkspaceId,
+        isGroup,
+        groupName: newDM.groupName,
+        participantIds: allParticipants,
+        createdBy: currentUserId,
+      }).catch((err) => console.warn('Supabase saveConversation error:', err));
+    }
+
     return newDM.id;
   }, [currentUserId, dms, activeWorkspaceId, addToast]);
 
@@ -670,11 +997,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isEncrypted: true,
       };
 
-      // Encrypt message with AES-256-GCM
+      // Encrypt message with AES-256-GCM and persist to Supabase
       encryptMessage(cleanContent, activeView.id).then((payload) => {
         setMessages((prev) =>
           prev.map((m) => (m.id === msgId ? { ...m, encryptedPayload: payload } : m))
         );
+
+        if (isSupabaseConfigured) {
+          saveMessageToSupabase({
+            id: msgId,
+            workspaceId: activeWorkspaceId,
+            conversationType: activeView.type,
+            conversationId: activeView.id,
+            senderId: currentUserId,
+            content: cleanContent,
+            attachments: attachments && attachments.length > 0 ? attachments : [],
+            reactions: {},
+            encryptedPayload: payload,
+          }).catch((err) => {
+            console.warn('Supabase saveMessage error:', err);
+          });
+        }
       });
 
       setMessages((prev) => [...prev, newMsg]);
@@ -694,7 +1037,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
     },
-    [activeView, currentUserId, addToast]
+    [activeView, currentUserId, activeWorkspaceId, addToast]
   );
 
   // Edit Message
@@ -732,6 +1075,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setMessages((prev) =>
           prev.filter((m) => m.id !== messageId && m.parentId !== messageId)
         );
+        if (isSupabaseConfigured) {
+          deleteMessageFromSupabase(messageId).catch(() => {});
+        }
         addToast('Message deleted for everyone', 'info');
       }
     },
@@ -1064,6 +1410,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setIsKeyboardShortcutsOpen,
         isSecurityModalOpen,
         setIsSecurityModalOpen,
+
+        isSupabaseConfigured,
+        isSupabaseConnected,
+        isSupabaseModalOpen,
+        setIsSupabaseModalOpen,
 
         searchQuery,
         setSearchQuery,

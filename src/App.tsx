@@ -22,6 +22,7 @@ import { KeyboardShortcutsModal } from './components/modals/KeyboardShortcutsMod
 import { TranslationModal } from './components/modals/TranslationModal';
 import { GoogleMeetModal } from './components/modals/GoogleMeetModal';
 import { SecurityModal } from './components/modals/SecurityModal';
+import { SupabaseConnectModal } from './components/modals/SupabaseConnectModal';
 import { ToastContainer } from './components/toast/ToastContainer';
 import { AuthPage } from './components/auth/AuthPage';
 
@@ -31,6 +32,8 @@ const ChatDashboard: React.FC = () => {
     activeThreadMessage,
     isRightPanelOpen,
     isAIAssistantOpen,
+    isSupabaseModalOpen,
+    setIsSupabaseModalOpen,
   } = useChat();
 
   // Lock window and document scrolling so nested containers never shift ancestor layout
@@ -49,57 +52,65 @@ const ChatDashboard: React.FC = () => {
     };
   }, []);
 
-  if (!isAuthenticated) {
-    return <AuthPage />;
-  }
-
   return (
-    <div className="h-full w-full flex flex-col overflow-hidden bg-[#0B0D12] text-[#F5F7FA] fixed inset-0">
-      {/* Top Global Navigation Bar (Section 4D) */}
-      <TopNavigation />
+    <>
+      {!isAuthenticated ? (
+        <AuthPage />
+      ) : (
+        <div className="h-full w-full flex flex-col overflow-hidden bg-[#0B0D12] text-[#F5F7FA] fixed inset-0">
+          {/* Top Global Navigation Bar (Section 4D) */}
+          <TopNavigation />
 
-      {/* Main Workspace Frame */}
-      <div className="flex-1 min-h-0 w-full flex overflow-hidden relative">
-        {/* Leftmost Workspace Rail */}
-        <WorkspaceRail />
+          {/* Main Workspace Frame */}
+          <div className="flex-1 min-h-0 w-full flex overflow-hidden relative">
+            {/* Leftmost Workspace Rail */}
+            <WorkspaceRail />
 
-        {/* Collapsible Channels & DMs Sidebar (Mac-style Genie animation to workspace button) */}
-        <ChannelSidebar />
+            {/* Collapsible Channels & DMs Sidebar (Mac-style Genie animation to workspace button) */}
+            <ChannelSidebar />
 
-        {/* Central Conversation Feed (Section 4B) */}
-        <main 
-          aria-label="Main conversation feed"
-          className="flex-1 min-h-0 flex flex-col min-w-0 bg-[#0B0D12] relative overflow-hidden"
-        >
-          <ChatHeader />
-          <MessageList />
-          <MessageComposer />
-        </main>
+            {/* Central Conversation Feed (Section 4B) */}
+            <main 
+              aria-label="Main conversation feed"
+              className="flex-1 min-h-0 flex flex-col min-w-0 bg-[#0B0D12] relative overflow-hidden"
+            >
+              <ChatHeader />
+              <MessageList />
+              <MessageComposer />
+            </main>
 
-        {/* Side Thread Panel (if thread is open) */}
-        {activeThreadMessage && <ThreadDrawer />}
+            {/* Side Thread Panel (if thread is open) */}
+            {activeThreadMessage && <ThreadDrawer />}
 
-        {/* Pulse AI Copilot Drawer (Red circled one) */}
-        {isAIAssistantOpen && <AIAssistantDrawer />}
+            {/* Pulse AI Copilot Drawer (Red circled one) */}
+            {isAIAssistantOpen && <AIAssistantDrawer />}
 
-        {/* Right Collapsible Inspector Panel (Section 4C) */}
-        {isRightPanelOpen && <RightInfoPanel />}
-      </div>
+            {/* Right Collapsible Inspector Panel (Section 4C) */}
+            {isRightPanelOpen && <RightInfoPanel />}
+          </div>
 
-      {/* Modals & Overlays */}
-      <CreateChannelModal />
-      <BrowseChannelsModal />
-      <NewDirectMessageModal />
-      <CreateWorkspaceModal />
-      <WorkspaceSettingsModal />
-      <UserProfileModal />
-      <GlobalSearchModal />
-      <KeyboardShortcutsModal />
-      <TranslationModal />
-      <GoogleMeetModal />
-      <SecurityModal />
+          {/* Modals & Overlays */}
+          <CreateChannelModal />
+          <BrowseChannelsModal />
+          <NewDirectMessageModal />
+          <CreateWorkspaceModal />
+          <WorkspaceSettingsModal />
+          <UserProfileModal />
+          <GlobalSearchModal />
+          <KeyboardShortcutsModal />
+          <TranslationModal />
+          <GoogleMeetModal />
+          <SecurityModal />
+        </div>
+      )}
+
+      {/* Global Modals & Notifications accessible everywhere */}
+      <SupabaseConnectModal
+        isOpen={isSupabaseModalOpen}
+        onClose={() => setIsSupabaseModalOpen(false)}
+      />
       <ToastContainer />
-    </div>
+    </>
   );
 };
 

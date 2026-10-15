@@ -286,16 +286,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                   <span>{showOriginal ? t('showing_original') : t('translated')}</span>
                 </button>
               )}
-
-              {/* E2EE Encryption Badge */}
-              <button
-                onClick={() => setShowCipherModal(true)}
-                className="text-[10px] text-[#32C48D] bg-[#32C48D]/10 hover:bg-[#32C48D]/20 px-1.5 py-0.2 rounded flex items-center gap-1 transition-colors cursor-pointer"
-                title="AES-256-GCM Encrypted • Click to inspect cryptographic ciphertext"
-              >
-                <Lock className="w-2.5 h-2.5 text-[#32C48D]" />
-                <span className="font-mono">AES-256</span>
-              </button>
             </div>
           )}
 
@@ -516,15 +506,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
           title={message.isPinned ? 'Unpin message' : 'Pin message'}
         >
           <Pin className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Inspect Encryption */}
-        <button
-          onClick={() => setShowCipherModal(true)}
-          className="p-1.5 text-[#32C48D] hover:bg-[#252B36] rounded transition-colors"
-          title="Inspect AES-256-GCM Encrypted Payload"
-        >
-          <ShieldCheck className="w-3.5 h-3.5" />
         </button>
 
         {/* Copy text */}

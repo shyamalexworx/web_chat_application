@@ -158,13 +158,30 @@ export async function supabaseSignUp(params: {
 }) {
   if (!isSupabaseConfigured) return null;
 
-  const cleanEmail = params.email.trim();
+  const cleanEmail = params.email.trim().toLowerCase();
   const cleanName = params.fullName.trim();
   const cleanUsername = params.username.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || 'member';
   const pwd = params.password || 'PulseChat@' + Math.random().toString(36).slice(2, 10);
   let authUser: any = null;
 
-  // 1. Attempt Supabase Auth signup
+  // 1. Verify if user email already exists in profiles
+  try {
+    const { data: existingProf } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', cleanEmail)
+      .maybeSingle();
+
+    if (existingProf) {
+      throw new Error('An account with this email already exists. Please sign in instead.');
+    }
+  } catch (err: any) {
+    if (err.message && err.message.includes('already exists')) {
+      throw err;
+    }
+  }
+
+  // 2. Attempt Supabase Auth signup
   try {
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
@@ -179,22 +196,28 @@ export async function supabaseSignUp(params: {
     });
     if (!error && data?.user) {
       authUser = data.user;
+    } else if (error && error.message?.toLowerCase().includes('already registered')) {
+      throw new Error('An account with this email already exists. Please sign in instead.');
     }
   } catch (authErr: any) {
-    console.warn('Supabase auth.signUp notice (saving profile directly):', authErr?.message);
+    if (authErr?.message?.includes('already exists') || authErr?.message?.toLowerCase().includes('already registered')) {
+      throw authErr;
+    }
+    console.warn('Supabase auth.signUp notice:', authErr?.message);
   }
 
-  // 2. Ensure a reliable user ID is present
+  // 3. User ID & avatar
   const userId = authUser?.id || 'usr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+  const avatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`;
 
-  // 3. Guarantee row exists in public.profiles table in Supabase
+  // 4. Upsert user into public.profiles table
   try {
     await supabase.from('profiles').upsert({
       id: userId,
       username: cleanUsername,
       full_name: cleanName,
       email: cleanEmail,
-      avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`,
+      avatar_url: avatarUrl,
       role: 'member',
       is_online: true,
     }, { onConflict: 'id' });
@@ -202,7 +225,28 @@ export async function supabaseSignUp(params: {
     console.warn('Profiles upsert notice:', profErr);
   }
 
-  // 4. Return user object so client state logs in immediately
+  // 5. Automatically assign membership in public.workspace_members (ws-pulse)
+  try {
+    await supabase.from('workspace_members').upsert({
+      workspace_id: 'ws-pulse',
+      user_id: userId,
+      role: 'member',
+    }, { onConflict: 'workspace_id,user_id' });
+  } catch (wmErr) {
+    console.warn('workspace_members insert notice:', wmErr);
+  }
+
+  // 6. Automatically assign membership in default channels (ch-general, ch-random)
+  try {
+    await supabase.from('channel_members').upsert([
+      { channel_id: 'ch-general', user_id: userId, role: 'member' },
+      { channel_id: 'ch-random', user_id: userId, role: 'member' },
+    ], { onConflict: 'channel_id,user_id' });
+  } catch (cmErr) {
+    console.warn('channel_members insert notice:', cmErr);
+  }
+
+  // 7. Return user object so client state logs in immediately
   return {
     user: {
       id: userId,
@@ -210,7 +254,7 @@ export async function supabaseSignUp(params: {
       user_metadata: {
         full_name: cleanName,
         username: cleanUsername,
-        avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`,
+        avatar_url: avatarUrl,
       },
     },
     session: null,
@@ -223,74 +267,59 @@ export async function supabaseSignIn(email: string, password?: string) {
   const cleanEmail = email.trim().toLowerCase();
   const pwd = password || 'PulseChat@2026';
 
-  // 1. Attempt Supabase Auth password sign in
+  // 1. Look up existing profile in public.profiles by email
+  let prof: any = null;
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password: pwd,
-    });
-
-    if (!error && data?.user) {
-      try {
-        await supabase.from('profiles').update({ is_online: true, last_seen: new Date().toISOString() }).eq('id', data.user.id);
-      } catch (e) {}
-      return data;
-    }
-  } catch (err: any) {
-    console.warn('Supabase signIn notice:', err?.message);
-  }
-
-  // 2. Look up existing profile in public.profiles by email
-  try {
-    const { data: prof } = await supabase
+    const { data } = await supabase
       .from('profiles')
       .select('*')
       .eq('email', cleanEmail)
       .maybeSingle();
 
-    if (prof) {
-      try {
-        await supabase.from('profiles').update({ is_online: true, last_seen: new Date().toISOString() }).eq('id', prof.id);
-      } catch (e) {}
-      return {
-        user: {
-          id: prof.id,
-          email: prof.email || cleanEmail,
-          user_metadata: { full_name: prof.full_name, username: prof.username },
-        },
-        session: null,
-      } as any;
+    if (data) {
+      prof = data;
     }
   } catch (pErr) {
     console.warn('Profile search notice:', pErr);
   }
 
-  // 3. If first-time user, automatically create profile in public.profiles
-  const generatedId = 'usr-' + Date.now();
-  const generatedName = cleanEmail.split('@')[0];
-  const generatedUsername = cleanEmail.split('@')[0].replace(/[^a-z0-9]/g, '') || 'member';
-
+  // 2. Also check Supabase Auth password sign in if available
+  let authUser: any = null;
   try {
-    await supabase.from('profiles').upsert({
-      id: generatedId,
-      username: generatedUsername,
-      full_name: generatedName.charAt(0).toUpperCase() + generatedName.slice(1),
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email: cleanEmail,
-      avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(generatedUsername)}`,
-      role: 'member',
-      is_online: true,
-    }, { onConflict: 'id' });
-  } catch (createErr) {
-    console.warn('Auto profile creation notice:', createErr);
+      password: pwd,
+    });
+    if (!authError && authData?.user) {
+      authUser = authData.user;
+    }
+  } catch (err: any) {
+    // Auth notice
   }
+
+  // 3. STRICT CHECK: If user does not exist in profiles and not in auth, REJECT!
+  if (!prof && !authUser) {
+    throw new Error('No account found with this email. Please sign up first.');
+  }
+
+  const userId = prof?.id || authUser?.id;
+  const userName = prof?.full_name || authUser?.user_metadata?.full_name || cleanEmail.split('@')[0];
+  const userHandle = prof?.username || authUser?.user_metadata?.username || cleanEmail.split('@')[0].replace(/[^a-z0-9]/g, '');
+  const avatarUrl = prof?.avatar_url || authUser?.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(userHandle)}`;
+
+  // Mark as online in profiles
+  try {
+    await supabase.from('profiles').update({ is_online: true, last_seen: new Date().toISOString() }).eq('id', userId);
+  } catch (e) {}
 
   return {
     user: {
-      id: generatedId,
+      id: userId,
       email: cleanEmail,
       user_metadata: {
-        full_name: generatedName,
-        username: generatedUsername,
+        full_name: userName,
+        username: userHandle,
+        avatar_url: avatarUrl,
       },
     },
     session: null,
@@ -667,3 +696,173 @@ export async function deleteMessageFromSupabase(messageId: string) {
   if (!isSupabaseConfigured) return;
   await supabase.from('messages').delete().eq('id', messageId);
 }
+
+/**
+ * Update message in Supabase (reactions, pin status, content)
+ */
+export async function updateMessageInSupabase(
+  messageId: string,
+  updates: {
+    reactions?: Record<string, string[]>;
+    isPinned?: boolean;
+    content?: string;
+  }
+) {
+  if (!isSupabaseConfigured) return null;
+  const payload: any = { updated_at: new Date().toISOString() };
+  if (updates.reactions !== undefined) payload.reactions = updates.reactions;
+  if (updates.isPinned !== undefined) payload.is_pinned = updates.isPinned;
+  if (updates.content !== undefined) payload.content = updates.content;
+
+  const { data, error } = await supabase
+    .from('messages')
+    .update(payload)
+    .eq('id', messageId)
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.warn('Error updating message in Supabase:', error);
+  }
+  return data;
+}
+
+/**
+ * Update user profile in Supabase
+ */
+export async function updateProfileInSupabase(
+  userId: string,
+  updates: {
+    name?: string;
+    avatar?: string;
+    title?: string;
+    statusText?: string;
+    statusEmoji?: string;
+  }
+) {
+  if (!isSupabaseConfigured) return null;
+  const payload: any = { updated_at: new Date().toISOString() };
+  if (updates.name !== undefined) payload.full_name = updates.name;
+  if (updates.avatar !== undefined) payload.avatar_url = updates.avatar;
+  if (updates.title !== undefined) payload.title = updates.title;
+  if (updates.statusText !== undefined) payload.status_text = updates.statusText;
+  if (updates.statusEmoji !== undefined) payload.status_emoji = updates.statusEmoji;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(payload)
+    .eq('id', userId)
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.warn('Error updating profile in Supabase:', error);
+  }
+  return data;
+}
+
+/**
+ * Fetch workspaces from Supabase
+ */
+export async function fetchWorkspacesFromSupabase() {
+  if (!isSupabaseConfigured) return [];
+  const { data, error } = await supabase
+    .from('workspaces')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    console.warn('Error fetching workspaces from Supabase:', error);
+    return [];
+  }
+
+  return (data || []).map((w: any) => ({
+    id: w.id,
+    name: w.name,
+    slug: w.slug,
+    icon: w.icon || '⚡',
+    iconBg: w.icon_bg || '#4F8CFF',
+    description: w.name + ' workspace',
+    ownerId: w.created_by || 'system',
+    membersCount: 1,
+    plan: w.plan || 'Pro',
+    createdAt: w.created_at || new Date().toISOString(),
+  }));
+}
+
+/**
+ * Save new workspace to Supabase and register creator as owner in workspace_members
+ */
+export async function saveWorkspaceToSupabase(ws: {
+  id: string;
+  name: string;
+  slug: string;
+  icon?: string;
+  iconBg?: string;
+  plan?: string;
+  createdBy: string;
+}) {
+  if (!isSupabaseConfigured) return null;
+
+  const { data, error } = await supabase
+    .from('workspaces')
+    .upsert({
+      id: ws.id,
+      name: ws.name,
+      slug: ws.slug,
+      icon: ws.icon || '⚡',
+      icon_bg: ws.iconBg || '#4F8CFF',
+      plan: ws.plan || 'Enterprise',
+      created_by: ws.createdBy,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.warn('Error saving workspace to Supabase:', error);
+    return null;
+  }
+
+  // Register creator as owner in workspace_members
+  try {
+    await supabase.from('workspace_members').upsert({
+      workspace_id: ws.id,
+      user_id: ws.createdBy,
+      role: 'owner',
+    }, { onConflict: 'workspace_id,user_id' });
+  } catch (wmErr) {
+    console.warn('Error adding workspace owner:', wmErr);
+  }
+
+  return data;
+}
+
+/**
+ * Update workspace in Supabase
+ */
+export async function updateWorkspaceInSupabase(
+  workspaceId: string,
+  updates: { name?: string; iconBg?: string }
+) {
+  if (!isSupabaseConfigured) return;
+  const payload: any = {};
+  if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.iconBg !== undefined) payload.icon_bg = updates.iconBg;
+  await supabase.from('workspaces').update(payload).eq('id', workspaceId);
+}
+
+/**
+ * Update channel in Supabase
+ */
+export async function updateChannelInSupabase(
+  channelId: string,
+  updates: { name?: string; topic?: string; description?: string }
+) {
+  if (!isSupabaseConfigured) return;
+  const payload: any = {};
+  if (updates.name !== undefined) payload.name = updates.name;
+  if (updates.topic !== undefined) payload.topic = updates.topic;
+  if (updates.description !== undefined) payload.description = updates.description;
+  await supabase.from('channels').update(payload).eq('id', channelId);
+}
+

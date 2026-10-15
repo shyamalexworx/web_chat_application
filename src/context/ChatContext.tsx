@@ -30,13 +30,19 @@ import {
   supabaseSignIn,
   supabaseSignOut,
   fetchProfilesFromSupabase,
+  fetchWorkspacesFromSupabase,
+  saveWorkspaceToSupabase,
+  updateWorkspaceInSupabase,
   fetchChannelsFromSupabase,
   saveChannelToSupabase,
+  updateChannelInSupabase,
   fetchConversationsFromSupabase,
   saveConversationToSupabase,
   fetchMessagesFromSupabase,
   saveMessageToSupabase,
+  updateMessageInSupabase,
   deleteMessageFromSupabase,
+  updateProfileInSupabase,
 } from '../lib/supabase';
 
 const STORAGE_KEY_PREFIX = 'pulsechat_v5_';
@@ -384,6 +390,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUsers((prev) =>
       prev.map((u) => (u.id === currentUserId ? { ...u, ...updates } : u))
     );
+    if (isSupabaseConfigured) {
+      updateProfileInSupabase(currentUserId, updates).catch((err) =>
+        console.warn('Supabase profile update notice:', err)
+      );
+    }
     addToast('Profile updated successfully', 'success');
   }, [currentUserId, addToast]);
 
@@ -406,14 +417,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        // 2. Fetch Profiles from Supabase
+        // 2. Fetch Workspaces from Supabase
+        const remoteWorkspaces = await fetchWorkspacesFromSupabase();
+        if (isMounted && remoteWorkspaces.length > 0) {
+          setWorkspaces(remoteWorkspaces);
+        }
+
+        // 3. Fetch Profiles from Supabase
         const remoteProfiles = await fetchProfilesFromSupabase();
         if (isMounted && remoteProfiles.length > 0) {
           const mappedUsers: User[] = remoteProfiles.map((p) => ({
             id: p.id,
             name: p.full_name || p.username,
             username: p.username,
-            email: p.username + '@pulsechat.io',
+            email: p.email || p.username + '@pulsechat.io',
             avatar: p.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(p.username)}`,
             role: p.role || 'member',
             title: p.title || 'Product Engineer',
@@ -423,7 +440,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setUsers(mappedUsers);
         }
 
-        // 3. Fetch Channels for workspace & user
+        // 4. Fetch Channels for workspace & user
         const remoteChannels = await fetchChannelsFromSupabase(activeWorkspaceId, uid);
         if (isMounted && remoteChannels.length > 0) {
           setChannels(remoteChannels);
@@ -550,7 +567,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: p.id,
                 name: p.full_name || p.username,
                 username: p.username,
-                email: p.username + '@pulsechat.io',
+                email: p.email || p.username + '@pulsechat.io',
                 avatar: p.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(p.username)}`,
                 role: p.role || 'member',
                 title: p.title || 'Product Engineer',
@@ -559,6 +576,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               }));
               setUsers(mappedUsers);
             }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'workspaces' },
+        async () => {
+          if (isMounted) {
+            const updated = await fetchWorkspacesFromSupabase();
+            if (updated.length > 0) setWorkspaces(updated);
           }
         }
       )
@@ -588,7 +615,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = useCallback(
     async (email: string, password?: string) => {
-      const cleanEmail = email.trim();
+      const cleanEmail = email.trim().toLowerCase();
 
       if (isSupabaseConfigured) {
         try {
@@ -617,43 +644,33 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             return true;
           }
         } catch (err: any) {
-          console.warn('Sign in notice:', err);
+          console.warn('Sign in error:', err);
+          addToast(err?.message || 'No account found with this email. Please sign up first.', 'error');
+          return false;
         }
       }
 
-      // Local fallback
-      const existing = users.find((u) => u.email.toLowerCase() === cleanEmail.toLowerCase());
+      // Demo/local mode: strictly check if user exists in registered list
+      const existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
       if (existing) {
         setCurrentUserId(existing.id);
         setIsAuthenticated(true);
         localStorage.setItem('pulsechat_auth', 'true');
+        localStorage.setItem('pulsechat_current_user', existing.id);
         addToast(`Welcome back, ${existing.name}!`, 'success');
         return true;
       }
-      const newUser: User = {
-        id: 'user-' + Date.now(),
-        name: cleanEmail.split('@')[0],
-        username: cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, ''),
-        email: cleanEmail,
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        role: 'member',
-        title: 'Product Engineer',
-        isOnline: true,
-        joinedDate: 'Just now',
-      };
-      setUsers((prev) => [...prev, newUser]);
-      setCurrentUserId(newUser.id);
-      setIsAuthenticated(true);
-      localStorage.setItem('pulsechat_auth', 'true');
-      addToast(`Account created. Welcome to PulseChat!`, 'success');
-      return true;
+
+      // Strictly reject unregistered user
+      addToast('No account found with this email. Please sign up first.', 'error');
+      return false;
     },
     [users, addToast]
   );
 
   const register = useCallback(
     async (name: string, email: string, username: string, password?: string) => {
-      const cleanEmail = email.trim();
+      const cleanEmail = email.trim().toLowerCase();
       const cleanName = name.trim();
       const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || 'member';
 
@@ -672,7 +689,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               name: cleanName,
               username: cleanUsername,
               email: cleanEmail,
-              avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`,
+              avatar: res.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`,
               role: 'member',
               title: 'Fullstack Engineer',
               isOnline: true,
@@ -693,9 +710,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // Local fallback
+      // Demo/local mode registration check
+      const existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
+      if (existing) {
+        addToast('An account with this email already exists. Please sign in instead.', 'error');
+        return false;
+      }
+
       const newUser: User = {
-        id: 'user-' + Date.now(),
+        id: 'usr-' + Date.now(),
         name: cleanName,
         username: cleanUsername,
         email: cleanEmail,
@@ -709,10 +732,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setCurrentUserId(newUser.id);
       setIsAuthenticated(true);
       localStorage.setItem('pulsechat_auth', 'true');
+      localStorage.setItem('pulsechat_current_user', newUser.id);
       addToast(`Welcome to PulseChat, ${cleanName}!`, 'success');
       return true;
     },
-    [addToast]
+    [users, addToast]
   );
 
   const logout = useCallback(() => {
@@ -779,6 +803,30 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveWorkspaceIdState(newWs.id);
     setActiveView({ type: 'channel', id: genChannel.id });
     addToast(`Workspace "${name}" created!`, 'success');
+
+    if (isSupabaseConfigured) {
+      saveWorkspaceToSupabase({
+        id: newWs.id,
+        name: newWs.name,
+        slug: newWs.slug,
+        icon: newWs.icon,
+        iconBg: newWs.iconBg,
+        plan: newWs.plan,
+        createdBy: currentUserId,
+      }).catch((err) => console.warn('Supabase saveWorkspace notice:', err));
+
+      saveChannelToSupabase({
+        id: genChannel.id,
+        workspaceId: newWs.id,
+        name: genChannel.name,
+        topic: genChannel.topic,
+        description: genChannel.description,
+        isPrivate: genChannel.isPrivate,
+        createdBy: currentUserId,
+        memberIds: genChannel.memberIds,
+      }).catch((err) => console.warn('Supabase saveChannel notice:', err));
+    }
+
     return newWs;
   }, [currentUserId, addToast]);
 
@@ -786,6 +834,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setWorkspaces((prev) =>
       prev.map((w) => (w.id === id ? { ...w, ...updates } : w))
     );
+    if (isSupabaseConfigured) {
+      updateWorkspaceInSupabase(id, { name: updates.name, iconBg: updates.iconBg }).catch((err) =>
+        console.warn('Supabase updateWorkspace notice:', err)
+      );
+    }
     addToast('Workspace settings saved', 'success');
   }, [addToast]);
 
@@ -849,6 +902,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setChannels((prev) =>
       prev.map((c) => (c.id === channelId ? { ...c, ...updates } : c))
     );
+    if (isSupabaseConfigured) {
+      updateChannelInSupabase(channelId, {
+        name: updates.name,
+        topic: updates.topic,
+        description: updates.description,
+      }).catch((err) => console.warn('Supabase updateChannel notice:', err));
+    }
     addToast('Channel details updated', 'success');
   }, [addToast]);
 
@@ -1060,6 +1120,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           : m
       )
     );
+    if (isSupabaseConfigured) {
+      updateMessageInSupabase(messageId, { content: newContent }).catch((err) =>
+        console.warn('Supabase editMessage notice:', err)
+      );
+    }
     addToast('Message edited', 'info');
   }, [addToast]);
 
@@ -1116,6 +1181,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           newReactions[emoji] = [...currentReactors, currentUserId];
         }
 
+        if (isSupabaseConfigured) {
+          updateMessageInSupabase(messageId, { reactions: newReactions }).catch((err) =>
+            console.warn('Supabase reaction notice:', err)
+          );
+        }
+
         return { ...m, reactions: newReactions };
       })
     );
@@ -1127,6 +1198,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((m) => {
         if (m.id !== messageId) return m;
         const isNowPinned = !m.isPinned;
+        if (isSupabaseConfigured) {
+          updateMessageInSupabase(messageId, { isPinned: isNowPinned }).catch((err) =>
+            console.warn('Supabase pin notice:', err)
+          );
+        }
         addToast(isNowPinned ? 'Message pinned to conversation' : 'Message unpinned', 'info');
         return { ...m, isPinned: isNowPinned };
       })
@@ -1166,6 +1242,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setMessages((prev) =>
           prev.map((m) => (m.id === replyId ? { ...m, encryptedPayload: payload } : m))
         );
+        if (isSupabaseConfigured) {
+          saveMessageToSupabase({
+            id: replyId,
+            workspaceId: activeWorkspaceId,
+            conversationType: parentMsg.conversationType,
+            conversationId: parentMsg.conversationId,
+            senderId: currentUserId,
+            content: cleanContent,
+            parentId: parentMessageId,
+            attachments: [],
+            reactions: {},
+            encryptedPayload: payload,
+          }).catch((err) => console.warn('Supabase saveThreadReply notice:', err));
+        }
       });
 
       setMessages((prev) => {

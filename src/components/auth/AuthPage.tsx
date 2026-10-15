@@ -27,8 +27,10 @@ export const AuthPage: React.FC = () => {
     try {
       const success = await login(email.trim(), password.trim());
       if (!success) {
-        setError('Invalid credentials or authentication error.');
+        setError('No account found with this email. Please sign up first.');
       }
+    } catch (err: any) {
+      setError(err?.message || 'No account found with this email. Please sign up first.');
     } finally {
       setIsSubmitting(false);
     }
@@ -50,8 +52,10 @@ export const AuthPage: React.FC = () => {
     try {
       const success = await register(name.trim(), email.trim(), username, password.trim());
       if (!success) {
-        setError('Unable to register. Please check your details and try again.');
+        setError('Registration failed. An account with this email may already exist.');
       }
+    } catch (err: any) {
+      setError(err?.message || 'Registration failed. An account with this email may already exist.');
     } finally {
       setIsSubmitting(false);
     }

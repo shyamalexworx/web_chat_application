@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useChat } from '../../context/ChatContext';
 import { InteractivePerspectiveGrid } from './InteractivePerspectiveGrid';
+import { generateLetterAvatar } from '../../utils/avatar';
+import { Upload } from 'lucide-react';
 
 export const AuthPage: React.FC = () => {
   const { login, register, addToast } = useChat();
@@ -9,8 +11,10 @@ export const AuthPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,7 +54,7 @@ export const AuthPage: React.FC = () => {
     const username = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || 'member';
     setIsSubmitting(true);
     try {
-      const success = await register(name.trim(), email.trim(), username, password.trim());
+      const success = await register(name.trim(), email.trim(), username, password.trim(), avatarUrl || undefined);
       if (!success) {
         setError('Registration failed. An account with this email may already exist.');
       }
@@ -116,19 +120,80 @@ export const AuthPage: React.FC = () => {
         {/* Sign In / Sign Up Form */}
         <form onSubmit={mode === 'login' ? handleLogin : handleRegister} className="space-y-4">
           {mode === 'register' && (
-            <div>
-              <label className="block text-sm font-medium text-[#F5F7FA] mb-2">
-                Full name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Alex Rivera"
-                className="w-full h-11 bg-[#181C25] hover:bg-[#1E2330] focus:bg-[#181C25] border border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-4 text-sm text-[#F5F7FA] placeholder-[#636D7E] outline-none transition-all shadow-sm"
-                required
-              />
-            </div>
+            <>
+              <div>
+                <label className="block text-sm font-medium text-[#F5F7FA] mb-2">
+                  Full name
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Your Name"
+                  className="w-full h-11 bg-[#181C25] hover:bg-[#1E2330] focus:bg-[#181C25] border border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-4 text-sm text-[#F5F7FA] placeholder-[#636D7E] outline-none transition-all shadow-sm"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[#F5F7FA] mb-2">
+                  Profile Photo <span className="text-xs text-[#929BAA] font-normal">(Optional)</span>
+                </label>
+                <div className="flex items-center space-x-3.5 bg-[#181C25] border border-[#252B36] rounded-xl p-3">
+                  <div className="relative flex-shrink-0">
+                    <img
+                      src={avatarUrl || generateLetterAvatar(name || 'Member')}
+                      alt=""
+                      className="w-11 h-11 rounded-xl object-cover border border-[#4F8CFF]/50 bg-[#0E1118]"
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (!file.type.startsWith('image/')) {
+                          addToast('Please select a valid image file', 'warning');
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setAvatarUrl(ev.target?.result as string);
+                          addToast('Custom photo chosen', 'success');
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                    <div className="flex items-center space-x-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="px-2.5 py-1 bg-[#1E2330] hover:bg-[#252B36] text-[#F5F7FA] border border-[#252B36] rounded-lg text-xs font-medium flex items-center space-x-1.5 transition-colors cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-[#4F8CFF]" />
+                        <span>Upload photo</span>
+                      </button>
+                      {avatarUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setAvatarUrl('')}
+                          className="px-2 py-1 text-[#929BAA] hover:text-[#F05D6C] text-xs transition-colors cursor-pointer"
+                        >
+                          Reset
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#929BAA] mt-1 truncate">
+                      {avatarUrl ? 'Custom photo selected' : 'Default: first letter with color'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
 
           <div>

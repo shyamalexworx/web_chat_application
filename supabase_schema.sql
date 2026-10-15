@@ -135,16 +135,22 @@ CREATE INDEX idx_channel_members_user ON public.channel_members(user_id);
 CREATE INDEX idx_workspace_members_user ON public.workspace_members(user_id);
 CREATE INDEX idx_profiles_email ON public.profiles(email);
 
--- 12. SEED DEFAULT WORKSPACE & DEFAULT CHANNELS
-INSERT INTO public.workspaces (id, name, slug, icon, icon_bg, plan)
-VALUES ('ws-pulse', 'PulseChat Main HQ', 'pulsechat', '⚡', '#4F8CFF', 'Enterprise')
-ON CONFLICT (id) DO NOTHING;
+-- 12. CHAT INVITATIONS TABLE (Slack-style invites)
+CREATE TABLE IF NOT EXISTS public.chat_invites (
+  id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+  workspace_id TEXT,
+  sender_id TEXT REFERENCES public.profiles(id) ON DELETE CASCADE,
+  receiver_id TEXT REFERENCES public.profiles(id) ON DELETE CASCADE,
+  conversation_id TEXT,
+  channel_id TEXT,
+  invite_type TEXT DEFAULT 'dm',
+  status TEXT DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-INSERT INTO public.channels (id, workspace_id, name, topic, description, is_private)
-VALUES 
-  ('ch-general', 'ws-pulse', 'general', 'Company announcements and team banter', 'Public channel for everyone', false),
-  ('ch-random', 'ws-pulse', 'random', 'Water cooler chats and casual discussion', 'Casual discussion', false)
-ON CONFLICT (id) DO NOTHING;
+CREATE INDEX IF NOT EXISTS idx_chat_invites_receiver ON public.chat_invites(receiver_id, status);
+CREATE INDEX IF NOT EXISTS idx_chat_invites_sender ON public.chat_invites(sender_id);
 
 -- 13. AUTOMATIC USER PROFILE TRIGGER (Fires on Supabase Auth signup)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -156,18 +162,13 @@ BEGIN
     COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1)),
     COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'avatar_url', 'https://api.dicebear.com/7.x/bottts/svg?seed=' || NEW.id),
+    NEW.raw_user_meta_data->>'avatar_url',
     COALESCE(NEW.raw_user_meta_data->>'role', 'member')
   )
   ON CONFLICT (id) DO UPDATE SET
     username = EXCLUDED.username,
     full_name = EXCLUDED.full_name,
     email = EXCLUDED.email;
-  
-  -- Add user to default workspace members
-  INSERT INTO public.workspace_members (workspace_id, user_id, role)
-  VALUES ('ws-pulse', NEW.id::text, 'member')
-  ON CONFLICT DO NOTHING;
 
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN

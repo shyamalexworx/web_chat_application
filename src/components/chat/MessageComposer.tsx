@@ -10,6 +10,8 @@ import {
   Trash2,
   Image as ImageIcon,
   Video,
+  Clock,
+  Mail,
 } from 'lucide-react';
 import { globalVoiceRecorder } from '../../utils/audioRecorder';
 import { uploadChatMedia, isSupabaseConfigured } from '../../lib/supabase';
@@ -28,6 +30,9 @@ export const MessageComposer: React.FC = () => {
     dms,
     users,
     currentUser,
+    invites,
+    acceptInvite,
+    declineInvite,
     sendMessage,
     typingUsers,
     addToast,
@@ -258,6 +263,71 @@ export const MessageComposer: React.FC = () => {
     setShowEmojiPicker(false);
     textareaRef.current?.focus();
   };
+
+  if (!activeChannel && !activeDM) {
+    return null;
+  }
+
+  if (activeDM && activeDM.status === 'pending') {
+    const isInviter = activeDM.invitedBy === currentUser.id;
+    return (
+      <div className="px-4 py-3 bg-[#0B0D12] select-none flex-shrink-0 border-t border-[#252B36]/50">
+        {isInviter ? (
+          <div className="p-4 bg-[#12151C] border border-[#252B36] rounded-xl flex items-center space-x-3 text-xs">
+            <div className="w-9 h-9 rounded-xl bg-[#F5A623]/15 text-[#F5A623] flex items-center justify-center flex-shrink-0">
+              <Clock className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="font-semibold text-[#F5F7FA] text-sm">Invitation Sent</span>
+              <p className="text-[11px] text-[#929BAA] mt-0.5">
+                Waiting for {dmPartner?.name || 'recipient'} to accept your chat invite. Messaging will unlock automatically once accepted.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="p-4 bg-[#12151C] border border-[#4F8CFF]/50 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-lg">
+            <div className="flex items-center space-x-3 text-[#F5F7FA]">
+              <div className="w-10 h-10 rounded-xl bg-[#4F8CFF]/20 text-[#4F8CFF] flex items-center justify-center flex-shrink-0">
+                <Mail className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="font-semibold text-[#F5F7FA] text-sm">{dmPartner?.name || 'Coworker'} invited you to chat</span>
+                <p className="text-[11px] text-[#929BAA] mt-0.5">
+                  Accept this invitation to start messaging, sharing files, and sending voice notes.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2 w-full sm:w-auto justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  const inv = invites.find(
+                    (i) => (i.conversationId === activeDM.id || (i.senderId === dmPartner?.id && i.receiverId === currentUser.id)) && i.status === 'pending'
+                  );
+                  if (inv) acceptInvite(inv.id);
+                }}
+                className="px-4 py-2 bg-[#10B981] hover:bg-[#059669] text-white font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const inv = invites.find(
+                    (i) => (i.conversationId === activeDM.id || (i.senderId === dmPartner?.id && i.receiverId === currentUser.id)) && i.status === 'pending'
+                  );
+                  if (inv) declineInvite(inv.id);
+                }}
+                className="px-3 py-2 bg-[#181C25] hover:bg-[#252B36] text-[#929BAA] hover:text-[#F05D6C] border border-[#252B36] rounded-lg transition-colors cursor-pointer"
+              >
+                Decline
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="px-4 pt-1 pb-3 bg-[#0B0D12] select-none flex-shrink-0 relative">

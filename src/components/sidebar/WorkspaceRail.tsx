@@ -27,8 +27,6 @@ export const WorkspaceRail: React.FC = () => {
     toggleAIAssistant,
     isAIAssistantOpen,
     currentUser,
-    users,
-    switchUser,
     updateCurrentUserProfile,
     setIsUserProfileOpen,
     logout,
@@ -249,33 +247,6 @@ export const WorkspaceRail: React.FC = () => {
               </div>
               <span className="text-[10px]">{soundEnabled ? 'ON' : 'OFF'}</span>
             </button>
-
-            {/* Switch User Perspective (Demo) */}
-            <div className="pt-1 border-t border-[#252B36]">
-              <div className="px-3 py-1 text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider">
-                Switch Perspective:
-              </div>
-              <div className="space-y-0.5 max-h-36 overflow-y-auto">
-                {users.map((u) => (
-                  <button
-                    key={u.id}
-                    onClick={() => {
-                      switchUser(u.id);
-                      setUserMenuOpen(false);
-                    }}
-                    className={`w-full flex items-center space-x-2 px-3 py-1.5 text-xs rounded-lg transition-colors ${
-                      u.id === currentUser.id
-                        ? 'bg-[#4F8CFF]/15 text-[#4F8CFF] font-medium'
-                        : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#12151C]'
-                    }`}
-                  >
-                    <img src={u.avatar} alt="" className="w-4 h-4 rounded-full object-cover" />
-                    <span className="truncate">{u.name}</span>
-                    {u.id === currentUser.id && <span className="text-[10px] ml-auto">Active</span>}
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {/* Logout */}
             <div className="pt-1 border-t border-[#252B36]">

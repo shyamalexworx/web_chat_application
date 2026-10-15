@@ -51,6 +51,20 @@ export interface DirectMessageConversation {
   unreadCount: number;
   isStarred: boolean;
   lastActivity: string;
+  status?: 'pending' | 'accepted' | 'declined';
+  invitedBy?: string;
+}
+
+export interface ChatInvite {
+  id: string;
+  workspaceId?: string;
+  senderId: string;
+  receiverId: string;
+  conversationId?: string;
+  channelId?: string;
+  inviteType: 'dm' | 'channel';
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: string;
 }
 
 export interface Attachment {

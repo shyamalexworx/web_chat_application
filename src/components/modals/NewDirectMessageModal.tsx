@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useChat } from '../../context/ChatContext';
-import { X, Search, Check, Users, User, ArrowRight } from 'lucide-react';
+import { X, Search, Check, Users, User, ArrowRight, Send } from 'lucide-react';
+import { resolveUserAvatar } from '../../utils/avatar';
 
 export const NewDirectMessageModal: React.FC = () => {
   const {
@@ -54,9 +55,9 @@ export const NewDirectMessageModal: React.FC = () => {
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#252B36] flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-bold text-[#F5F7FA]">Direct Messages</h2>
+            <h2 className="text-sm font-bold text-[#F5F7FA]">Direct Messages & Invites</h2>
             <p className="text-[11px] text-[#929BAA]">
-              Send a direct message or select multiple people for a group chat.
+              Send a chat invite to a coworker or select multiple people for a group chat.
             </p>
           </div>
 
@@ -80,7 +81,7 @@ export const NewDirectMessageModal: React.FC = () => {
                     key={id}
                     className="inline-flex items-center space-x-1.5 bg-[#4F8CFF]/20 border border-[#4F8CFF]/40 text-[#4F8CFF] px-2.5 py-1 rounded-full text-xs font-medium"
                   >
-                    <img src={u.avatar} alt="" className="w-3.5 h-3.5 rounded-full object-cover" />
+                    <img src={resolveUserAvatar(u.avatar, u.name)} alt="" className="w-3.5 h-3.5 rounded-full object-cover" />
                     <span>{u.name}</span>
                     <button
                       onClick={() => toggleSelectUser(id)}
@@ -141,7 +142,7 @@ export const NewDirectMessageModal: React.FC = () => {
                   <div className="flex items-center space-x-3 truncate">
                     <div className="relative flex-shrink-0">
                       <img
-                        src={u.avatar}
+                        src={resolveUserAvatar(u.avatar, u.name)}
                         alt={u.name}
                         className="w-8 h-8 rounded-lg object-cover"
                       />
@@ -194,11 +195,11 @@ export const NewDirectMessageModal: React.FC = () => {
               disabled={selectedUserIds.length === 0}
               className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all ${
                 selectedUserIds.length > 0
-                  ? 'bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white shadow-accent-glow'
+                  ? 'bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white shadow-accent-glow cursor-pointer'
                   : 'bg-[#12151C] text-[#929BAA]/50 cursor-not-allowed'
               }`}
             >
-              <span>Start Conversation</span>
+              <span>{selectedUserIds.length > 1 ? 'Start Group Discussion' : 'Send Chat Invite'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

@@ -1,4 +1,6 @@
 import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
+import { generateLetterAvatar, resolveUserAvatar } from '../utils/avatar';
+import type { ChatInvite } from '../types';
 
 // ==============================================================================
 // 1. CONFIGURATION & CLIENT INITIALIZATION
@@ -155,6 +157,7 @@ export async function supabaseSignUp(params: {
   password?: string;
   fullName: string;
   username: string;
+  avatarUrl?: string;
 }) {
   if (!isSupabaseConfigured) return null;
 
@@ -162,6 +165,7 @@ export async function supabaseSignUp(params: {
   const cleanName = params.fullName.trim();
   const cleanUsername = params.username.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || 'member';
   const pwd = params.password || 'PulseChat@' + Math.random().toString(36).slice(2, 10);
+  const avatarUrl = params.avatarUrl || generateLetterAvatar(cleanName);
   let authUser: any = null;
 
   // 1. Verify if user email already exists in profiles
@@ -190,7 +194,7 @@ export async function supabaseSignUp(params: {
         data: {
           full_name: cleanName,
           username: cleanUsername,
-          avatar_url: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`,
+          avatar_url: avatarUrl,
         },
       },
     });
@@ -206,11 +210,10 @@ export async function supabaseSignUp(params: {
     console.warn('Supabase auth.signUp notice:', authErr?.message);
   }
 
-  // 3. User ID & avatar
+  // 3. User ID
   const userId = authUser?.id || 'usr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
-  const avatarUrl = `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`;
 
-  // 4. Upsert user into public.profiles table
+  // 4. Upsert user into public.profiles table (Fresh start: no demo workspaces or demo channels)
   try {
     await supabase.from('profiles').upsert({
       id: userId,
@@ -225,28 +228,7 @@ export async function supabaseSignUp(params: {
     console.warn('Profiles upsert notice:', profErr);
   }
 
-  // 5. Automatically assign membership in public.workspace_members (ws-pulse)
-  try {
-    await supabase.from('workspace_members').upsert({
-      workspace_id: 'ws-pulse',
-      user_id: userId,
-      role: 'member',
-    }, { onConflict: 'workspace_id,user_id' });
-  } catch (wmErr) {
-    console.warn('workspace_members insert notice:', wmErr);
-  }
-
-  // 6. Automatically assign membership in default channels (ch-general, ch-random)
-  try {
-    await supabase.from('channel_members').upsert([
-      { channel_id: 'ch-general', user_id: userId, role: 'member' },
-      { channel_id: 'ch-random', user_id: userId, role: 'member' },
-    ], { onConflict: 'channel_id,user_id' });
-  } catch (cmErr) {
-    console.warn('channel_members insert notice:', cmErr);
-  }
-
-  // 7. Return user object so client state logs in immediately
+  // 5. Return user object so client state logs in immediately
   return {
     user: {
       id: userId,
@@ -305,7 +287,7 @@ export async function supabaseSignIn(email: string, password?: string) {
   const userId = prof?.id || authUser?.id;
   const userName = prof?.full_name || authUser?.user_metadata?.full_name || cleanEmail.split('@')[0];
   const userHandle = prof?.username || authUser?.user_metadata?.username || cleanEmail.split('@')[0].replace(/[^a-z0-9]/g, '');
-  const avatarUrl = prof?.avatar_url || authUser?.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(userHandle)}`;
+  const avatarUrl = resolveUserAvatar(prof?.avatar_url || authUser?.user_metadata?.avatar_url, userName);
 
   // Mark as online in profiles
   try {
@@ -422,7 +404,10 @@ export async function fetchProfilesFromSupabase() {
     console.warn('Error fetching profiles from Supabase:', error);
     return [];
   }
-  return data || [];
+  return (data || []).map((p: any) => ({
+    ...p,
+    avatar_url: resolveUserAvatar(p.avatar_url, p.full_name || p.username),
+  }));
 }
 
 /**
@@ -865,4 +850,83 @@ export async function updateChannelInSupabase(
   if (updates.description !== undefined) payload.description = updates.description;
   await supabase.from('channels').update(payload).eq('id', channelId);
 }
+
+/**
+ * Fetch chat invitations for a user (sent or received)
+ */
+export async function fetchInvitesFromSupabase(userId: string): Promise<ChatInvite[]> {
+  if (!isSupabaseConfigured) return [];
+  try {
+    const { data, error } = await supabase
+      .from('chat_invites')
+      .select('*')
+      .or(`receiver_id.eq.${userId},sender_id.eq.${userId}`)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      // Table may not exist yet if user hasn't run latest SQL
+      return [];
+    }
+
+    return (data || []).map((inv: any) => ({
+      id: inv.id,
+      workspaceId: inv.workspace_id,
+      senderId: inv.sender_id,
+      receiverId: inv.receiver_id,
+      conversationId: inv.conversation_id,
+      channelId: inv.channel_id,
+      inviteType: inv.invite_type || 'dm',
+      status: inv.status || 'pending',
+      createdAt: inv.created_at,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Save chat invitation to Supabase
+ */
+export async function saveInviteToSupabase(invite: ChatInvite) {
+  if (!isSupabaseConfigured) return null;
+  try {
+    const { data, error } = await supabase
+      .from('chat_invites')
+      .upsert({
+        id: invite.id,
+        workspace_id: invite.workspaceId || null,
+        sender_id: invite.senderId,
+        receiver_id: invite.receiverId,
+        conversation_id: invite.conversationId || null,
+        channel_id: invite.channelId || null,
+        invite_type: invite.inviteType,
+        status: invite.status,
+      })
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      console.warn('Notice saving invite to Supabase:', error.message);
+    }
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Update invite status in Supabase (accepted, declined)
+ */
+export async function updateInviteStatusInSupabase(inviteId: string, status: 'accepted' | 'declined') {
+  if (!isSupabaseConfigured) return;
+  try {
+    await supabase
+      .from('chat_invites')
+      .update({ status, updated_at: new Date().toISOString() })
+      .eq('id', inviteId);
+  } catch (e) {
+    console.warn('Notice updating invite status:', e);
+  }
+}
+
 

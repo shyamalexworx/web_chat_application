@@ -10,6 +10,7 @@ import type {
   HuddleState,
   ActiveView,
   Attachment,
+  ChatInvite,
 } from '../types';
 import {
   INITIAL_USERS,
@@ -23,6 +24,7 @@ import { soundFX } from '../utils/audio';
 import { translateText, getTranslation } from '../utils/translation';
 import { encryptMessage } from '../utils/crypto';
 import { sanitizeInput, rateLimiter } from '../utils/security';
+import { generateLetterAvatar, resolveUserAvatar } from '../utils/avatar';
 import {
   isSupabaseConfigured,
   supabase,
@@ -43,16 +45,19 @@ import {
   updateMessageInSupabase,
   deleteMessageFromSupabase,
   updateProfileInSupabase,
+  fetchInvitesFromSupabase,
+  saveInviteToSupabase,
+  updateInviteStatusInSupabase,
 } from '../lib/supabase';
 
-const STORAGE_KEY_PREFIX = 'pulsechat_v5_';
+const STORAGE_KEY_PREFIX = 'pulsechat_v6_fresh_';
 
 const GUEST_FALLBACK_USER: User = {
   id: 'guest',
   name: 'Team Member',
   username: 'member',
   email: 'member@pulsechat.io',
-  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+  avatar: generateLetterAvatar('Team Member'),
   role: 'owner',
   title: 'Workspace Member',
   isOnline: true,
@@ -66,10 +71,16 @@ interface ChatContextType {
   switchUser: (userId: string) => void;
   isAuthenticated: boolean;
   login: (email: string, password?: string) => Promise<boolean> | boolean;
-  register: (name: string, email: string, username: string, password?: string) => Promise<boolean> | boolean;
+  register: (name: string, email: string, username: string, password?: string, avatarUrl?: string) => Promise<boolean> | boolean;
   logout: () => void;
   updateCurrentUserProfile: (updates: Partial<User>) => void;
   users: User[];
+
+  // Chat Invitations (Slack style)
+  invites: ChatInvite[];
+  sendChatInvite: (receiverId: string) => Promise<boolean>;
+  acceptInvite: (inviteId: string) => Promise<void>;
+  declineInvite: (inviteId: string) => Promise<void>;
 
   // Supabase Cloud State
   isSupabaseConfigured: boolean;
@@ -214,7 +225,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEY_PREFIX + 'active_workspace') || 'ws-pulse';
+    return localStorage.getItem(STORAGE_KEY_PREFIX + 'active_workspace') || '';
   });
 
   const [channels, setChannels] = useState<Channel[]>(() => {
@@ -237,9 +248,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
   });
 
+  const [invites, setInvites] = useState<ChatInvite[]>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'invites');
+    return saved ? JSON.parse(saved) : [];
+  });
+
   const [activeView, setActiveView] = useState<ActiveView>(() => {
     const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'active_view');
-    return saved ? JSON.parse(saved) : { type: 'channel', id: 'ch-general' };
+    return saved ? JSON.parse(saved) : { type: 'channel', id: '' };
   });
 
   // Mac-style collapsible channel sidebar (responsive: collapsed by default on mobile)
@@ -322,6 +338,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'notifications', JSON.stringify(notifications));
   }, [notifications]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY_PREFIX + 'invites', JSON.stringify(invites));
+  }, [invites]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY_PREFIX + 'active_workspace', activeWorkspaceId);
@@ -431,7 +451,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             name: p.full_name || p.username,
             username: p.username,
             email: p.email || p.username + '@pulsechat.io',
-            avatar: p.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(p.username)}`,
+            avatar: resolveUserAvatar(p.avatar_url, p.full_name || p.username),
             role: p.role || 'member',
             title: p.title || 'Product Engineer',
             isOnline: Boolean(p.is_online),
@@ -446,11 +466,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setChannels(remoteChannels);
         }
 
-        // 4. Fetch Conversations (DMs & Groups) for user
+        // 4. Fetch Conversations (DMs & Groups) and Chat Invites for user
         if (uid) {
           const remoteDMs = await fetchConversationsFromSupabase(activeWorkspaceId, uid);
           if (isMounted && remoteDMs.length > 0) {
             setDms(remoteDMs);
+          }
+
+          const remoteInvites = await fetchInvitesFromSupabase(uid);
+          if (isMounted && remoteInvites.length > 0) {
+            setInvites(remoteInvites);
           }
         }
 
@@ -470,7 +495,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     syncFromSupabase();
 
-    // Realtime channel across messages, channels, conversations, profiles
+    // Realtime channel across messages, channels, conversations, profiles, chat_invites
     const channel = supabase
       .channel('pulsechat_live_realtime')
       .on(
@@ -568,13 +593,33 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 name: p.full_name || p.username,
                 username: p.username,
                 email: p.email || p.username + '@pulsechat.io',
-                avatar: p.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(p.username)}`,
+                avatar: resolveUserAvatar(p.avatar_url, p.full_name || p.username),
                 role: p.role || 'member',
                 title: p.title || 'Product Engineer',
                 isOnline: Boolean(p.is_online),
                 joinedDate: 'Joined recently',
               }));
               setUsers(mappedUsers);
+            }
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'chat_invites' },
+        async (payload) => {
+          if (isMounted && currentUserId) {
+            const updated = await fetchInvitesFromSupabase(currentUserId);
+            setInvites(updated);
+            const remoteDMs = await fetchConversationsFromSupabase(activeWorkspaceId, currentUserId);
+            if (remoteDMs.length > 0) setDms(remoteDMs);
+
+            if (payload.eventType === 'INSERT') {
+              const row = payload.new as any;
+              if (row && row.receiver_id === currentUserId) {
+                soundFX.playMessageReceived();
+                addToast('You received a new chat invitation!', 'info');
+              }
             }
           }
         }
@@ -629,7 +674,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               name: userName,
               username: userHandle,
               email: cleanEmail,
-              avatar: res.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(userHandle)}`,
+              avatar: resolveUserAvatar(res.user.user_metadata?.avatar_url, userName),
               role: 'member',
               title: 'Product Engineer',
               isOnline: true,
@@ -669,10 +714,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   );
 
   const register = useCallback(
-    async (name: string, email: string, username: string, password?: string) => {
+    async (name: string, email: string, username: string, password?: string, avatarUrl?: string) => {
       const cleanEmail = email.trim().toLowerCase();
       const cleanName = name.trim();
       const cleanUsername = username.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || 'member';
+      const resolvedAvatar = avatarUrl || generateLetterAvatar(cleanName);
 
       if (isSupabaseConfigured) {
         try {
@@ -681,6 +727,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             password,
             fullName: cleanName,
             username: cleanUsername,
+            avatarUrl: resolvedAvatar,
           });
           if (res?.user) {
             const uid = res.user.id;
@@ -689,7 +736,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               name: cleanName,
               username: cleanUsername,
               email: cleanEmail,
-              avatar: res.user.user_metadata?.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`,
+              avatar: resolveUserAvatar(res.user.user_metadata?.avatar_url || resolvedAvatar, cleanName),
               role: 'member',
               title: 'Fullstack Engineer',
               isOnline: true,
@@ -701,6 +748,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.setItem('pulsechat_auth', 'true');
             localStorage.setItem('pulsechat_current_user', uid);
             addToast(`Welcome to PulseChat, ${cleanName}!`, 'success');
+            if (workspaces.length === 0) {
+              setIsCreateWorkspaceOpen(true);
+            }
             return true;
           }
         } catch (err: any) {
@@ -722,7 +772,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         name: cleanName,
         username: cleanUsername,
         email: cleanEmail,
-        avatar: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(cleanUsername)}`,
+        avatar: resolvedAvatar,
         role: 'member',
         title: 'Fullstack Engineer',
         isOnline: true,
@@ -734,9 +784,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('pulsechat_auth', 'true');
       localStorage.setItem('pulsechat_current_user', newUser.id);
       addToast(`Welcome to PulseChat, ${cleanName}!`, 'success');
+      if (workspaces.length === 0) {
+        setIsCreateWorkspaceOpen(true);
+      }
       return true;
     },
-    [users, addToast]
+    [users, workspaces.length, addToast]
   );
 
   const logout = useCallback(() => {
@@ -748,8 +801,22 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addToast('Logged out successfully', 'info');
   }, [currentUserId, addToast]);
 
+  // Safe fallback workspace if workspace array is completely empty
+  const EMPTY_WORKSPACE: Workspace = {
+    id: '',
+    name: 'PulseChat',
+    slug: 'pulsechat',
+    icon: 'PC',
+    iconBg: '#4F8CFF',
+    description: 'Create a workspace to begin collaborating',
+    ownerId: '',
+    membersCount: 0,
+    plan: 'Pro',
+    createdAt: new Date().toISOString(),
+  };
+
   // Active Workspace
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || workspaces[0] || INITIAL_WORKSPACES[0];
+  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || workspaces[0] || EMPTY_WORKSPACE;
 
   const setActiveWorkspaceId = useCallback((id: string) => {
     setActiveWorkspaceIdState(id);
@@ -933,6 +1000,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     const isGroup = allParticipants.length > 2;
+    const otherUserId = participantIds.find((id) => id !== currentUserId) || participantIds[0];
     const newDM: DirectMessageConversation = {
       id: 'dm-' + Date.now(),
       workspaceId: activeWorkspaceId,
@@ -942,11 +1010,32 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       unreadCount: 0,
       isStarred: false,
       lastActivity: new Date().toISOString(),
+      status: isGroup ? 'accepted' : 'pending',
+      invitedBy: currentUserId,
     };
 
     setDms((prev) => [newDM, ...prev]);
     setActiveView({ type: 'dm', id: newDM.id });
-    addToast('Conversation started', 'info');
+
+    if (!isGroup && otherUserId) {
+      const newInvite: ChatInvite = {
+        id: 'inv-' + Date.now(),
+        workspaceId: activeWorkspaceId,
+        senderId: currentUserId,
+        receiverId: otherUserId,
+        conversationId: newDM.id,
+        inviteType: 'dm',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+      };
+      setInvites((prev) => [newInvite, ...prev.filter((i) => i.id !== newInvite.id)]);
+      if (isSupabaseConfigured) {
+        saveInviteToSupabase(newInvite).catch(() => {});
+      }
+      addToast('Chat invitation sent! Conversation unlocks once accepted.', 'info');
+    } else {
+      addToast('Group conversation started', 'success');
+    }
 
     if (isSupabaseConfigured) {
       saveConversationToSupabase({
@@ -961,6 +1050,66 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return newDM.id;
   }, [currentUserId, dms, activeWorkspaceId, addToast]);
+
+  const sendChatInvite = useCallback(async (receiverId: string): Promise<boolean> => {
+    if (receiverId === currentUserId) return false;
+    const dmId = createOrOpenDM([receiverId]);
+    return Boolean(dmId);
+  }, [currentUserId, createOrOpenDM]);
+
+  const acceptInvite = useCallback(async (inviteId: string) => {
+    const inv = invites.find((i) => i.id === inviteId);
+    if (!inv) return;
+
+    setInvites((prev) =>
+      prev.map((i) => (i.id === inviteId ? { ...i, status: 'accepted' } : i))
+    );
+
+    if (inv.conversationId) {
+      setDms((prev) =>
+        prev.map((d) => (d.id === inv.conversationId ? { ...d, status: 'accepted' } : d))
+      );
+      setActiveView({ type: 'dm', id: inv.conversationId });
+    } else {
+      setDms((prev) =>
+        prev.map((d) =>
+          !d.isGroup &&
+          d.participantIds.includes(inv.senderId) &&
+          d.participantIds.includes(inv.receiverId)
+            ? { ...d, status: 'accepted' }
+            : d
+        )
+      );
+    }
+
+    if (isSupabaseConfigured) {
+      await updateInviteStatusInSupabase(inviteId, 'accepted');
+    }
+
+    soundFX.playMessageReceived();
+    addToast('Chat invitation accepted! You can now send messages.', 'success');
+  }, [invites, addToast]);
+
+  const declineInvite = useCallback(async (inviteId: string) => {
+    const inv = invites.find((i) => i.id === inviteId);
+    if (!inv) return;
+
+    setInvites((prev) =>
+      prev.map((i) => (i.id === inviteId ? { ...i, status: 'declined' } : i))
+    );
+
+    if (inv.conversationId) {
+      setDms((prev) =>
+        prev.map((d) => (d.id === inv.conversationId ? { ...d, status: 'declined' } : d))
+      );
+    }
+
+    if (isSupabaseConfigured) {
+      await updateInviteStatusInSupabase(inviteId, 'declined');
+    }
+
+    addToast('Invitation declined', 'info');
+  }, [invites, addToast]);
 
   // Global screen localization helper
   const t = useCallback(
@@ -1420,6 +1569,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         updateCurrentUserProfile,
         users,
+
+        // Chat Invitations (Slack style)
+        invites,
+        sendChatInvite,
+        acceptInvite,
+        declineInvite,
 
         workspaces,
         activeWorkspace,

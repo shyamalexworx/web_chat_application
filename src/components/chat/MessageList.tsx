@@ -2,6 +2,7 @@ import React, { useRef, useEffect } from 'react';
 import { useChat } from '../../context/ChatContext';
 import { MessageItem } from './MessageItem';
 import { Hash, Lock, Users, Sparkles, ArrowDown } from 'lucide-react';
+import { resolveUserAvatar } from '../../utils/avatar';
 
 export const MessageList: React.FC = () => {
   const {
@@ -13,6 +14,8 @@ export const MessageList: React.FC = () => {
     currentUser,
     setIsRightPanelOpen,
     setRightPanelTab,
+    setIsCreateWorkspaceOpen,
+    setIsNewDMOpen,
     t,
   } = useChat();
 
@@ -99,7 +102,7 @@ export const MessageList: React.FC = () => {
                     setIsRightPanelOpen(true);
                     setRightPanelTab('members');
                   }}
-                  className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] text-xs font-medium text-[#F5F7FA] border border-[#252B36] rounded-lg transition-colors flex items-center space-x-1.5"
+                  className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] text-xs font-medium text-[#F5F7FA] border border-[#252B36] rounded-lg transition-colors flex items-center space-x-1.5 cursor-pointer"
                 >
                   <Users className="w-3.5 h-3.5 text-[#4F8CFF]" />
                   <span>{t('view_members')} ({activeChannel.memberIds.length})</span>
@@ -113,7 +116,7 @@ export const MessageList: React.FC = () => {
                   <Users className="w-6 h-6" />
                 ) : (
                   <img
-                    src={dmPartner?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                    src={resolveUserAvatar(dmPartner?.avatar, dmPartner?.name)}
                     alt=""
                     className="w-full h-full object-cover"
                   />
@@ -128,7 +131,31 @@ export const MessageList: React.FC = () => {
                   : `${t('dm_beginning')} ${dmPartner?.name} (${dmPartner?.title}).`}
               </p>
             </div>
-          ) : null}
+          ) : (
+            <div className="py-8 text-center max-w-md mx-auto">
+              <div className="w-16 h-16 rounded-3xl bg-[#181C25] border border-[#252B36] flex items-center justify-center text-[#4F8CFF] mx-auto mb-4 shadow-subtle">
+                <Sparkles className="w-8 h-8" />
+              </div>
+              <h1 className="text-xl font-bold text-[#F5F7FA]">Welcome to PulseChat</h1>
+              <p className="text-xs text-[#929BAA] mt-2 leading-relaxed">
+                Start by creating your own workspace or send a chat invitation to connect with your coworkers.
+              </p>
+              <div className="mt-5 flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setIsCreateWorkspaceOpen(true)}
+                  className="px-4 py-2 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-xs font-semibold rounded-xl shadow-accent-glow transition-all cursor-pointer"
+                >
+                  + Create Workspace
+                </button>
+                <button
+                  onClick={() => setIsNewDMOpen(true)}
+                  className="px-4 py-2 bg-[#181C25] hover:bg-[#252B36] text-[#F5F7FA] border border-[#252B36] text-xs font-medium rounded-xl transition-colors cursor-pointer"
+                >
+                  New Message
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Message stream grouped by date */}

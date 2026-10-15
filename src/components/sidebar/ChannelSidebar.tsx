@@ -11,20 +11,29 @@ import {
   Search,
   Video,
   PanelLeftClose,
+  Mail,
+  Check,
+  X,
 } from 'lucide-react';
+import { resolveUserAvatar } from '../../utils/avatar';
 
 export const ChannelSidebar: React.FC = () => {
   const {
     currentUser,
     users,
+    workspaces,
     activeWorkspace,
     channels,
     dms,
+    invites,
+    acceptInvite,
+    declineInvite,
     activeView,
     setActiveView,
     setIsCreateChannelOpen,
     setIsNewDMOpen,
     setIsBrowseChannelsOpen,
+    setIsCreateWorkspaceOpen,
     isSidebarCollapsed,
     toggleSidebarCollapsed,
     startGoogleMeet,
@@ -53,6 +62,10 @@ export const ChannelSidebar: React.FC = () => {
   });
   const starredDMs = workspaceDMs.filter((d) => d.isStarred);
   const regularDMs = workspaceDMs.filter((d) => !d.isStarred);
+
+  const pendingReceivedInvites = invites.filter(
+    (inv) => inv.receiverId === currentUser.id && inv.status === 'pending'
+  );
 
   const getDMName = (dm: typeof workspaceDMs[0]) => {
     if (dm.isGroup) {
@@ -121,6 +134,73 @@ export const ChannelSidebar: React.FC = () => {
 
       {/* Navigation List */}
       <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-4">
+        {/* PENDING CHAT INVITATIONS (SLACK STYLE) */}
+        {pendingReceivedInvites.length > 0 && (
+          <div className="bg-[#12151C] border border-[#4F8CFF]/40 rounded-xl p-2.5 mx-0.5 shadow-md">
+            <div className="flex items-center space-x-1.5 text-xs font-bold text-[#4F8CFF] mb-2">
+              <Mail className="w-3.5 h-3.5" />
+              <span>Invitations ({pendingReceivedInvites.length})</span>
+            </div>
+            <div className="space-y-1.5">
+              {pendingReceivedInvites.map((inv) => {
+                const sender = users.find((u) => u.id === inv.senderId);
+                const senderName = sender?.name || 'Coworker';
+                return (
+                  <div key={inv.id} className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] flex items-center justify-between gap-1.5">
+                    <div className="flex items-center space-x-2 min-w-0">
+                      <img
+                        src={resolveUserAvatar(sender?.avatar, senderName)}
+                        alt=""
+                        className="w-6 h-6 rounded-md object-cover flex-shrink-0"
+                      />
+                      <div className="truncate">
+                        <p className="text-xs font-semibold text-[#F5F7FA] truncate">{senderName}</p>
+                        <p className="text-[10px] text-[#929BAA] truncate">Chat invite</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-1 flex-shrink-0">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          acceptInvite(inv.id);
+                        }}
+                        className="p-1 bg-[#10B981]/20 hover:bg-[#10B981] text-[#10B981] hover:text-white rounded transition-colors cursor-pointer"
+                        title="Accept Invitation"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          declineInvite(inv.id);
+                        }}
+                        className="p-1 bg-[#F05D6C]/20 hover:bg-[#F05D6C] text-[#F05D6C] hover:text-white rounded transition-colors cursor-pointer"
+                        title="Decline Invitation"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Empty workspaces call-to-action */}
+        {workspaces.length === 0 && (
+          <div className="p-3 bg-[#12151C] border border-[#252B36] rounded-xl text-center space-y-2">
+            <p className="text-xs font-semibold text-[#F5F7FA]">No Workspaces Yet</p>
+            <p className="text-[11px] text-[#929BAA]">Create your workspace to start channels and collaborate.</p>
+            <button
+              onClick={() => setIsCreateWorkspaceOpen(true)}
+              className="w-full py-1.5 px-3 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-sm"
+            >
+              + Create Workspace
+            </button>
+          </div>
+        )}
+
         {/* STARRED SECTION */}
         {(starredChannels.length > 0 || starredDMs.length > 0) && (
           <div>
@@ -190,7 +270,7 @@ export const ChannelSidebar: React.FC = () => {
                         ) : (
                           <div className="relative">
                             <img
-                              src={partner?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50'}
+                              src={resolveUserAvatar(partner?.avatar, partner?.name)}
                               alt=""
                               className="w-4 h-4 rounded-full object-cover"
                             />
@@ -202,6 +282,11 @@ export const ChannelSidebar: React.FC = () => {
                           </div>
                         )}
                         <span className="truncate">{getDMName(dm)}</span>
+                        {dm.status === 'pending' && (
+                          <span className="px-1.5 py-0.2 text-[9px] font-semibold bg-[#F5A623]/20 text-[#F5A623] border border-[#F5A623]/30 rounded">
+                            Pending
+                          </span>
+                        )}
                       </div>
                     </button>
                   );
@@ -338,7 +423,7 @@ export const ChannelSidebar: React.FC = () => {
                       ) : (
                         <div className="relative flex-shrink-0">
                           <img
-                            src={partner?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50'}
+                            src={resolveUserAvatar(partner?.avatar, partner?.name)}
                             alt=""
                             className="w-4 h-4 rounded-full object-cover"
                           />
@@ -350,6 +435,11 @@ export const ChannelSidebar: React.FC = () => {
                         </div>
                       )}
                       <span className="truncate">{getDMName(dm)}</span>
+                      {dm.status === 'pending' && (
+                        <span className="ml-1 px-1.5 py-0.2 text-[9px] font-semibold bg-[#F5A623]/20 text-[#F5A623] border border-[#F5A623]/30 rounded">
+                          Pending
+                        </span>
+                      )}
                     </div>
 
                     {dm.unreadCount > 0 && (

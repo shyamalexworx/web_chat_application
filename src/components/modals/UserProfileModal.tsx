@@ -19,6 +19,9 @@ import {
   Volume2,
   VolumeX,
   Languages,
+  Upload,
+  Image as ImageIcon,
+  Trash2,
 } from 'lucide-react';
 import {
   encryptMessage,
@@ -28,6 +31,7 @@ import {
 } from '../../utils/crypto';
 import { soundFX } from '../../utils/audio';
 import { SUPPORTED_LANGUAGES } from '../../utils/translation';
+import { generateLetterAvatar } from '../../utils/avatar';
 
 const STATUS_PRESETS = [
   { emoji: '💬', text: 'In a meeting' },
@@ -36,15 +40,6 @@ const STATUS_PRESETS = [
   { emoji: '☕', text: 'On coffee break' },
   { emoji: '🌴', text: 'On vacation' },
   { emoji: '🤒', text: 'Out sick' },
-];
-
-const AVATAR_OPTIONS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&auto=format&fit=crop&q=80',
 ];
 
 export const UserProfileModal: React.FC = () => {
@@ -72,7 +67,8 @@ export const UserProfileModal: React.FC = () => {
   const [statusEmoji, setStatusEmoji] = useState(currentUser.statusEmoji || '💻');
   const [statusText, setStatusText] = useState(currentUser.statusText || '');
   const [isOnline, setIsOnline] = useState(currentUser.isOnline);
-  const [avatar, setAvatar] = useState(currentUser.avatar);
+  const [avatar, setAvatar] = useState(currentUser.avatar || generateLetterAvatar(currentUser.name));
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   // Security & Encryption State
   const [copiedFingerprint, setCopiedFingerprint] = useState(false);
@@ -239,7 +235,7 @@ export const UserProfileModal: React.FC = () => {
                     <img
                       src={avatar}
                       alt=""
-                      className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F8CFF] shadow-subtle"
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F8CFF] shadow-subtle bg-[#181C25]"
                     />
                     <span
                       className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-[#181C25] ${
@@ -248,18 +244,47 @@ export const UserProfileModal: React.FC = () => {
                     />
                   </div>
 
-                  <div className="flex items-center space-x-2 overflow-x-auto py-1">
-                    {AVATAR_OPTIONS.map((imgUrl, i) => (
-                      <img
-                        key={i}
-                        src={imgUrl}
-                        alt=""
-                        onClick={() => setAvatar(imgUrl)}
-                        className={`w-8 h-8 rounded-lg object-cover cursor-pointer border transition-transform ${
-                          avatar === imgUrl ? 'border-[#4F8CFF] scale-110 ring-2 ring-[#4F8CFF]/50' : 'border-[#252B36] opacity-70 hover:opacity-100'
-                        }`}
-                      />
-                    ))}
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        if (!file.type.startsWith('image/')) {
+                          addToast('Please select a valid image file', 'warning');
+                          return;
+                        }
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          const dataUrl = ev.target?.result as string;
+                          setAvatar(dataUrl);
+                          addToast('Custom photo chosen', 'success');
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-3 py-1.5 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Choose Custom Photo</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const letterAv = generateLetterAvatar(name || currentUser.name);
+                        setAvatar(letterAv);
+                        addToast('Switched to default letter avatar', 'info');
+                      }}
+                      className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] text-[#929BAA] hover:text-[#F5F7FA] border border-[#252B36] rounded-lg text-xs font-medium transition-colors cursor-pointer"
+                    >
+                      Default (First Letter)
+                    </button>
                   </div>
                 </div>
               </div>

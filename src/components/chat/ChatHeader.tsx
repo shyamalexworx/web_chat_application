@@ -10,7 +10,9 @@ import {
   Check,
   X,
   Menu,
+  Clock,
 } from 'lucide-react';
+import { resolveUserAvatar } from '../../utils/avatar';
 
 export const ChatHeader: React.FC = () => {
   const {
@@ -140,7 +142,7 @@ export const ChatHeader: React.FC = () => {
               ) : (
                 <div className="relative">
                   <img
-                    src={dmPartner?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=60'}
+                    src={resolveUserAvatar(dmPartner?.avatar, dmPartner?.name)}
                     alt=""
                     className="w-6 h-6 rounded-full object-cover"
                   />
@@ -154,6 +156,12 @@ export const ChatHeader: React.FC = () => {
               <h2 className="text-sm font-bold text-[#F5F7FA]">
                 {activeDM.isGroup ? activeDM.groupName : dmPartner?.name}
               </h2>
+              {activeDM.status === 'pending' && (
+                <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold bg-[#F5A623]/20 text-[#F5A623] border border-[#F5A623]/30 rounded-md">
+                  <Clock className="w-3 h-3" />
+                  <span>Pending Invite</span>
+                </span>
+              )}
               <button
                 onClick={() => toggleStarDM(activeDM.id)}
                 className={`p-1 rounded hover:bg-[#181C25] transition-colors ${
@@ -175,7 +183,12 @@ export const ChatHeader: React.FC = () => {
                   }`}
             </div>
           </>
-        ) : null}
+        ) : (
+          <div className="flex items-center space-x-2">
+            <h2 className="text-sm font-bold text-[#F5F7FA]">PulseChat</h2>
+            <span className="text-xs text-[#929BAA]">Select or create a conversation to start</span>
+          </div>
+        )}
       </div>
 
       {/* Action Controls on the Right (Panel Toggle) */}

@@ -1,29 +1,99 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useChat } from '../../context/ChatContext';
-import { X, Hash, Lock, Globe } from 'lucide-react';
+import { X, Hash, Lock, Globe, UserPlus, Check, Search, Mail } from 'lucide-react';
+import { resolveUserAvatar } from '../../utils/avatar';
 
 export const CreateChannelModal: React.FC = () => {
-  const { isCreateChannelOpen, setIsCreateChannelOpen, createChannel } = useChat();
+  const {
+    isCreateChannelOpen,
+    setIsCreateChannelOpen,
+    createChannel,
+    users,
+    invites,
+    dms,
+    currentUser,
+    inviteUsersToChannel,
+    addToast,
+  } = useChat();
 
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
   const [description, setDescription] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [inviteEmail, setInviteEmail] = useState('');
   const [error, setError] = useState('');
+
+  // Determine who the current user is personally connected to via an accepted invitation
+  const connectedUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    invites.forEach((inv) => {
+      if (inv.status === 'accepted') {
+        if (inv.senderId === currentUser.id && inv.receiverId) {
+          ids.add(inv.receiverId);
+        }
+        if (
+          (inv.receiverId === currentUser.id ||
+            (currentUser.email && inv.receiverId.toLowerCase() === currentUser.email.toLowerCase())) &&
+          inv.senderId
+        ) {
+          ids.add(inv.senderId);
+        }
+      }
+    });
+
+    dms.forEach((d) => {
+      if (d.participantIds.includes(currentUser.id) && d.status !== 'pending') {
+        d.participantIds.forEach((pid) => {
+          if (pid !== currentUser.id) ids.add(pid);
+        });
+      }
+    });
+
+    return ids;
+  }, [invites, dms, currentUser.id, currentUser.email]);
+
+  const connectedMembers = users.filter(
+    (u) => u.id !== currentUser.id && connectedUserIds.has(u.id)
+  );
+
+  const filteredMembers = connectedMembers.filter(
+    (u) =>
+      u.name.toLowerCase().includes(memberSearch.toLowerCase()) ||
+      u.username.toLowerCase().includes(memberSearch.toLowerCase()) ||
+      u.email.toLowerCase().includes(memberSearch.toLowerCase())
+  );
+
+  const toggleSelectUser = (id: string) => {
+    if (selectedUserIds.includes(id)) {
+      setSelectedUserIds((prev) => prev.filter((uid) => uid !== id));
+    } else {
+      setSelectedUserIds((prev) => [...prev, id]);
+    }
+  };
 
   if (!isCreateChannelOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
       setError('Please provide a channel name.');
       return;
     }
-    createChannel(name, topic, description, isPrivate);
+    const created = createChannel(name, topic, description, isPrivate, selectedUserIds);
+
+    if (inviteEmail.trim()) {
+      inviteUsersToChannel(created.id, [], inviteEmail.trim()).catch(() => {});
+    }
+
     setName('');
     setTopic('');
     setDescription('');
     setIsPrivate(false);
+    setSelectedUserIds([]);
+    setMemberSearch('');
+    setInviteEmail('');
     setError('');
     setIsCreateChannelOpen(false);
   };
@@ -35,10 +105,10 @@ export const CreateChannelModal: React.FC = () => {
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg bg-[#181C25] border border-[#252B36] rounded-2xl shadow-modal overflow-hidden cursor-default"
+        className="w-full max-w-lg bg-[#181C25] border border-[#252B36] rounded-2xl shadow-modal overflow-hidden max-h-[88vh] flex flex-col cursor-default"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#252B36] flex items-center justify-between">
+        <div className="px-5 sm:px-6 py-4 border-b border-[#252B36] flex items-center justify-between flex-shrink-0">
           <div className="flex items-center space-x-2">
             <div className="p-2 bg-[#12151C] rounded-lg border border-[#252B36] text-[#4F8CFF]">
               {isPrivate ? <Lock className="w-4 h-4" /> : <Hash className="w-4 h-4" />}
@@ -60,7 +130,7 @@ export const CreateChannelModal: React.FC = () => {
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-5 sm:p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
           {error && (
             <div className="p-2.5 bg-[#F05D6C]/10 border border-[#F05D6C]/30 text-[#F05D6C] text-xs rounded-lg">
               {error}
@@ -114,6 +184,97 @@ export const CreateChannelModal: React.FC = () => {
               placeholder="Add more context or guidelines for this channel"
               className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none resize-none"
             />
+          </div>
+
+          {/* ADD PEOPLE SECTION */}
+          <div className="space-y-3 pt-1">
+            <div className="flex items-center space-x-2">
+              <UserPlus className="w-4 h-4 text-[#4F8CFF]" />
+              <label className="text-xs font-semibold text-[#F5F7FA]">
+                Add People to Channel
+              </label>
+            </div>
+
+            {/* Quick Email Invite */}
+            <div>
+              <div className="relative">
+                <Mail className="w-3.5 h-3.5 text-[#929BAA] absolute left-3 top-3" />
+                <input
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="Invite coworker by email (optional)..."
+                  className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl pl-9 pr-3 py-2 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none"
+                />
+              </div>
+            </div>
+
+            {/* Connected Members Checklist (Only shown if connected members exist) */}
+            {connectedMembers.length > 0 ? (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-[#929BAA] absolute left-3 top-2.5" />
+                  <input
+                    type="text"
+                    value={memberSearch}
+                    onChange={(e) => setMemberSearch(e.target.value)}
+                    placeholder="Search connected teammates..."
+                    className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none"
+                  />
+                </div>
+
+                <div className="max-h-36 overflow-y-auto space-y-1 pr-1 divide-y divide-[#252B36]/30 bg-[#12151C]/60 p-2 rounded-xl border border-[#252B36]">
+                  {filteredMembers.length === 0 ? (
+                    <div className="p-2 text-center text-xs text-[#929BAA]">
+                      No matching connected teammates.
+                    </div>
+                  ) : (
+                    filteredMembers.map((member) => {
+                      const isSelected = selectedUserIds.includes(member.id);
+                      return (
+                        <div
+                          key={member.id}
+                          onClick={() => toggleSelectUser(member.id)}
+                          className={`pt-1.5 pb-1.5 px-2 rounded-lg flex items-center justify-between cursor-pointer transition-colors ${
+                            isSelected ? 'bg-[#4F8CFF]/15 text-[#4F8CFF]' : 'hover:bg-[#181C25]'
+                          }`}
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <img
+                              src={resolveUserAvatar(member.avatar, member.name)}
+                              alt={member.name}
+                              className="w-6 h-6 rounded-md object-cover border border-[#252B36]"
+                            />
+                            <div className="truncate">
+                              <span className="text-xs font-medium text-[#F5F7FA] block truncate">
+                                {member.name}
+                              </span>
+                              <span className="text-[10px] text-[#929BAA] block truncate">
+                                @{member.username}
+                              </span>
+                            </div>
+                          </div>
+                          <div
+                            className={`w-4 h-4 rounded flex items-center justify-center border transition-colors ${
+                              isSelected ? 'bg-[#4F8CFF] border-[#4F8CFF] text-white' : 'border-[#252B36] bg-[#12151C]'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-3 h-3" />}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+                <p className="text-[10px] text-[#929BAA]">
+                  {selectedUserIds.length} connected teammate{selectedUserIds.length === 1 ? '' : 's'} selected to join
+                </p>
+              </div>
+            ) : (
+              <p className="text-[11px] text-[#929BAA] bg-[#12151C]/40 p-2.5 rounded-xl border border-[#252B36]">
+                Only personally connected teammates can be added directly. Use the email field above to invite new coworkers!
+              </p>
+            )}
           </div>
 
           {/* Privacy Toggle */}

@@ -162,35 +162,39 @@ export async function supabaseSignUp(params: {
   if (!isSupabaseConfigured) return null;
 
   const cleanEmail = params.email.trim().toLowerCase();
+  const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!EMAIL_REGEX.test(cleanEmail)) {
+    throw new Error('Please enter a valid email address with a real domain (e.g. yourname@gmail.com).');
+  }
+
+  // Disposable / temporary email domain blocklist
+  const DISPOSABLE_DOMAINS = [
+    'tempmail.com', 'temp-mail.org', 'mailinator.com', '10minutemail.com',
+    'guerrillamail.com', 'throwawaymail.com', 'yopmail.com', 'sharklasers.com',
+    'fakemailgenerator.com', 'dispostable.com', 'getairmail.com', 'trashmail.com',
+    'mytemp.email', 'mohmal.com', 'burnermail.io', 'generator.email'
+  ];
+
+  const domain = cleanEmail.split('@')[1] || '';
+  if (DISPOSABLE_DOMAINS.includes(domain)) {
+    throw new Error('Disposable / temporary email addresses are not permitted. Please use a real email provider (e.g. your personal Gmail, Outlook, or corporate email).');
+  }
+
   const cleanName = params.fullName.trim();
   const cleanUsername = params.username.trim().toLowerCase().replace(/[^a-z0-9]/g, '') || 'member';
   const pwd = params.password || 'PulseChat@' + Math.random().toString(36).slice(2, 10);
   const avatarUrl = params.avatarUrl || generateLetterAvatar(cleanName);
   let authUser: any = null;
+  let requiresVerification = false;
 
-  // 1. Verify if user email already exists in profiles
+  // 1. Attempt Supabase Auth signup
   try {
-    const { data: existingProf } = await supabase
-      .from('profiles')
-      .select('id')
-      .eq('email', cleanEmail)
-      .maybeSingle();
-
-    if (existingProf) {
-      throw new Error('An account with this email already exists. Please sign in instead.');
-    }
-  } catch (err: any) {
-    if (err.message && err.message.includes('already exists')) {
-      throw err;
-    }
-  }
-
-  // 2. Attempt Supabase Auth signup
-  try {
+    const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}` : undefined;
     const { data, error } = await supabase.auth.signUp({
       email: cleanEmail,
       password: pwd,
       options: {
+        emailRedirectTo: redirectUrl,
         data: {
           full_name: cleanName,
           username: cleanUsername,
@@ -198,22 +202,84 @@ export async function supabaseSignUp(params: {
         },
       },
     });
-    if (!error && data?.user) {
+
+    if (error) {
+      if (
+        error.message?.toLowerCase().includes('already registered') ||
+        error.message?.toLowerCase().includes('already exists')
+      ) {
+        // User already registered in Supabase Auth. Attempt auto-login if password was entered:
+        if (params.password) {
+          try {
+            const signInRes = await supabaseSignIn(cleanEmail, params.password);
+            if (signInRes?.user) {
+              return {
+                user: signInRes.user,
+                alreadyExisted: true,
+                message: `Welcome back, ${cleanName}! Signed in to your existing account.`,
+              };
+            }
+          } catch {}
+        }
+        throw new Error('An account with this email already exists. Please sign in with your password, or use "Forgot password?" to reset it.');
+      }
+      throw error;
+    }
+
+    if (data?.user) {
+      // In Supabase, if a user already exists and identities array is empty, it means existing account
+      if (data.user.identities && data.user.identities.length === 0) {
+        if (params.password) {
+          try {
+            const signInRes = await supabaseSignIn(cleanEmail, params.password);
+            if (signInRes?.user) {
+              return {
+                user: signInRes.user,
+                alreadyExisted: true,
+                message: `Welcome back, ${cleanName}! Signed in to your existing account.`,
+              };
+            }
+          } catch {}
+        }
+        throw new Error('An account with this email already exists. Please sign in with your password, or use "Forgot password?" to reset it.');
+      }
+
       authUser = data.user;
-    } else if (error && error.message?.toLowerCase().includes('already registered')) {
-      throw new Error('An account with this email already exists. Please sign in instead.');
+      // If email confirmation is enabled in Supabase, session is null or email_confirmed_at is null
+      if (!data.session || !data.user.email_confirmed_at) {
+        requiresVerification = true;
+      }
     }
   } catch (authErr: any) {
-    if (authErr?.message?.includes('already exists') || authErr?.message?.toLowerCase().includes('already registered')) {
-      throw authErr;
-    }
-    console.warn('Supabase auth.signUp notice:', authErr?.message);
+    throw authErr;
   }
 
   // 3. User ID
   const userId = authUser?.id || 'usr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
 
-  // 4. Upsert user into public.profiles table (Fresh start: no demo workspaces or demo channels)
+  // 4. If email requires verification, DO NOT insert active online profile or return active session!
+  if (requiresVerification) {
+    // Save pending profile so trigger doesn't conflict
+    try {
+      await supabase.from('profiles').upsert({
+        id: userId,
+        username: cleanUsername,
+        full_name: cleanName,
+        email: cleanEmail,
+        avatar_url: avatarUrl,
+        role: 'member',
+        is_online: false,
+      }, { onConflict: 'id' });
+    } catch {}
+
+    return {
+      user: null,
+      requiresVerification: true,
+      message: `A verification link has been sent to ${cleanEmail}. Please check your inbox and verify your email address before logging in.`,
+    };
+  }
+
+  // 5. Active verified profile upsert
   try {
     await supabase.from('profiles').upsert({
       id: userId,
@@ -228,7 +294,6 @@ export async function supabaseSignUp(params: {
     console.warn('Profiles upsert notice:', profErr);
   }
 
-  // 5. Return user object so client state logs in immediately
   return {
     user: {
       id: userId,
@@ -249,13 +314,39 @@ export async function supabaseSignIn(email: string, password?: string) {
   const cleanEmail = email.trim().toLowerCase();
   const pwd = password || 'PulseChat@2026';
 
-  // 1. Look up existing profile in public.profiles by email
+  // 1. Authenticate with Supabase Auth (Enforce real credentials & email confirmation)
+  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+    email: cleanEmail,
+    password: pwd,
+  });
+
+  if (authError) {
+    if (authError.message?.toLowerCase().includes('email not confirmed')) {
+      throw new Error('Your email address has not been verified yet. Please check your inbox (and spam folder) and click the verification link before logging in.');
+    }
+    if (authError.message?.toLowerCase().includes('invalid login credentials')) {
+      throw new Error('Invalid email or password. Please verify your credentials or sign up.');
+    }
+    throw new Error(authError.message || 'Unable to sign in. Please check your credentials.');
+  }
+
+  const authUser = authData?.user;
+  if (!authUser) {
+    throw new Error('No account found with this email. Please sign up first.');
+  }
+
+  // Double check email verification
+  if (!authUser.email_confirmed_at && !authData.session) {
+    throw new Error('Your email address has not been verified yet. Please check your inbox and click the verification link before logging in.');
+  }
+
+  // 2. Look up or update profile
   let prof: any = null;
   try {
     const { data } = await supabase
       .from('profiles')
       .select('*')
-      .eq('email', cleanEmail)
+      .eq('id', authUser.id)
       .maybeSingle();
 
     if (data) {
@@ -265,33 +356,23 @@ export async function supabaseSignIn(email: string, password?: string) {
     console.warn('Profile search notice:', pErr);
   }
 
-  // 2. Also check Supabase Auth password sign in if available
-  let authUser: any = null;
-  try {
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: cleanEmail,
-      password: pwd,
-    });
-    if (!authError && authData?.user) {
-      authUser = authData.user;
-    }
-  } catch (err: any) {
-    // Auth notice
-  }
-
-  // 3. STRICT CHECK: If user does not exist in profiles and not in auth, REJECT!
-  if (!prof && !authUser) {
-    throw new Error('No account found with this email. Please sign up first.');
-  }
-
-  const userId = prof?.id || authUser?.id;
-  const userName = prof?.full_name || authUser?.user_metadata?.full_name || cleanEmail.split('@')[0];
-  const userHandle = prof?.username || authUser?.user_metadata?.username || cleanEmail.split('@')[0].replace(/[^a-z0-9]/g, '');
-  const avatarUrl = resolveUserAvatar(prof?.avatar_url || authUser?.user_metadata?.avatar_url, userName);
+  const userId = authUser.id;
+  const userName = prof?.full_name || authUser.user_metadata?.full_name || cleanEmail.split('@')[0];
+  const userHandle = prof?.username || authUser.user_metadata?.username || cleanEmail.split('@')[0].replace(/[^a-z0-9]/g, '');
+  const avatarUrl = resolveUserAvatar(prof?.avatar_url || authUser.user_metadata?.avatar_url, userName);
 
   // Mark as online in profiles
   try {
-    await supabase.from('profiles').update({ is_online: true, last_seen: new Date().toISOString() }).eq('id', userId);
+    await supabase.from('profiles').upsert({
+      id: userId,
+      username: userHandle,
+      full_name: userName,
+      email: cleanEmail,
+      avatar_url: avatarUrl,
+      role: prof?.role || 'member',
+      is_online: true,
+      last_seen: new Date().toISOString(),
+    }, { onConflict: 'id' });
   } catch (e) {}
 
   return {
@@ -308,6 +389,25 @@ export async function supabaseSignIn(email: string, password?: string) {
   } as any;
 }
 
+export async function supabaseSignInWithOAuth(provider: 'google' | 'apple') {
+  if (!isSupabaseConfigured) {
+    throw new Error('Supabase is not configured.');
+  }
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: window.location.origin,
+    },
+  });
+  if (error) {
+    throw error;
+  }
+  if (data?.url) {
+    window.location.href = data.url;
+  }
+  return data;
+}
+
 export async function supabaseSignOut(userId?: string) {
   if (!isSupabaseConfigured) return;
   if (userId) {
@@ -315,6 +415,57 @@ export async function supabaseSignOut(userId?: string) {
   }
   await supabase.auth.signOut();
 }
+
+/**
+ * Send password reset email via Supabase Auth
+ */
+export async function supabaseResetPassword(email: string): Promise<{ success: boolean; message: string }> {
+  const cleanEmail = email.trim().toLowerCase();
+  const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!cleanEmail || !EMAIL_REGEX.test(cleanEmail)) {
+    throw new Error('Please enter a valid email address with a real domain (e.g. yourname@gmail.com).');
+  }
+
+  if (!isSupabaseConfigured) {
+    return {
+      success: true,
+      message: `Password reset link sent to ${cleanEmail}. Check your inbox.`,
+    };
+  }
+
+  // 1. Verify user profile exists in database
+  try {
+    const { data: prof } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('email', cleanEmail)
+      .maybeSingle();
+
+    if (!prof) {
+      throw new Error('No account found with this email. Please check your spelling or sign up first.');
+    }
+  } catch (err: any) {
+    if (err?.message && err.message.includes('No account found')) {
+      throw err;
+    }
+  }
+
+  // 2. Dispatch Supabase Auth reset email
+  const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}` : undefined;
+  const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+    redirectTo: redirectUrl,
+  });
+
+  if (error) {
+    throw new Error(error.message || 'Unable to send password reset email. Please try again.');
+  }
+
+  return {
+    success: true,
+    message: `Password reset link sent to ${cleanEmail}. Please check your inbox or spam folder.`,
+  };
+}
+
 
 export async function supabaseGetCurrentUser() {
   if (!isSupabaseConfigured) return null;
@@ -841,30 +992,46 @@ export async function updateWorkspaceInSupabase(
  */
 export async function updateChannelInSupabase(
   channelId: string,
-  updates: { name?: string; topic?: string; description?: string }
+  updates: { name?: string; topic?: string; description?: string; memberIds?: string[] }
 ) {
   if (!isSupabaseConfigured) return;
   const payload: any = {};
   if (updates.name !== undefined) payload.name = updates.name;
   if (updates.topic !== undefined) payload.topic = updates.topic;
   if (updates.description !== undefined) payload.description = updates.description;
-  await supabase.from('channels').update(payload).eq('id', channelId);
+  if (Object.keys(payload).length > 0) {
+    await supabase.from('channels').update(payload).eq('id', channelId);
+  }
+  if (updates.memberIds && updates.memberIds.length > 0) {
+    const rows = updates.memberIds.map((uid) => ({
+      channel_id: channelId,
+      user_id: uid,
+      role: 'member',
+    }));
+    await supabase.from('channel_members').upsert(rows, { onConflict: 'channel_id,user_id' });
+  }
 }
 
 /**
  * Fetch chat invitations for a user (sent or received)
  */
-export async function fetchInvitesFromSupabase(userId: string): Promise<ChatInvite[]> {
+export async function fetchInvitesFromSupabase(userId: string, userEmail?: string): Promise<ChatInvite[]> {
   if (!isSupabaseConfigured) return [];
   try {
+    let orQuery = `receiver_id.eq.${userId},sender_id.eq.${userId}`;
+    if (userEmail) {
+      const clean = userEmail.trim().toLowerCase();
+      orQuery += `,receiver_id.eq.${clean},sender_id.eq.${clean}`;
+    }
+
     const { data, error } = await supabase
       .from('chat_invites')
       .select('*')
-      .or(`receiver_id.eq.${userId},sender_id.eq.${userId}`)
+      .or(orQuery)
       .order('created_at', { ascending: false });
 
     if (error) {
-      // Table may not exist yet if user hasn't run latest SQL
+      // Table may not exist yet or query issue
       return [];
     }
 

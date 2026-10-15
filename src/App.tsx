@@ -22,6 +22,7 @@ import { KeyboardShortcutsModal } from './components/modals/KeyboardShortcutsMod
 import { TranslationModal } from './components/modals/TranslationModal';
 import { GoogleMeetModal } from './components/modals/GoogleMeetModal';
 import { SecurityModal } from './components/modals/SecurityModal';
+import { InviteChannelMembersModal } from './components/modals/InviteChannelMembersModal';
 import { ToastContainer } from './components/toast/ToastContainer';
 import { AuthPage } from './components/auth/AuthPage';
 
@@ -69,7 +70,7 @@ const ChatDashboard: React.FC = () => {
             {/* Central Conversation Feed (Section 4B) */}
             <main 
               aria-label="Main conversation feed"
-              className="flex-1 min-h-0 flex flex-col min-w-0 bg-[#0B0D12] relative overflow-hidden"
+              className="flex-1 min-h-0 flex flex-col min-w-0 bg-[#0B0D12] relative overflow-hidden border-l border-[#252B36] sidebar-chat-divider"
             >
               <ChatHeader />
               <MessageList />
@@ -98,6 +99,7 @@ const ChatDashboard: React.FC = () => {
           <TranslationModal />
           <GoogleMeetModal />
           <SecurityModal />
+          <InviteChannelMembersModal />
         </div>
       )}
 

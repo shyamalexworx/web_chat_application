@@ -37,6 +37,12 @@ class SoundFX {
     localStorage.setItem('pulsechat_sound_enabled', String(enabled));
   }
 
+  public play(type: 'sent' | 'received' | 'mention' | 'chime' = 'chime') {
+    if (type === 'sent') this.playMessageSent();
+    else if (type === 'mention') this.playMention();
+    else this.playMessageReceived();
+  }
+
   // Crisp, soft pop when user sends a message
   public playMessageSent() {
     if (!this.soundEnabled) return;

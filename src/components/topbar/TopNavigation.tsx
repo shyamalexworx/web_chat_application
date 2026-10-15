@@ -11,6 +11,8 @@ import {
   Zap,
   Trash2,
 } from 'lucide-react';
+import { SquigglyText } from '../ui/squiggly-text';
+import { EncryptedText } from '../ui/encrypted-text';
 
 export const TopNavigation: React.FC = () => {
   const {
@@ -107,14 +109,21 @@ export const TopNavigation: React.FC = () => {
     searchResults.files.length;
 
   return (
-    <header className="h-12 min-h-[48px] flex-shrink-0 bg-[#0B0D12] border-b border-[#252B36] flex items-center justify-between px-4 select-none z-40 relative">
-      {/* Left side: Brand Indicator */}
-      <div className="flex items-center space-x-2 sm:space-x-3 w-auto sm:w-48 md:w-56 flex-shrink-0">
-        <div className="flex items-center space-x-2 text-xs font-semibold tracking-wider text-[#F5F7FA]">
-          <span className="w-2 h-2 rounded-full bg-[#4F8CFF] animate-pulse"></span>
-          <span className="uppercase text-[11px] font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#F5F7FA] to-[#929BAA]">
-            PulseChat
-          </span>
+    <header className="h-12 min-h-[48px] flex-shrink-0 bg-[#0B0D12] border-b border-[#252B36] flex items-center justify-between pr-4 select-none z-40 relative">
+      {/* Left side: Brand Indicator with Website Logo matching AI Assistant size (w-8 h-8) and aligned with WorkspaceRail */}
+      <div className="flex items-center flex-shrink-0">
+        <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
+          <div className="relative overflow-hidden rounded-lg w-8 h-8 flex-shrink-0 bg-[#12151D] border border-blue-500/25 shadow-sm flex items-center justify-center">
+            <img src="/logo.png" alt="PulseChat" className="w-full h-full object-contain p-1" />
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/35 to-transparent animate-light-sweep pointer-events-none" />
+          </div>
+        </div>
+        <div className="pl-2 pr-3 flex items-center cursor-pointer">
+          <EncryptedText
+            text="PulseChat"
+            className="text-sm font-black tracking-wider uppercase text-slate-900 dark:text-white brand-pulse-text"
+            highlightClass="text-[#2563EB] dark:text-[#4F8CFF]"
+          />
         </div>
       </div>
 
@@ -304,28 +313,6 @@ export const TopNavigation: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                <div>
-                  <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider px-2 py-1">
-                    Teammates
-                  </div>
-                  {users.slice(0, 3).map((u) => (
-                    <div
-                      key={u.id}
-                      onClick={() => {
-                        setSearchFocused(false);
-                        addToast(`Jumped to ${u.name}`, 'info');
-                      }}
-                      className="px-2.5 py-1.5 rounded-lg hover:bg-[#12151C] cursor-pointer flex items-center justify-between"
-                    >
-                      <div className="flex items-center space-x-2 truncate">
-                        <img src={u.avatar} alt="" className="w-5 h-5 rounded-md object-cover" />
-                        <span className="font-semibold text-[#F5F7FA]">{u.name}</span>
-                        <span className="text-[11px] text-[#929BAA]">@{u.username}</span>
-                      </div>
-                      <span className="text-[10px] text-[#32C48D]">{u.isOnline ? 'Online' : 'Offline'}</span>
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
           </div>
@@ -419,7 +406,7 @@ export const TopNavigation: React.FC = () => {
                               {n.title}
                             </span>
                             <span className="text-[10px] text-[#929BAA] font-mono">
-                              {new Date(n.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {new Date(n.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                             </span>
                           </div>
                           <p className="text-xs text-[#929BAA] mt-0.5 line-clamp-2">

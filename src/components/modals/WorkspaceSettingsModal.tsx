@@ -7,11 +7,10 @@ import {
   Shield,
   Link,
   Copy,
-  RotateCcw,
   Trash2,
   Check,
   Building2,
-  CreditCard,
+  Upload,
 } from 'lucide-react';
 
 export const WorkspaceSettingsModal: React.FC = () => {
@@ -22,7 +21,6 @@ export const WorkspaceSettingsModal: React.FC = () => {
     updateWorkspace,
     users,
     currentUser,
-    resetToDemoData,
     addToast,
   } = useChat();
 
@@ -45,6 +43,31 @@ export const WorkspaceSettingsModal: React.FC = () => {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
+  const handleWorkspaceAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      addToast('Image size should be less than 5MB', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        updateWorkspace(activeWorkspace.id, { avatar: dataUrl });
+        addToast('Workspace profile picture updated', 'success');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const workspaceMembers = users.filter((u) => {
+    if (activeWorkspace.memberIds && activeWorkspace.memberIds.length > 0) {
+      return activeWorkspace.memberIds.includes(u.id);
+    }
+    return u.id === activeWorkspace.ownerId || u.id === currentUser.id;
+  });
+
   return (
     <div 
       onClick={() => setIsWorkspaceSettingsOpen(false)}
@@ -57,12 +80,20 @@ export const WorkspaceSettingsModal: React.FC = () => {
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#252B36] flex items-center justify-between">
           <div className="flex items-center space-x-2.5">
-            <div
-              className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-bold text-xs"
-              style={{ backgroundColor: activeWorkspace.iconBg || '#4F8CFF' }}
-            >
-              {activeWorkspace.icon}
-            </div>
+            {activeWorkspace.avatar ? (
+              <img
+                src={activeWorkspace.avatar}
+                alt=""
+                className="w-8 h-8 rounded-xl object-cover border border-[#252B36]"
+              />
+            ) : (
+              <div
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-bold text-xs"
+                style={{ backgroundColor: activeWorkspace.iconBg || '#4F8CFF' }}
+              >
+                {activeWorkspace.icon}
+              </div>
+            )}
             <div>
               <h2 className="text-sm font-bold text-[#F5F7FA]">{activeWorkspace.name} Settings</h2>
               <p className="text-[11px] text-[#929BAA]">
@@ -89,7 +120,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 : 'border-transparent text-[#929BAA] hover:text-[#F5F7FA]'
             }`}
           >
-            General & Plan
+            General
           </button>
           <button
             onClick={() => setActiveTab('members')}
@@ -99,7 +130,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 : 'border-transparent text-[#929BAA] hover:text-[#F5F7FA]'
             }`}
           >
-            Members & Roles ({users.length})
+            Members & Roles ({workspaceMembers.length})
           </button>
           <button
             onClick={() => setActiveTab('danger')}
@@ -117,6 +148,58 @@ export const WorkspaceSettingsModal: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-6">
           {activeTab === 'general' && (
             <form onSubmit={handleSaveGeneral} className="space-y-4">
+              {/* Workspace Profile Picture Upload */}
+              <div>
+                <label className="block text-xs font-semibold text-[#F5F7FA] mb-2">
+                  Workspace Profile Picture
+                </label>
+                <div className="flex items-center space-x-3.5">
+                  <div className="relative group flex-shrink-0">
+                    {activeWorkspace.avatar ? (
+                      <img
+                        src={activeWorkspace.avatar}
+                        alt={activeWorkspace.name}
+                        className="w-14 h-14 rounded-2xl object-cover border border-[#252B36] shadow-sm"
+                      />
+                    ) : (
+                      <div
+                        className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-sm"
+                        style={{ backgroundColor: activeWorkspace.iconBg || '#4F8CFF' }}
+                      >
+                        {activeWorkspace.icon}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center space-x-2">
+                      <label className="px-3 py-1.5 bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 border border-[#4F8CFF]/30 text-[#4F8CFF] text-xs font-medium rounded-lg cursor-pointer transition-colors flex items-center gap-1.5">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Change Workspace Picture</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleWorkspaceAvatarChange}
+                        />
+                      </label>
+                      {activeWorkspace.avatar && (
+                        <button
+                          type="button"
+                          onClick={() => updateWorkspace(activeWorkspace.id, { avatar: undefined })}
+                          className="px-2.5 py-1.5 text-xs text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-[#929BAA]">
+                      Recommended: square image, PNG or JPG, max 5MB.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
                   Workspace Name
@@ -139,22 +222,6 @@ export const WorkspaceSettingsModal: React.FC = () => {
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-[#F5F7FA] outline-none resize-none"
                 />
-              </div>
-
-              {/* Plan Card */}
-              <div className="p-4 bg-[#12151C] border border-[#252B36] rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <CreditCard className="w-4 h-4 text-[#4F8CFF]" />
-                    <span className="text-xs font-semibold text-[#F5F7FA]">Enterprise Grid Plan</span>
-                  </div>
-                  <span className="text-[10px] bg-[#32C48D]/20 text-[#32C48D] px-2 py-0.5 rounded-full font-bold">
-                    ACTIVE
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#929BAA]">
-                  Includes unlimited message history, sub-15ms WebSocket routing, audit trails, and 99.99% uptime SLA.
-                </p>
               </div>
 
               {/* Invite Link */}
@@ -197,71 +264,57 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 Assign administrator roles, manage member access, and monitor team presence.
               </div>
 
-              <div className="divide-y divide-[#252B36]/50">
-                {users.map((member) => (
-                  <div
-                    key={member.id}
-                    className="py-3 flex items-center justify-between hover:bg-[#12151C]/40 px-3 rounded-xl transition-colors"
-                  >
-                    <div className="flex items-center space-x-3 truncate">
-                      <div className="relative">
-                        <img
-                          src={member.avatar}
-                          alt={member.name}
-                          className="w-8 h-8 rounded-lg object-cover"
-                        />
-                        <span
-                          className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#0F1117] ${
-                            member.isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
-                          }`}
-                        />
-                      </div>
-                      <div className="truncate">
-                        <div className="text-xs font-semibold text-[#F5F7FA] flex items-center gap-1.5">
-                          {member.name}
-                          {member.id === currentUser.id && (
-                            <span className="text-[10px] text-[#4F8CFF] font-medium">(you)</span>
-                          )}
+              {workspaceMembers.length === 0 ? (
+                <div className="p-6 text-center text-xs text-[#929BAA]">
+                  No members currently in this workspace.
+                </div>
+              ) : (
+                <div className="divide-y divide-[#252B36]/50">
+                  {workspaceMembers.map((member) => (
+                    <div
+                      key={member.id}
+                      className="py-3 flex items-center justify-between hover:bg-[#12151C]/40 px-3 rounded-xl transition-colors"
+                    >
+                      <div className="flex items-center space-x-3 truncate">
+                        <div className="relative">
+                          <img
+                            src={member.avatar}
+                            alt={member.name}
+                            className="w-8 h-8 rounded-lg object-cover"
+                          />
+                          <span
+                            className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#0F1117] ${
+                              member.isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
+                            }`}
+                          />
                         </div>
-                        <div className="text-[11px] text-[#929BAA] truncate">
-                          {member.title} &bull; {member.email}
+                        <div className="truncate">
+                          <div className="text-xs font-semibold text-[#F5F7FA] flex items-center gap-1.5">
+                            {member.name}
+                            {member.id === currentUser.id && (
+                              <span className="text-[10px] text-[#4F8CFF] font-medium">(you)</span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-[#929BAA] truncate">
+                            {member.title} &bull; {member.email}
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs font-medium text-[#929BAA] bg-[#12151C] border border-[#252B36] px-2.5 py-1 rounded-lg capitalize">
-                        {member.role}
-                      </span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-medium text-[#929BAA] bg-[#12151C] border border-[#252B36] px-2.5 py-1 rounded-lg capitalize">
+                          {member.role}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
           {activeTab === 'danger' && (
             <div className="space-y-4">
-              <div className="p-4 bg-[#12151C] border border-[#252B36] rounded-xl space-y-2">
-                <div className="flex items-center space-x-2 text-xs font-semibold text-[#F5F7FA]">
-                  <RotateCcw className="w-4 h-4 text-[#4F8CFF]" />
-                  <span>Reset Demo Workspace Data</span>
-                </div>
-                <p className="text-[11px] text-[#929BAA]">
-                  Restore the default sample team messages, channels, attachments, and demo accounts.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    resetToDemoData();
-                    setIsWorkspaceSettingsOpen(false);
-                  }}
-                  className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] text-xs font-medium text-[#F5F7FA] rounded-lg transition-colors"
-                >
-                  Reset to Default Demo State
-                </button>
-              </div>
-
               <div className="p-4 bg-[#F05D6C]/10 border border-[#F05D6C]/30 rounded-xl space-y-2">
                 <div className="flex items-center space-x-2 text-xs font-semibold text-[#F05D6C]">
                   <Trash2 className="w-4 h-4" />
@@ -275,7 +328,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                   onClick={() => {
                     addToast('Workspace deletion is disabled in demo mode', 'warning');
                   }}
-                  className="px-3 py-1.5 bg-[#F05D6C] hover:bg-[#D94554] text-white text-xs font-medium rounded-lg transition-colors"
+                  className="px-3 py-1.5 bg-[#F05D6C] hover:bg-[#D94554] text-white text-xs font-medium rounded-lg transition-colors cursor-pointer"
                 >
                   Delete Workspace
                 </button>

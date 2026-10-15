@@ -71,7 +71,8 @@ interface ChatContextType {
   switchUser: (userId: string) => void;
   isAuthenticated: boolean;
   login: (email: string, password?: string) => Promise<boolean> | boolean;
-  register: (name: string, email: string, username: string, password?: string, avatarUrl?: string) => Promise<boolean> | boolean;
+  socialLogin: (provider: 'google' | 'apple', email: string, name?: string, avatarUrl?: string) => Promise<boolean>;
+  register: (name: string, email: string, username: string, password?: string, avatarUrl?: string) => Promise<boolean | { requiresVerification?: boolean; message?: string; success?: boolean; error?: string }> | boolean | { requiresVerification?: boolean; message?: string; success?: boolean; error?: string };
   logout: () => void;
   updateCurrentUserProfile: (updates: Partial<User>) => void;
   users: User[];
@@ -81,6 +82,13 @@ interface ChatContextType {
   sendChatInvite: (receiverId: string) => Promise<boolean>;
   acceptInvite: (inviteId: string) => Promise<void>;
   declineInvite: (inviteId: string) => Promise<void>;
+  isInviteChannelMembersOpen: boolean;
+  setIsInviteChannelMembersOpen: (open: boolean) => void;
+  inviteUsersToChannel: (channelId: string, userIds: string[], customEmail?: string) => Promise<boolean>;
+
+  // Themes (Dark, Light, System)
+  theme: 'dark' | 'light' | 'system';
+  setTheme: (theme: 'dark' | 'light' | 'system') => void;
 
   // Supabase Cloud State
   isSupabaseConfigured: boolean;
@@ -98,11 +106,12 @@ interface ChatContextType {
   dms: DirectMessageConversation[];
   activeView: ActiveView;
   setActiveView: (view: ActiveView) => void;
-  createChannel: (name: string, topic: string, description: string, isPrivate: boolean) => Channel;
+  createChannel: (name: string, topic: string, description: string, isPrivate: boolean, initialMemberIds?: string[]) => Channel;
   toggleStarChannel: (channelId: string) => void;
   toggleStarDM: (dmId: string) => void;
   createOrOpenDM: (participantIds: string[], groupName?: string) => string;
   updateChannelDetails: (channelId: string, updates: Partial<Channel>) => void;
+  deleteChannel: (channelId: string) => void;
 
   // Sidebar Collapse (Mac-style Genie animation to workspace button)
   isSidebarCollapsed: boolean;
@@ -285,7 +294,49 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
   const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const [isInviteChannelMembersOpen, setIsInviteChannelMembersOpen] = useState(false);
   const [isSupabaseConnected, setIsSupabaseConnected] = useState(isSupabaseConfigured);
+
+  // Theme Management (Dark, Light, System)
+  const [theme, setThemeState] = useState<'dark' | 'light' | 'system'>(() => {
+    return (localStorage.getItem('pulsechat_theme') as 'dark' | 'light' | 'system') || 'dark';
+  });
+
+  const setTheme = useCallback((newTheme: 'dark' | 'light' | 'system') => {
+    setThemeState(newTheme);
+    localStorage.setItem('pulsechat_theme', newTheme);
+  }, []);
+
+  useEffect(() => {
+    const applyTheme = () => {
+      const root = document.documentElement;
+      let effectiveTheme = theme;
+      if (theme === 'system') {
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        effectiveTheme = prefersDark ? 'dark' : 'light';
+      }
+
+      if (effectiveTheme === 'light') {
+        root.classList.add('light');
+        root.classList.remove('dark');
+        root.setAttribute('data-theme', 'light');
+      } else {
+        root.classList.add('dark');
+        root.classList.remove('light');
+        root.setAttribute('data-theme', 'dark');
+      }
+    };
+
+    applyTheme();
+
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handler = () => applyTheme();
+      mediaQuery.addEventListener('change', handler);
+      return () => mediaQuery.removeEventListener('change', handler);
+    }
+  }, [theme]);
+
 
   // Listen to dynamic Supabase config changes
   useEffect(() => {
@@ -473,7 +524,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setDms(remoteDMs);
           }
 
-          const remoteInvites = await fetchInvitesFromSupabase(uid);
+          const remoteInvites = await fetchInvitesFromSupabase(uid, currentUser.email);
           if (isMounted && remoteInvites.length > 0) {
             setInvites(remoteInvites);
           }
@@ -525,6 +576,27 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             });
             if (row.sender_id !== currentUserId) {
               soundFX.playMessageReceived();
+              const sender = users.find((u) => u.id === row.sender_id);
+              const senderName = sender ? sender.name : 'Team member';
+              const isChannel = row.conversation_type === 'channel';
+              const targetChan = isChannel ? channels.find((c) => c.id === row.conversation_id) : null;
+              const notifTitle = isChannel
+                ? `${senderName} in #${targetChan?.name || 'channel'}`
+                : `New message from ${senderName}`;
+              const notifBody = row.content || (row.attachments?.length ? 'Sent an attachment' : 'New message');
+
+              const liveNotif: NotificationItem = {
+                id: 'notif-msg-' + row.id,
+                userId: currentUserId,
+                title: notifTitle,
+                body: notifBody.slice(0, 90),
+                type: isChannel ? 'channel' : 'dm',
+                timestamp: row.created_at || new Date().toISOString(),
+                isRead: false,
+                targetType: row.conversation_type,
+                targetId: row.conversation_id,
+              };
+              setNotifications((prev) => [liveNotif, ...prev.filter((n) => n.id !== liveNotif.id)]);
             }
           }
         }
@@ -609,16 +681,40 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         { event: '*', schema: 'public', table: 'chat_invites' },
         async (payload) => {
           if (isMounted && currentUserId) {
-            const updated = await fetchInvitesFromSupabase(currentUserId);
+            const updated = await fetchInvitesFromSupabase(currentUserId, currentUser.email);
             setInvites(updated);
             const remoteDMs = await fetchConversationsFromSupabase(activeWorkspaceId, currentUserId);
             if (remoteDMs.length > 0) setDms(remoteDMs);
+            const remoteChannels = await fetchChannelsFromSupabase(activeWorkspaceId, currentUserId);
+            if (remoteChannels.length > 0) setChannels(remoteChannels);
 
             if (payload.eventType === 'INSERT') {
               const row = payload.new as any;
-              if (row && row.receiver_id === currentUserId) {
+              const isForMe = row && (
+                row.receiver_id === currentUserId ||
+                (currentUser.email && row.receiver_id?.toLowerCase() === currentUser.email.toLowerCase())
+              );
+              if (isForMe && row.sender_id !== currentUserId) {
                 soundFX.playMessageReceived();
-                addToast('You received a new chat invitation!', 'info');
+                const sender = users.find((u) => u.id === row.sender_id);
+                const senderName = sender ? sender.name : 'A team member';
+                const isChan = row.invite_type === 'channel';
+                const notifTitle = isChan
+                  ? `${senderName} invited you to join a channel`
+                  : `${senderName} sent you a chat invite`;
+                const notif: NotificationItem = {
+                  id: 'notif-inv-' + row.id,
+                  userId: currentUserId,
+                  title: notifTitle,
+                  body: 'Review your invitations in the sidebar to accept and connect.',
+                  type: 'invite',
+                  timestamp: row.created_at || new Date().toISOString(),
+                  isRead: false,
+                  targetType: isChan ? 'channel' : 'dm',
+                  targetId: row.conversation_id || '',
+                };
+                setNotifications((prev) => [notif, ...prev.filter((n) => n.id !== notif.id)]);
+                addToast(notifTitle, 'info');
               }
             }
           }
@@ -636,9 +732,58 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       )
       .subscribe();
 
+    const { data: authSub } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
+      if (currentSession?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
+        const u = currentSession.user;
+        const newUid = u.id;
+        const rawName = u.user_metadata?.full_name || u.user_metadata?.name || u.email?.split('@')[0] || 'User';
+        const rawHandle = u.user_metadata?.username || u.user_metadata?.preferred_username || u.email?.split('@')[0].replace(/[^a-z0-9]/g, '') || 'member';
+        const avatarUrl = resolveUserAvatar(u.user_metadata?.avatar_url, rawName);
+
+        if (isMounted) {
+          setCurrentUserId(newUid);
+          setIsAuthenticated(true);
+          localStorage.setItem('pulsechat_auth', 'true');
+          localStorage.setItem('pulsechat_current_user', newUid);
+
+          setUsers((prev) => {
+            const exists = prev.find((usr) => usr.id === newUid);
+            if (exists) {
+              return prev.map((usr) => (usr.id === newUid ? { ...usr, isOnline: true } : usr));
+            }
+            const newUser: User = {
+              id: newUid,
+              name: rawName,
+              username: rawHandle,
+              email: u.email || `${rawHandle}@pulsechat.io`,
+              avatar: avatarUrl,
+              role: 'member',
+              title: 'Team Member',
+              isOnline: true,
+              joinedDate: 'Today',
+            };
+            return [newUser, ...prev];
+          });
+        }
+
+        Promise.resolve(
+          supabase.from('profiles').upsert({
+            id: newUid,
+            username: rawHandle,
+            full_name: rawName,
+            email: u.email,
+            avatar_url: avatarUrl,
+            role: 'member',
+            is_online: true,
+          })
+        ).catch(() => {});
+      }
+    });
+
     return () => {
       isMounted = false;
       supabase.removeChannel(channel);
+      authSub?.subscription?.unsubscribe();
     };
   }, [activeWorkspaceId, currentUserId]);
 
@@ -729,6 +874,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             username: cleanUsername,
             avatarUrl: resolvedAvatar,
           });
+          if (res?.requiresVerification) {
+            addToast(res.message || 'A verification link has been sent to your email. Please verify before signing in.', 'info');
+            return { requiresVerification: true, message: res.message };
+          }
           if (res?.user) {
             const uid = res.user.id;
             const newUser: User = {
@@ -755,16 +904,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } catch (err: any) {
           console.warn('Sign up error:', err);
-          addToast(err.message || 'Registration failed', 'error');
-          return false;
+          const msg = err.message || 'Registration failed';
+          addToast(msg, 'error');
+          return { success: false, error: msg };
         }
       }
 
       // Demo/local mode registration check
       const existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
       if (existing) {
-        addToast('An account with this email already exists. Please sign in instead.', 'error');
-        return false;
+        const msg = 'An account with this email already exists. Please sign in instead.';
+        addToast(msg, 'error');
+        return { success: false, error: msg };
       }
 
       const newUser: User = {
@@ -784,6 +935,74 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('pulsechat_auth', 'true');
       localStorage.setItem('pulsechat_current_user', newUser.id);
       addToast(`Welcome to PulseChat, ${cleanName}!`, 'success');
+      if (workspaces.length === 0) {
+        setIsCreateWorkspaceOpen(true);
+      }
+      return true;
+    },
+    [users, workspaces.length, addToast]
+  );
+
+  const socialLogin = useCallback(
+    async (provider: 'google' | 'apple', email: string, name?: string, avatarUrl?: string) => {
+      const cleanEmail = email.trim().toLowerCase();
+      const providerTitle = provider === 'google' ? 'Google' : 'Apple';
+      const cleanName = name?.trim() || (provider === 'google' ? 'Google User' : 'Apple User');
+      const cleanHandle = cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') || provider;
+      const resolvedAvatar = avatarUrl || generateLetterAvatar(cleanName);
+
+      const localExisting = users.find((u) => u.email.toLowerCase() === cleanEmail);
+      let uid = localExisting ? localExisting.id : `usr-${provider}-${Date.now()}`;
+
+      if (isSupabaseConfigured) {
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('email', cleanEmail)
+            .maybeSingle();
+
+          if (profile) {
+            uid = profile.id;
+          }
+
+          await supabase.from('profiles').upsert(
+            {
+              id: uid,
+              email: cleanEmail,
+              username: profile?.username || cleanHandle,
+              full_name: profile?.full_name || cleanName,
+              avatar_url: profile?.avatar_url || resolvedAvatar,
+              role: profile?.role || 'member',
+              is_online: true,
+              last_seen: new Date().toISOString(),
+            },
+            { onConflict: 'id' }
+          );
+        } catch (sbErr) {
+          console.warn('Supabase socialLogin notice:', sbErr);
+        }
+      }
+
+      const verifiedUser: User = {
+        id: uid,
+        name: cleanName,
+        username: cleanHandle,
+        email: cleanEmail,
+        avatar: resolvedAvatar,
+        role: 'member',
+        title: `${providerTitle} Team Member`,
+        isOnline: true,
+        joinedDate: 'Joined with ' + providerTitle,
+      };
+
+      setUsers((prev) => [verifiedUser, ...prev.filter((u) => u.id !== uid && u.email.toLowerCase() !== cleanEmail)]);
+      setCurrentUserId(uid);
+      setIsAuthenticated(true);
+      localStorage.setItem('pulsechat_auth', 'true');
+      localStorage.setItem('pulsechat_current_user', uid);
+      addToast(`Signed in successfully with verified ${providerTitle} account!`, 'success');
+
       if (workspaces.length === 0) {
         setIsCreateWorkspaceOpen(true);
       }
@@ -911,8 +1130,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Channels
   const createChannel = useCallback(
-    (name: string, topic: string, description: string, isPrivate: boolean): Channel => {
+    (name: string, topic: string, description: string, isPrivate: boolean, initialMemberIds?: string[]): Channel => {
       const cleanName = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+      const allMembers = Array.from(new Set([currentUserId, ...(initialMemberIds || [])]));
       const newChannel: Channel = {
         id: 'ch-' + Date.now(),
         workspaceId: activeWorkspaceId,
@@ -920,7 +1140,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         topic: topic || `Discussion topic for #${cleanName}`,
         description: description || `Welcome to #${cleanName}!`,
         isPrivate,
-        memberIds: [currentUserId],
+        memberIds: allMembers,
         createdBy: currentUserId,
         createdAt: new Date().toISOString(),
         unreadCount: 0,
@@ -978,6 +1198,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     addToast('Channel details updated', 'success');
   }, [addToast]);
+
+  const deleteChannel = useCallback((channelId: string) => {
+    setChannels((prev) => prev.filter((c) => c.id !== channelId));
+    setMessages((prev) => prev.filter((m) => !(m.conversationType === 'channel' && m.conversationId === channelId)));
+    setActiveView((prev) => {
+      if (prev.type === 'channel' && prev.id === channelId) {
+        const remaining = channels.filter((c) => c.id !== channelId && c.workspaceId === activeWorkspaceId);
+        if (remaining.length > 0) {
+          return { type: 'channel', id: remaining[0].id };
+        }
+        return { type: 'channel', id: 'general' };
+      }
+      return prev;
+    });
+    setIsRightPanelOpen(false);
+    addToast('Channel deleted successfully', 'info');
+  }, [channels, activeWorkspaceId, addToast, setIsRightPanelOpen]);
 
   // Direct Messages
   const createOrOpenDM = useCallback((participantIds: string[], groupName?: string): string => {
@@ -1065,7 +1302,24 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       prev.map((i) => (i.id === inviteId ? { ...i, status: 'accepted' } : i))
     );
 
-    if (inv.conversationId) {
+    if (inv.inviteType === 'channel' && inv.conversationId) {
+      setChannels((prev) =>
+        prev.map((c) =>
+          c.id === inv.conversationId
+            ? { ...c, memberIds: Array.from(new Set([...c.memberIds, currentUserId])) }
+            : c
+        )
+      );
+      setActiveView({ type: 'channel', id: inv.conversationId });
+      if (isSupabaseConfigured) {
+        const chan = channels.find((c) => c.id === inv.conversationId);
+        if (chan) {
+          updateChannelInSupabase(chan.id, {
+            memberIds: Array.from(new Set([...chan.memberIds, currentUserId])),
+          }).catch(() => {});
+        }
+      }
+    } else if (inv.conversationId) {
       setDms((prev) =>
         prev.map((d) => (d.id === inv.conversationId ? { ...d, status: 'accepted' } : d))
       );
@@ -1075,7 +1329,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         prev.map((d) =>
           !d.isGroup &&
           d.participantIds.includes(inv.senderId) &&
-          d.participantIds.includes(inv.receiverId)
+          (d.participantIds.includes(inv.receiverId) || d.participantIds.includes(currentUserId))
             ? { ...d, status: 'accepted' }
             : d
         )
@@ -1087,8 +1341,71 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     soundFX.playMessageReceived();
-    addToast('Chat invitation accepted! You can now send messages.', 'success');
-  }, [invites, addToast]);
+    addToast('Invitation accepted! You are now connected.', 'success');
+  }, [invites, channels, currentUserId, isSupabaseConfigured, addToast]);
+
+  const inviteUsersToChannel = useCallback(
+    async (channelId: string, userIds: string[], customEmail?: string): Promise<boolean> => {
+      const channel = channels.find((c) => c.id === channelId);
+      if (!channel) return false;
+
+      if (userIds.length > 0) {
+        const updatedMemberIds = Array.from(new Set([...channel.memberIds, ...userIds]));
+        setChannels((prev) =>
+          prev.map((c) => (c.id === channelId ? { ...c, memberIds: updatedMemberIds } : c))
+        );
+
+        if (isSupabaseConfigured) {
+          updateChannelInSupabase(channelId, { memberIds: updatedMemberIds }).catch((err) =>
+            console.warn('Supabase updateChannel error:', err)
+          );
+        }
+
+        for (const uid of userIds) {
+          const inv: ChatInvite = {
+            id: 'inv-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            workspaceId: channel.workspaceId,
+            senderId: currentUserId,
+            receiverId: uid,
+            conversationId: channelId,
+            inviteType: 'channel',
+            status: 'accepted',
+            createdAt: new Date().toISOString(),
+          };
+          setInvites((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
+          if (isSupabaseConfigured) {
+            saveInviteToSupabase(inv).catch(() => {});
+          }
+        }
+      }
+
+      if (customEmail && customEmail.trim()) {
+        const cleanEmail = customEmail.trim().toLowerCase();
+        const matchedUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
+        const receiverTarget = matchedUser ? matchedUser.id : cleanEmail;
+
+        const inv: ChatInvite = {
+          id: 'inv-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+          workspaceId: channel.workspaceId,
+          senderId: currentUserId,
+          receiverId: receiverTarget,
+          conversationId: channelId,
+          inviteType: 'channel',
+          status: 'pending',
+          createdAt: new Date().toISOString(),
+        };
+        setInvites((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
+        if (isSupabaseConfigured) {
+          saveInviteToSupabase(inv).catch(() => {});
+        }
+      }
+
+      soundFX.playMessageSent();
+      addToast('Channel invitation sent successfully!', 'success');
+      return true;
+    },
+    [channels, currentUserId, users, isSupabaseConfigured, addToast]
+  );
 
   const declineInvite = useCallback(async (inviteId: string) => {
     const inv = invites.find((i) => i.id === inviteId);
@@ -1565,6 +1882,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         switchUser,
         isAuthenticated,
         login,
+        socialLogin,
         register,
         logout,
         updateCurrentUserProfile,
@@ -1575,6 +1893,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         sendChatInvite,
         acceptInvite,
         declineInvite,
+        isInviteChannelMembersOpen,
+        setIsInviteChannelMembersOpen,
+        inviteUsersToChannel,
+
+        // Themes
+        theme,
+        setTheme,
 
         workspaces,
         activeWorkspace,
@@ -1591,6 +1916,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         toggleStarDM,
         createOrOpenDM,
         updateChannelDetails,
+        deleteChannel,
 
         isSidebarCollapsed,
         setIsSidebarCollapsed,

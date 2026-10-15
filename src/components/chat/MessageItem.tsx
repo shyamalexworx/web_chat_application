@@ -9,19 +9,20 @@ import {
   Trash2,
   Copy,
   Check,
+  CheckCheck,
   FileText,
   FileCode,
   Download,
   ChevronRight,
   Shield,
   ShieldCheck,
-  Lock,
   Languages,
   X,
   User as UserIcon,
   Users as UsersIcon,
 } from 'lucide-react';
 import { translateText } from '../../utils/translation';
+import { resolveUserAvatar } from '../../utils/avatar';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 
 interface MessageItemProps {
@@ -56,26 +57,35 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
   const [showCipherModal, setShowCipherModal] = useState(false);
   const [copiedCipher, setCopiedCipher] = useState(false);
 
-  const sender: User = users.find((u) => u.id === message.senderId) || {
-    id: message.senderId,
-    name: 'Unknown Member',
-    username: 'member',
-    email: '',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50',
-    role: 'member',
-    title: 'Workspace Member',
-    isOnline: false,
-    joinedDate: '',
-  };
+  // Check if current user is the author
+  const isCurrentUser = Boolean(
+    (currentUser?.id && message.senderId === currentUser.id) ||
+    (currentUser?.email && message.senderId === currentUser.email)
+  );
 
-  const isCurrentUser = currentUser.id === message.senderId;
+  // Robust sender resolution: NEVER fall back to Unsplash demo or 'Unknown Member'
+  const sender: User = isCurrentUser
+    ? currentUser
+    : (users.find((u) => u.id === message.senderId || u.email === message.senderId) || {
+        id: message.senderId,
+        name: 'Member',
+        username: 'member',
+        email: '',
+        avatar: '',
+        role: 'member',
+        title: 'Workspace Member',
+        isOnline: false,
+        joinedDate: '',
+      });
 
-  // Determine if grouped with previous message (same author sent within 4 minutes)
-  const isGrouped =
+  const senderAvatar = resolveUserAvatar(sender.avatar, sender.name);
+
+  // Determine grouping (same sender within 4 minutes)
+  const isGrouped = Boolean(
     previousMessage &&
     previousMessage.senderId === message.senderId &&
-    Math.abs(new Date(message.timestamp).getTime() - new Date(previousMessage.timestamp).getTime()) <
-      4 * 60 * 1000;
+    Math.abs(new Date(message.timestamp).getTime() - new Date(previousMessage.timestamp).getTime()) < 4 * 60 * 1000
+  );
 
   const displayedContent = showOriginal && message.originalContent
     ? message.originalContent
@@ -102,11 +112,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
 
   const formatTimestamp = (iso: string) => {
     const d = new Date(iso);
-    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
-  // Render markdown with syntax highlights and mentions
-  const renderMessageContent = (text: string) => {
+  // Render markdown styles inside bubble
+  const renderMessageContent = (text: string, isSelf: boolean) => {
     if (text.includes('```')) {
       const parts = text.split(/(```[\s\S]*?```)/g);
       return parts.map((part, index) => {
@@ -122,20 +132,27 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
           return (
             <div
               key={index}
-              className="my-2.5 rounded-lg border border-[#252B36] bg-[#12151C] overflow-hidden text-xs font-mono shadow-sm"
+              className={`my-2 rounded-xl overflow-hidden text-xs font-mono shadow-sm border ${
+                isSelf ? 'bg-[#0E1526] border-[#3B82F6]/40' : 'bg-[#12151C] border-[#252B36]'
+              }`}
             >
-              <div className="bg-[#181C25] px-3 py-1.5 border-b border-[#252B36] flex items-center justify-between text-[#929BAA]">
-                <span className="text-[11px] font-semibold text-[#4F8CFF] uppercase tracking-wider">
+              <div
+                className={`px-3 py-1.5 flex items-center justify-between border-b ${
+                  isSelf ? 'bg-[#18233D] border-[#3B82F6]/30 text-[#93C5FD]' : 'bg-[#181C25] border-[#252B36] text-[#929BAA]'
+                }`}
+              >
+                <span className="text-[11px] font-semibold uppercase tracking-wider">
                   {lang}
                 </span>
                 <button
+                  type="button"
                   onClick={() => {
                     navigator.clipboard.writeText(codeContent);
                     setCopiedCodeIndex(index);
-                    addToast('Code copied to clipboard', 'info');
+                    addToast('Code copied', 'info');
                     setTimeout(() => setCopiedCodeIndex(null), 2000);
                   }}
-                  className="flex items-center space-x-1 text-[11px] hover:text-[#F5F7FA] transition-colors"
+                  className="flex items-center space-x-1 text-[11px] hover:text-white transition-colors cursor-pointer"
                 >
                   {copiedCodeIndex === index ? (
                     <>
@@ -150,21 +167,21 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                   )}
                 </button>
               </div>
-              <pre className="p-3 overflow-x-auto text-[#F5F7FA] leading-relaxed selection:bg-[#4F8CFF]/40">
+              <pre className="p-3 overflow-x-auto text-[#F5F7FA] leading-relaxed selection:bg-[#4F8CFF]/50">
                 <code>{codeContent}</code>
               </pre>
             </div>
           );
         } else {
-          return <span key={index}>{renderInlineStyles(part)}</span>;
+          return <span key={index}>{renderInlineStyles(part, isSelf)}</span>;
         }
       });
     }
 
-    return renderInlineStyles(text);
+    return renderInlineStyles(text, isSelf);
   };
 
-  const renderInlineStyles = (content: string) => {
+  const renderInlineStyles = (content: string, isSelf: boolean) => {
     const lines = content.split('\n');
     return lines.map((line, lIdx) => {
       const words = line.split(/(\s+)/);
@@ -173,7 +190,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
           return (
             <span
               key={wIdx}
-              className="bg-[#4F8CFF]/20 text-[#4F8CFF] font-medium px-1.5 py-0.5 rounded text-xs"
+              className={`font-medium px-1.5 py-0.5 rounded text-xs ${
+                isSelf ? 'bg-white/20 text-white' : 'bg-[#4F8CFF]/20 text-[#4F8CFF]'
+              }`}
             >
               {w}
             </span>
@@ -183,14 +202,18 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
           return (
             <code
               key={wIdx}
-              className="bg-[#181C25] text-[#F5F7FA] font-mono px-1 py-0.5 rounded text-xs border border-[#252B36]"
+              className={`font-mono px-1 py-0.5 rounded text-xs border ${
+                isSelf
+                  ? 'bg-[#1E3A8A]/50 border-white/20 text-white'
+                  : 'bg-[#12151C] border-[#252B36] text-[#F5F7FA]'
+              }`}
             >
               {w.slice(1, -1)}
             </code>
           );
         }
         if (w.startsWith('**') && w.endsWith('**') && w.length > 4) {
-          return <strong key={wIdx} className="font-semibold text-white">{w.slice(2, -2)}</strong>;
+          return <strong key={wIdx} className="font-bold text-white">{w.slice(2, -2)}</strong>;
         }
         return w;
       });
@@ -203,364 +226,586 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
     });
   };
 
+  // Hover Action Bar component
+  const renderActionBar = () => (
+    <div
+      className={`message-actions absolute -top-3.5 flex items-center bg-[#181C25] border border-[#252B36] rounded-lg shadow-elevated p-0.5 z-20 space-x-0.5 ${
+        isCurrentUser ? 'right-4' : 'left-12'
+      }`}
+    >
+      {COMMON_EMOJIS.slice(0, 4).map((emoji) => (
+        <button
+          key={emoji}
+          type="button"
+          onClick={() => toggleReaction(message.id, emoji)}
+          className="p-1.5 hover:bg-[#252B36] rounded text-xs transition-colors hover:scale-110 cursor-pointer"
+          title={`React with ${emoji}`}
+        >
+          {emoji}
+        </button>
+      ))}
+
+      <div className="w-[1px] h-3.5 bg-[#252B36] mx-0.5" />
+
+      <button
+        type="button"
+        onClick={handleSingleTranslate}
+        className="p-1.5 text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
+        title="Translate message"
+      >
+        <Languages className="w-3.5 h-3.5" />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setActiveThreadMessageId(message.id)}
+        className="p-1.5 text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
+        title="Reply in thread"
+      >
+        <MessageSquare className="w-3.5 h-3.5" />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => togglePinMessage(message.id)}
+        className={`p-1.5 rounded transition-colors cursor-pointer ${
+          message.isPinned
+            ? 'text-[#4F8CFF] bg-[#4F8CFF]/15'
+            : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36]'
+        }`}
+        title={message.isPinned ? 'Unpin message' : 'Pin message'}
+      >
+        <Pin className="w-3.5 h-3.5" />
+      </button>
+
+      <button
+        type="button"
+        onClick={handleCopyText}
+        className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
+        title="Copy text"
+      >
+        <Copy className="w-3.5 h-3.5" />
+      </button>
+
+      {isCurrentUser && (
+        <button
+          type="button"
+          onClick={() => {
+            setEditDraft(message.content);
+            setIsEditing(true);
+          }}
+          className="p-1.5 text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
+          title="Edit message"
+        >
+          <Edit2 className="w-3.5 h-3.5" />
+        </button>
+      )}
+
+      <button
+        type="button"
+        onClick={() => setShowDeleteModal(true)}
+        className="p-1.5 text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
+        title="Delete message"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+
   return (
     <div
-      className={`message-row group relative px-5 py-1.5 hover:bg-[#12151C]/70 transition-colors ${
-        message.isPinned ? 'bg-[#4F8CFF]/5 border-l-2 border-[#4F8CFF]' : ''
+      className={`message-row group relative px-4 sm:px-6 py-1.5 transition-colors ${
+        message.isPinned ? 'bg-[#4F8CFF]/5 border-l-2 border-[#4F8CFF]' : 'hover:bg-[#12151C]/40'
       }`}
     >
       {/* Pinned Indicator Flag */}
       {message.isPinned && !isGrouped && (
-        <div className="flex items-center space-x-1.5 text-[10px] font-medium text-[#4F8CFF] mb-1">
+        <div
+          className={`flex items-center space-x-1.5 text-[10px] font-medium text-[#4F8CFF] mb-1.5 ${
+            isCurrentUser ? 'justify-end' : 'justify-start pl-10'
+          }`}
+        >
           <Pin className="w-3 h-3 fill-current rotate-45" />
           <span>{t('pinned_to_conversation')}</span>
         </div>
       )}
 
-      <div className="flex items-start space-x-3">
-        {/* Avatar or Grouped Spacer */}
-        {!isGrouped ? (
-          <div className="relative flex-shrink-0 cursor-pointer pt-0.5">
-            <img
-              src={sender.avatar}
-              alt={sender.name}
-              onClick={() => setIsUserProfileOpen(true)}
-              className="w-9 h-9 rounded-lg object-cover border border-[#252B36] hover:scale-105 transition-transform"
-            />
-            <span
-              className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#0B0D12] ${
-                sender.isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
-              }`}
-            />
-          </div>
-        ) : (
-          <div className="w-9 flex-shrink-0 text-right pr-2 pt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-            <span className="text-[10px] text-[#929BAA] font-mono">
-              {formatTimestamp(message.timestamp)}
-            </span>
-          </div>
-        )}
+      {/* Action Bar on hover */}
+      {renderActionBar()}
 
-        {/* Message Body */}
-        <div className="flex-1 overflow-hidden">
-          {/* Header (Sender & Time) */}
-          {!isGrouped && (
-            <div className="flex items-center space-x-2 mb-0.5 flex-wrap gap-y-1">
-              <span
-                onClick={() => setIsUserProfileOpen(true)}
-                className="text-xs font-semibold text-[#F5F7FA] hover:text-[#4F8CFF] cursor-pointer transition-colors"
-              >
-                {sender.name}
-              </span>
-
-              {sender.role === 'owner' && (
-                <span className="text-[10px] bg-[#4F8CFF]/20 text-[#4F8CFF] font-semibold px-1.5 py-0.2 rounded border border-[#4F8CFF]/30 flex items-center gap-0.5">
-                  <Shield className="w-2.5 h-2.5" /> Lead
+      {/* ========================================================================= */}
+      {/* CASE A: SENT MESSAGE (Current User) -> Placed on the RIGHT side */}
+      {/* ========================================================================= */}
+      {isCurrentUser ? (
+        <div className="w-full flex justify-end">
+          <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%] md:max-w-[65%]">
+            {/* Header info for sent message */}
+            {!isGrouped && (
+              <div className="flex items-center space-x-2 mb-1 justify-end">
+                <span className="text-[11px] text-[#929BAA] font-mono">
+                  {formatTimestamp(message.timestamp)}
                 </span>
-              )}
-              {sender.role === 'admin' && (
-                <span className="text-[10px] bg-[#32C48D]/20 text-[#32C48D] font-semibold px-1.5 py-0.2 rounded border border-[#32C48D]/30">
-                  Admin
+                <span className="text-xs font-semibold text-[#F5F7FA]">
+                  {currentUser.name}
                 </span>
-              )}
-
-              <span
-                className="text-[11px] text-[#929BAA] font-mono cursor-default"
-                title={new Date(message.timestamp).toLocaleString()}
-              >
-                {formatTimestamp(message.timestamp)}
-              </span>
-
-              {message.editedAt && (
-                <span className="text-[10px] text-[#929BAA] italic">(edited)</span>
-              )}
-
-              {/* Translation Badge */}
-              {message.isTranslated && (
-                <button
-                  onClick={() => setShowOriginal(!showOriginal)}
-                  className="text-[10px] text-[#4F8CFF] bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 px-1.5 py-0.2 rounded flex items-center gap-1 transition-colors"
-                  title="Click to toggle translated/original text"
-                >
-                  <Languages className="w-2.5 h-2.5" />
-                  <span>{showOriginal ? t('showing_original') : t('translated')}</span>
-                </button>
-              )}
-            </div>
-          )}
-
-          {/* Message Content or Edit Form */}
-          {isEditing ? (
-            <div className="mt-1 space-y-2">
-              <textarea
-                value={editDraft}
-                onChange={(e) => setEditDraft(e.target.value)}
-                className="w-full bg-[#181C25] border border-[#4F8CFF] rounded-lg p-2.5 text-xs text-[#F5F7FA] outline-none resize-none font-sans"
-                rows={3}
-                autoFocus
-              />
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={handleSaveEdit}
-                  className="px-3 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-xs font-medium rounded-md transition-colors"
-                >
-                  Save Changes
-                </button>
-                <button
-                  onClick={() => setIsEditing(false)}
-                  className="px-3 py-1 bg-[#181C25] hover:bg-[#252B36] text-[#929BAA] text-xs font-medium rounded-md border border-[#252B36] transition-colors"
-                >
-                  Cancel
-                </button>
               </div>
-            </div>
-          ) : (
-            <div className="text-xs text-[#F5F7FA] leading-relaxed break-words selectable-text">
-              {renderMessageContent(displayedContent)}
-            </div>
-          )}
+            )}
 
-          {/* Attachments rendering */}
-          {message.attachments && message.attachments.length > 0 && (
-            <div className="mt-2.5 flex flex-wrap gap-2.5">
-              {message.attachments.map((att) => {
-                if (att.type === 'image') {
-                  return (
-                    <div
-                      key={att.id}
-                      onClick={() => setLightboxImage(att.previewUrl || att.url)}
-                      className="group/img relative rounded-lg border border-[#252B36] overflow-hidden max-w-sm cursor-zoom-in"
-                    >
-                      <img
-                        src={att.previewUrl || att.url}
-                        alt={att.name}
-                        className="max-h-60 rounded-lg object-cover hover:opacity-95 transition-opacity"
-                      />
-                      <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex items-center justify-between text-[11px] text-white">
-                        <span className="truncate">{att.name}</span>
-                        <span className="text-[#929BAA] text-[10px]">{att.size}</span>
-                      </div>
-                    </div>
-                  );
-                }
-
-                if (att.type === 'video') {
-                  return (
-                    <div
-                      key={att.id}
-                      className="group/vid relative rounded-lg border border-[#252B36] overflow-hidden max-w-md bg-black/60"
-                    >
-                      <video
-                        src={att.url}
-                        controls
-                        className="max-h-72 w-full rounded-lg object-contain bg-black"
-                      />
-                      <div className="bg-[#12151C] px-3 py-1.5 flex items-center justify-between text-[11px] text-white border-t border-[#252B36]">
-                        <span className="truncate">{att.name}</span>
-                        <span className="text-[#929BAA] text-[10px]">{att.size}</span>
-                      </div>
-                    </div>
-                  );
-                }
-
-                if (att.type === 'audio') {
-                  return (
-                    <VoiceMessagePlayer
-                      key={att.id}
-                      url={att.url}
-                      name={att.name}
-                      duration={att.duration}
-                      senderAvatar={sender.avatar}
-                    />
-                  );
-                }
-
-                return (
-                  <div
-                    key={att.id}
-                    className="flex items-center space-x-3 px-3 py-2 bg-[#181C25] hover:bg-[#1E2330] border border-[#252B36] rounded-lg text-xs max-w-xs transition-colors group/att"
-                  >
-                    <div className="p-2 bg-[#12151C] rounded border border-[#252B36] text-[#4F8CFF]">
-                      {att.type === 'code' ? (
-                        <FileCode className="w-4 h-4" />
-                      ) : (
-                        <FileText className="w-4 h-4" />
-                      )}
-                    </div>
-                    <div className="flex-1 truncate">
-                      <div className="font-medium text-[#F5F7FA] truncate">{att.name}</div>
-                      <div className="text-[10px] text-[#929BAA]">{att.size}</div>
-                    </div>
+            {/* Bubble Container: Modern rich blue gradient bubble */}
+            <div className="relative rounded-2xl rounded-tr-xs bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] text-white p-3.5 shadow-md border border-[#3B82F6]/30 select-text">
+              {isEditing ? (
+                <div className="space-y-2 min-w-[240px]">
+                  <textarea
+                    value={editDraft}
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    className="w-full bg-[#181C25] border border-white/30 rounded-lg p-2.5 text-xs text-white outline-none resize-none"
+                    rows={3}
+                    autoFocus
+                  />
+                  <div className="flex items-center justify-end space-x-2">
                     <button
-                      onClick={() => addToast(`Downloaded ${att.name}`, 'success')}
-                      className="p-1 text-[#929BAA] hover:text-[#F5F7FA] rounded hover:bg-[#252B36] transition-colors"
-                      title="Download file"
+                      type="button"
+                      onClick={() => setIsEditing(false)}
+                      className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white text-xs font-medium rounded-md transition-colors cursor-pointer"
                     >
-                      <Download className="w-3.5 h-3.5" />
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveEdit}
+                      className="px-3 py-1 bg-white text-[#1D4ED8] hover:bg-gray-100 text-xs font-semibold rounded-md transition-colors cursor-pointer"
+                    >
+                      Save
                     </button>
                   </div>
-                );
-              })}
+                </div>
+              ) : (
+                <>
+                  {displayedContent && (
+                    <div className="text-xs text-white leading-relaxed break-words">
+                      {renderMessageContent(displayedContent, true)}
+                    </div>
+                  )}
+
+                  {/* Attachments rendering */}
+                  {message.attachments && message.attachments.length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap gap-2.5 justify-end">
+                      {message.attachments.map((att) => {
+                        if (att.type === 'image') {
+                          return (
+                            <div
+                              key={att.id}
+                              onClick={() => setLightboxImage(att.previewUrl || att.url)}
+                              className="group/img relative rounded-xl border border-white/20 overflow-hidden max-w-sm cursor-zoom-in shadow-sm"
+                            >
+                              <img
+                                src={att.previewUrl || att.url}
+                                alt={att.name}
+                                className="max-h-60 rounded-xl object-cover hover:opacity-95 transition-opacity"
+                              />
+                              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex items-center justify-between text-[11px] text-white">
+                                <span className="truncate">{att.name}</span>
+                                <span className="text-white/70 text-[10px]">{att.size}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (att.type === 'video') {
+                          return (
+                            <div
+                              key={att.id}
+                              className="group/vid relative rounded-xl border border-white/20 overflow-hidden max-w-md bg-black shadow-sm"
+                            >
+                              <video
+                                src={att.url}
+                                controls
+                                className="max-h-72 w-full rounded-xl object-contain bg-black"
+                              />
+                              <div className="bg-[#0F172A] px-3 py-1.5 flex items-center justify-between text-[11px] text-white border-t border-white/10">
+                                <span className="truncate">{att.name}</span>
+                                <span className="text-white/70 text-[10px]">{att.size}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (att.type === 'audio') {
+                          return (
+                            <VoiceMessagePlayer
+                              key={att.id}
+                              url={att.url}
+                              name={att.name}
+                              duration={att.duration}
+                              senderAvatar={senderAvatar}
+                            />
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={att.id}
+                            className="flex items-center space-x-3 px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs max-w-xs transition-colors"
+                          >
+                            <div className="p-2 bg-white/20 rounded-lg text-white">
+                              {att.type === 'code' ? (
+                                <FileCode className="w-4 h-4" />
+                              ) : (
+                                <FileText className="w-4 h-4" />
+                              )}
+                            </div>
+                            <div className="flex-1 truncate text-left">
+                              <div className="font-medium text-white truncate">{att.name}</div>
+                              <div className="text-[10px] text-white/70">{att.size}</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => addToast(`Downloaded ${att.name}`, 'success')}
+                              className="p-1 text-white/80 hover:text-white rounded hover:bg-white/20 transition-colors cursor-pointer"
+                              title="Download file"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Bubble Footer: Timestamp & delivery check */}
+                  <div className="mt-1 flex items-center justify-end space-x-1.5 text-[10px] text-white/70 font-mono">
+                    {message.editedAt && <span className="italic">(edited)</span>}
+                    {message.isTranslated && (
+                      <button
+                        type="button"
+                        onClick={() => setShowOriginal(!showOriginal)}
+                        className="text-[10px] text-white underline cursor-pointer"
+                      >
+                        {showOriginal ? t('showing_original') : t('translated')}
+                      </button>
+                    )}
+                    <span>{formatTimestamp(message.timestamp)}</span>
+                    <CheckCheck className="w-3.5 h-3.5 text-white/90 inline-block" />
+                  </div>
+                </>
+              )}
             </div>
-          )}
 
-          {/* Reactions Strip */}
-          {Object.keys(message.reactions).length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5 items-center">
-              {Object.entries(message.reactions).map(([emoji, reactors]) => {
-                const hasReacted = reactors.includes(currentUser.id);
-                return (
-                  <button
-                    key={emoji}
-                    onClick={() => toggleReaction(message.id, emoji)}
-                    className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs transition-all ${
-                      hasReacted
-                        ? 'bg-[#4F8CFF]/20 border border-[#4F8CFF]/40 text-[#4F8CFF]'
-                        : 'bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] text-[#929BAA] hover:text-[#F5F7FA]'
-                    }`}
-                    title={`Reacted by: ${reactors.length} team members`}
-                  >
-                    <span>{emoji}</span>
-                    <span className="font-mono text-[11px] font-semibold">{reactors.length}</span>
-                  </button>
-                );
-              })}
+            {/* Reactions Strip (Sent Message - Aligned Right) */}
+            {Object.keys(message.reactions).length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5 items-center justify-end">
+                {Object.entries(message.reactions).map(([emoji, reactors]) => {
+                  const hasReacted = reactors.includes(currentUser.id);
+                  return (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => toggleReaction(message.id, emoji)}
+                      className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs transition-all cursor-pointer ${
+                        hasReacted
+                          ? 'bg-[#4F8CFF]/20 border border-[#4F8CFF]/50 text-[#4F8CFF]'
+                          : 'bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] text-[#929BAA] hover:text-[#F5F7FA]'
+                      }`}
+                    >
+                      <span>{emoji}</span>
+                      <span className="font-mono text-[11px] font-semibold">{reactors.length}</span>
+                    </button>
+                  );
+                })}
 
+                <button
+                  type="button"
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className="p-1 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] rounded-full text-[#929BAA] hover:text-[#F5F7FA] transition-colors cursor-pointer"
+                  title="Add reaction"
+                >
+                  <Smile className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            {/* Thread Preview Bar (Sent Message - Aligned Right) */}
+            {message.replyCount && message.replyCount > 0 ? (
               <button
-                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-                className="p-1 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] rounded-full text-[#929BAA] hover:text-[#F5F7FA] transition-colors"
-                title="Add reaction"
+                type="button"
+                onClick={() => setActiveThreadMessageId(message.id)}
+                className="mt-1.5 inline-flex items-center space-x-2 px-2.5 py-1 bg-[#181C25]/80 hover:bg-[#1E2330] border border-[#252B36] rounded-md text-xs text-[#4F8CFF] group/thread transition-colors cursor-pointer"
               >
-                <Smile className="w-3 h-3" />
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span className="font-medium">
+                  {message.replyCount} {message.replyCount === 1 ? 'reply' : 'replies'}
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 text-[#929BAA] group-hover/thread:translate-x-0.5 transition-transform" />
               </button>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        /* ========================================================================= */
+        /* CASE B: RECEIVED MESSAGE (Other User) -> Placed on the LEFT side          */
+        /* ========================================================================= */
+        <div className="w-full flex justify-start items-start space-x-2.5">
+          {/* Sender Avatar */}
+          {!isGrouped ? (
+            <div className="relative flex-shrink-0 cursor-pointer pt-0.5">
+              <img
+                src={senderAvatar}
+                alt={sender.name}
+                onClick={() => setIsUserProfileOpen(true)}
+                className="w-9 h-9 rounded-xl object-cover border border-[#252B36] hover:scale-105 transition-transform bg-[#0E1118]"
+              />
+              <span
+                className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-[#0B0D12] ${
+                  sender.isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
+                }`}
+              />
             </div>
+          ) : (
+            <div className="w-9 flex-shrink-0" />
           )}
 
-          {/* Thread Preview Bar */}
-          {message.replyCount && message.replyCount > 0 ? (
-            <button
-              onClick={() => setActiveThreadMessageId(message.id)}
-              className="mt-2 inline-flex items-center space-x-2 px-2.5 py-1 bg-[#181C25]/80 hover:bg-[#1E2330] border border-[#252B36] rounded-md text-xs text-[#4F8CFF] group/thread transition-colors"
-            >
-              <MessageSquare className="w-3.5 h-3.5" />
-              <span className="font-medium">
-                {message.replyCount} {message.replyCount === 1 ? 'reply' : 'replies'}
-              </span>
-              <span className="text-[11px] text-[#929BAA]">
-                Last reply{' '}
-                {message.lastReplyAt
-                  ? new Date(message.lastReplyAt).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })
-                  : 'recently'}
-              </span>
-              <ChevronRight className="w-3.5 h-3.5 text-[#929BAA] group-hover/thread:translate-x-0.5 transition-transform" />
-            </button>
-          ) : null}
+          {/* Bubble Container: Clean dark card bubble */}
+          <div className="flex flex-col items-start max-w-[85%] sm:max-w-[75%] md:max-w-[65%]">
+            {!isGrouped && (
+              <div className="flex items-center space-x-2 mb-1">
+                <span
+                  onClick={() => setIsUserProfileOpen(true)}
+                  className="text-xs font-semibold text-[#F5F7FA] hover:text-[#4F8CFF] cursor-pointer transition-colors"
+                >
+                  {sender.name}
+                </span>
+
+                {sender.role === 'owner' && (
+                  <span className="text-[10px] bg-[#4F8CFF]/20 text-[#4F8CFF] font-semibold px-1.5 py-0.2 rounded border border-[#4F8CFF]/30 flex items-center gap-0.5">
+                    <Shield className="w-2.5 h-2.5" /> Lead
+                  </span>
+                )}
+                {sender.role === 'admin' && (
+                  <span className="text-[10px] bg-[#32C48D]/20 text-[#32C48D] font-semibold px-1.5 py-0.2 rounded border border-[#32C48D]/30">
+                    Admin
+                  </span>
+                )}
+
+                <span className="text-[11px] text-[#929BAA] font-mono cursor-default">
+                  {formatTimestamp(message.timestamp)}
+                </span>
+              </div>
+            )}
+
+            <div className="relative rounded-2xl rounded-tl-xs bg-[#181C25] border border-[#252B36] text-[#F5F7FA] p-3.5 shadow-md select-text">
+              {isEditing ? (
+                <div className="space-y-2 min-w-[240px]">
+                  <textarea
+                    value={editDraft}
+                    onChange={(e) => setEditDraft(e.target.value)}
+                    className="w-full bg-[#12151C] border border-[#4F8CFF] rounded-lg p-2.5 text-xs text-[#F5F7FA] outline-none resize-none"
+                    rows={3}
+                    autoFocus
+                  />
+                  <div className="flex items-center justify-end space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditing(false)}
+                      className="px-2.5 py-1 bg-[#181C25] hover:bg-[#252B36] text-[#929BAA] text-xs font-medium rounded-md transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveEdit}
+                      className="px-3 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-xs font-semibold rounded-md transition-colors cursor-pointer"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {displayedContent && (
+                    <div className="text-xs text-[#F5F7FA] leading-relaxed break-words">
+                      {renderMessageContent(displayedContent, false)}
+                    </div>
+                  )}
+
+                  {/* Attachments rendering */}
+                  {message.attachments && message.attachments.length > 0 && (
+                    <div className="mt-2.5 flex flex-wrap gap-2.5">
+                      {message.attachments.map((att) => {
+                        if (att.type === 'image') {
+                          return (
+                            <div
+                              key={att.id}
+                              onClick={() => setLightboxImage(att.previewUrl || att.url)}
+                              className="group/img relative rounded-xl border border-[#252B36] overflow-hidden max-w-sm cursor-zoom-in"
+                            >
+                              <img
+                                src={att.previewUrl || att.url}
+                                alt={att.name}
+                                className="max-h-60 rounded-xl object-cover hover:opacity-95 transition-opacity"
+                              />
+                              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex items-center justify-between text-[11px] text-white">
+                                <span className="truncate">{att.name}</span>
+                                <span className="text-[#929BAA] text-[10px]">{att.size}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (att.type === 'video') {
+                          return (
+                            <div
+                              key={att.id}
+                              className="group/vid relative rounded-xl border border-[#252B36] overflow-hidden max-w-md bg-black/60"
+                            >
+                              <video
+                                src={att.url}
+                                controls
+                                className="max-h-72 w-full rounded-xl object-contain bg-black"
+                              />
+                              <div className="bg-[#12151C] px-3 py-1.5 flex items-center justify-between text-[11px] text-white border-t border-[#252B36]">
+                                <span className="truncate">{att.name}</span>
+                                <span className="text-[#929BAA] text-[10px]">{att.size}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (att.type === 'audio') {
+                          return (
+                            <VoiceMessagePlayer
+                              key={att.id}
+                              url={att.url}
+                              name={att.name}
+                              duration={att.duration}
+                              senderAvatar={senderAvatar}
+                            />
+                          );
+                        }
+
+                        return (
+                          <div
+                            key={att.id}
+                            className="flex items-center space-x-3 px-3 py-2 bg-[#12151C] hover:bg-[#1E2330] border border-[#252B36] rounded-xl text-xs max-w-xs transition-colors"
+                          >
+                            <div className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] text-[#4F8CFF]">
+                              {att.type === 'code' ? (
+                                <FileCode className="w-4 h-4" />
+                              ) : (
+                                <FileText className="w-4 h-4" />
+                              )}
+                            </div>
+                            <div className="flex-1 truncate">
+                              <div className="font-medium text-[#F5F7FA] truncate">{att.name}</div>
+                              <div className="text-[10px] text-[#929BAA]">{att.size}</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => addToast(`Downloaded ${att.name}`, 'success')}
+                              className="p-1 text-[#929BAA] hover:text-[#F5F7FA] rounded hover:bg-[#252B36] transition-colors cursor-pointer"
+                              title="Download file"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Received Bubble Footer */}
+                  <div className="mt-1 flex items-center justify-start space-x-1.5 text-[10px] text-[#929BAA] font-mono">
+                    {message.editedAt && <span className="italic">(edited)</span>}
+                    {message.isTranslated && (
+                      <button
+                        type="button"
+                        onClick={() => setShowOriginal(!showOriginal)}
+                        className="text-[10px] text-[#4F8CFF] hover:underline cursor-pointer"
+                      >
+                        {showOriginal ? t('showing_original') : t('translated')}
+                      </button>
+                    )}
+                    <span>{formatTimestamp(message.timestamp)}</span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Reactions Strip (Received Message - Aligned Left) */}
+            {Object.keys(message.reactions).length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5 items-center justify-start">
+                {Object.entries(message.reactions).map(([emoji, reactors]) => {
+                  const hasReacted = reactors.includes(currentUser.id);
+                  return (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => toggleReaction(message.id, emoji)}
+                      className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs transition-all cursor-pointer ${
+                        hasReacted
+                          ? 'bg-[#4F8CFF]/20 border border-[#4F8CFF]/50 text-[#4F8CFF]'
+                          : 'bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] text-[#929BAA] hover:text-[#F5F7FA]'
+                      }`}
+                    >
+                      <span>{emoji}</span>
+                      <span className="font-mono text-[11px] font-semibold">{reactors.length}</span>
+                    </button>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  className="p-1 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] rounded-full text-[#929BAA] hover:text-[#F5F7FA] transition-colors cursor-pointer"
+                  title="Add reaction"
+                >
+                  <Smile className="w-3 h-3" />
+                </button>
+              </div>
+            )}
+
+            {/* Thread Preview Bar (Received Message - Aligned Left) */}
+            {message.replyCount && message.replyCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setActiveThreadMessageId(message.id)}
+                className="mt-1.5 inline-flex items-center space-x-2 px-2.5 py-1 bg-[#181C25]/80 hover:bg-[#1E2330] border border-[#252B36] rounded-md text-xs text-[#4F8CFF] group/thread transition-colors cursor-pointer"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                <span className="font-medium">
+                  {message.replyCount} {message.replyCount === 1 ? 'reply' : 'replies'}
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 text-[#929BAA] group-hover/thread:translate-x-0.5 transition-transform" />
+              </button>
+            ) : null}
+          </div>
         </div>
-      </div>
-
-      {/* Hover Action Bar (Top Right of Message) */}
-      <div className="message-actions absolute -top-3.5 right-5 flex items-center bg-[#181C25] border border-[#252B36] rounded-lg shadow-elevated p-0.5 z-20 space-x-0.5">
-        {/* Quick Emoji Reactions */}
-        {COMMON_EMOJIS.slice(0, 4).map((emoji) => (
-          <button
-            key={emoji}
-            onClick={() => toggleReaction(message.id, emoji)}
-            className="p-1.5 hover:bg-[#252B36] rounded text-xs transition-colors hover:scale-110"
-            title={`React with ${emoji}`}
-          >
-            {emoji}
-          </button>
-        ))}
-
-        <div className="w-[1px] h-3.5 bg-[#252B36] mx-0.5" />
-
-        {/* Translate Message */}
-        <button
-          onClick={handleSingleTranslate}
-          className="p-1.5 text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36] rounded transition-colors"
-          title="Translate message"
-        >
-          <Languages className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Reply in Thread */}
-        <button
-          onClick={() => setActiveThreadMessageId(message.id)}
-          className="p-1.5 text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36] rounded transition-colors"
-          title="Reply in thread"
-        >
-          <MessageSquare className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Pin / Unpin */}
-        <button
-          onClick={() => togglePinMessage(message.id)}
-          className={`p-1.5 rounded transition-colors ${
-            message.isPinned
-              ? 'text-[#4F8CFF] bg-[#4F8CFF]/15'
-              : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36]'
-          }`}
-          title={message.isPinned ? 'Unpin message' : 'Pin message'}
-        >
-          <Pin className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Copy text */}
-        <button
-          onClick={handleCopyText}
-          className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36] rounded transition-colors"
-          title="Copy text"
-        >
-          <Copy className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Edit (for author) */}
-        {isCurrentUser && (
-          <button
-            onClick={() => {
-              setEditDraft(message.content);
-              setIsEditing(true);
-            }}
-            className="p-1.5 text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36] rounded transition-colors"
-            title="Edit message"
-          >
-            <Edit2 className="w-3.5 h-3.5" />
-          </button>
-        )}
-
-        {/* Delete message (opens options: delete for me / delete for everyone) */}
-        <button
-          onClick={() => setShowDeleteModal(true)}
-          className="p-1.5 text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#252B36] rounded transition-colors"
-          title="Delete message"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      )}
 
       {/* Emoji Picker Popup with outside click backdrop */}
       {showEmojiPicker && (
         <>
           <div className="fixed inset-0 z-20 bg-transparent" onClick={() => setShowEmojiPicker(false)} />
-          <div className="absolute left-14 mt-1 bg-[#181C25] border border-[#252B36] rounded-lg shadow-modal p-2 z-30 flex items-center space-x-1 animate-slide-down">
-          {COMMON_EMOJIS.map((e) => (
-            <button
-              key={e}
-              onClick={() => {
-                toggleReaction(message.id, e);
-                setShowEmojiPicker(false);
-              }}
-              className="p-1.5 hover:bg-[#252B36] rounded text-sm hover:scale-115 transition-transform"
-            >
-              {e}
-            </button>
-          ))}
-        </div>
-      </>
-    )}
+          <div
+            className={`absolute mt-1 bg-[#181C25] border border-[#252B36] rounded-xl shadow-modal p-2 z-30 flex items-center space-x-1 animate-slide-down ${
+              isCurrentUser ? 'right-6' : 'left-14'
+            }`}
+          >
+            {COMMON_EMOJIS.map((e) => (
+              <button
+                key={e}
+                type="button"
+                onClick={() => {
+                  toggleReaction(message.id, e);
+                  setShowEmojiPicker(false);
+                }}
+                className="p-1.5 hover:bg-[#252B36] rounded-lg text-sm hover:scale-115 transition-transform cursor-pointer"
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Lightbox Modal */}
       {lightboxImage && (
@@ -576,7 +821,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
         </div>
       )}
 
-      {/* Delete Options Modal (Delete for me / Delete for everyone) */}
+      {/* Delete Options Modal */}
       {showDeleteModal && (
         <div
           onClick={() => setShowDeleteModal(false)}
@@ -597,13 +842,13 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
             </div>
 
             <div className="space-y-2 pt-1">
-              {/* Option 1: Delete for me */}
               <button
+                type="button"
                 onClick={() => {
                   deleteMessage(message.id, 'me');
                   setShowDeleteModal(false);
                 }}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#12151C] hover:bg-[#252B36] border border-[#252B36] text-left transition-colors flex items-center justify-between group"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#12151C] hover:bg-[#252B36] border border-[#252B36] text-left transition-colors flex items-center justify-between group cursor-pointer"
               >
                 <div>
                   <div className="text-xs font-semibold text-[#F5F7FA] group-hover:text-[#4F8CFF] transition-colors">
@@ -616,13 +861,13 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                 <UserIcon className="w-4 h-4 text-[#929BAA] group-hover:text-[#4F8CFF]" />
               </button>
 
-              {/* Option 2: Delete for everyone */}
               <button
+                type="button"
                 onClick={() => {
                   deleteMessage(message.id, 'everyone');
                   setShowDeleteModal(false);
                 }}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F05D6C]/10 hover:bg-[#F05D6C]/20 border border-[#F05D6C]/30 text-left transition-colors flex items-center justify-between group"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F05D6C]/10 hover:bg-[#F05D6C]/20 border border-[#F05D6C]/30 text-left transition-colors flex items-center justify-between group cursor-pointer"
               >
                 <div>
                   <div className="text-xs font-semibold text-[#F05D6C]">
@@ -638,8 +883,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
 
             <div className="pt-2 border-t border-[#252B36] flex justify-end">
               <button
+                type="button"
                 onClick={() => setShowDeleteModal(false)}
-                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#12151C] transition-colors"
+                className="px-3.5 py-1.5 rounded-lg text-xs font-medium text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#12151C] transition-colors cursor-pointer"
               >
                 Cancel
               </button>
@@ -669,8 +915,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setShowCipherModal(false)}
-                className="p-1 text-[#929BAA] hover:text-[#F5F7FA] rounded hover:bg-[#12151C]"
+                className="p-1 text-[#929BAA] hover:text-[#F5F7FA] rounded hover:bg-[#12151C] cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -701,14 +948,15 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                 <div className="flex items-center justify-between text-[10px]">
                   <span className="text-[#929BAA]">CIPHERTEXT (AES-256-GCM Base64):</span>
                   <button
+                    type="button"
                     onClick={() => {
                       const cipher = message.encryptedPayload?.ciphertext || btoa(message.content);
                       navigator.clipboard.writeText(cipher);
                       setCopiedCipher(true);
-                      addToast('Ciphertext copied to clipboard', 'info');
+                      addToast('Ciphertext copied', 'info');
                       setTimeout(() => setCopiedCipher(false), 2000);
                     }}
-                    className="text-[#4F8CFF] hover:underline flex items-center gap-1 font-sans"
+                    className="text-[#4F8CFF] hover:underline flex items-center gap-1 font-sans cursor-pointer"
                   >
                     {copiedCipher ? <Check className="w-3 h-3 text-[#32C48D]" /> : <Copy className="w-3 h-3" />}
                     <span>{copiedCipher ? 'Copied' : 'Copy'}</span>
@@ -729,8 +977,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
 
             <div className="pt-2 border-t border-[#252B36] flex justify-end">
               <button
+                type="button"
                 onClick={() => setShowCipherModal(false)}
-                className="px-4 py-1.5 bg-[#12151C] hover:bg-[#252B36] text-[#F5F7FA] rounded-lg text-xs font-medium transition-colors border border-[#252B36]"
+                className="px-4 py-1.5 bg-[#12151C] hover:bg-[#252B36] text-[#F5F7FA] rounded-lg text-xs font-medium transition-colors border border-[#252B36] cursor-pointer"
               >
                 Close
               </button>

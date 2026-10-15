@@ -22,6 +22,9 @@ import {
   Upload,
   Image as ImageIcon,
   Trash2,
+  Moon,
+  Sun,
+  Laptop,
 } from 'lucide-react';
 import {
   encryptMessage,
@@ -55,6 +58,8 @@ export const UserProfileModal: React.FC = () => {
     setSelectedLanguage,
     autoTranslateEnabled,
     setAutoTranslateEnabled,
+    theme,
+    setTheme,
     addToast,
     t,
   } = useChat();
@@ -128,6 +133,7 @@ export const UserProfileModal: React.FC = () => {
     const next = !soundEnabled;
     soundFX.setEnabled(next);
     setSoundEnabled(next);
+    if (next) soundFX.play('chime');
     addToast(next ? 'Sound notifications enabled' : 'Sound notifications muted', 'info');
   };
 
@@ -273,17 +279,6 @@ export const UserProfileModal: React.FC = () => {
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>Choose Custom Photo</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const letterAv = generateLetterAvatar(name || currentUser.name);
-                        setAvatar(letterAv);
-                        addToast('Switched to default letter avatar', 'info');
-                      }}
-                      className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] text-[#929BAA] hover:text-[#F5F7FA] border border-[#252B36] rounded-lg text-xs font-medium transition-colors cursor-pointer"
-                    >
-                      Default (First Letter)
                     </button>
                   </div>
                 </div>
@@ -558,15 +553,73 @@ export const UserProfileModal: React.FC = () => {
           {/* TAB 3: PREFERENCES & AUDIO */}
           {activeTab === 'preferences' && (
             <div className="space-y-4 animate-fade-in">
+              {/* Interface Theme Selection (Dark, Light, System) */}
+              <div className="p-3.5 bg-[#12151C] border border-[#252B36] rounded-xl space-y-2.5">
+                <div className="flex items-center space-x-2">
+                  <Sun className="w-4 h-4 text-[#4F8CFF]" />
+                  <span className="text-xs font-semibold text-[#F5F7FA]">Interface Theme</span>
+                </div>
+                <p className="text-[11px] text-[#929BAA]">
+                  Select your preferred workspace visual theme.
+                </p>
+                <div className="grid grid-cols-3 gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTheme('dark');
+                      addToast('Dark theme activated', 'info');
+                    }}
+                    className={`p-3 rounded-xl border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1.5 cursor-pointer ${
+                      theme === 'dark'
+                        ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-2 ring-[#4F8CFF]/30'
+                        : 'bg-[#181C25] text-[#929BAA] border-[#252B36] hover:bg-[#252B36] hover:text-[#F5F7FA]'
+                    }`}
+                  >
+                    <Moon className="w-4 h-4" />
+                    <span>Dark</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTheme('light');
+                      addToast('Light theme activated', 'info');
+                    }}
+                    className={`p-3 rounded-xl border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1.5 cursor-pointer ${
+                      theme === 'light'
+                        ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-2 ring-[#4F8CFF]/30'
+                        : 'bg-[#181C25] text-[#929BAA] border-[#252B36] hover:bg-[#252B36] hover:text-[#F5F7FA]'
+                    }`}
+                  >
+                    <Sun className="w-4 h-4" />
+                    <span>Light</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTheme('system');
+                      addToast('System theme sync activated', 'info');
+                    }}
+                    className={`p-3 rounded-xl border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1.5 cursor-pointer ${
+                      theme === 'system'
+                        ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-2 ring-[#4F8CFF]/30'
+                        : 'bg-[#181C25] text-[#929BAA] border-[#252B36] hover:bg-[#252B36] hover:text-[#F5F7FA]'
+                    }`}
+                  >
+                    <Laptop className="w-4 h-4" />
+                    <span>System</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Sound Notifications Toggle */}
-              <div className="p-3.5 bg-[#12151C] border border-[#252B36] rounded-xl flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] text-[#4F8CFF]">
+              <div className="p-3.5 bg-[#12151C] border border-[#252B36] rounded-xl flex items-center justify-between gap-3">
+                <div className="flex items-center space-x-3 min-w-0 flex-1">
+                  <div className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] text-[#4F8CFF] flex-shrink-0">
                     {soundEnabled ? <Volume2 className="w-4 h-4 text-[#32C48D]" /> : <VolumeX className="w-4 h-4 text-[#F05D6C]" />}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="text-xs font-semibold text-[#F5F7FA]">Sound Chimes & Audio FX</div>
-                    <div className="text-[11px] text-[#929BAA]">
+                    <div className="text-[11px] text-[#929BAA] leading-normal">
                       Subtle procedural workplace tones for sent messages and incoming notifications.
                     </div>
                   </div>
@@ -574,13 +627,17 @@ export const UserProfileModal: React.FC = () => {
 
                 <button
                   type="button"
+                  role="switch"
+                  aria-checked={soundEnabled}
                   onClick={toggleSound}
-                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#4F8CFF] ${
                     soundEnabled ? 'bg-[#32C48D]' : 'bg-[#252B36]'
                   }`}
+                  title={soundEnabled ? 'Disable sound FX' : 'Enable sound FX'}
                 >
-                  <div
-                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
+                  <span
+                    aria-hidden="true"
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
                       soundEnabled ? 'translate-x-5' : 'translate-x-0'
                     }`}
                   />

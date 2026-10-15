@@ -18,6 +18,12 @@ import {
   Shield,
   Clock,
   Sparkles,
+  Upload,
+  Trash2,
+  ShieldCheck,
+  UserMinus,
+  MessageSquare,
+  MoreVertical,
 } from 'lucide-react';
 
 export const RightInfoPanel: React.FC = () => {
@@ -33,11 +39,18 @@ export const RightInfoPanel: React.FC = () => {
     currentUser,
     messages,
     togglePinMessage,
+    setIsInviteChannelMembersOpen,
+    updateChannelDetails,
+    deleteChannel,
+    createOrOpenDM,
+    setActiveView,
     addToast,
     t,
   } = useChat();
 
   const [memberSearch, setMemberSearch] = useState('');
+  const [confirmDeleteChannel, setConfirmDeleteChannel] = useState(false);
+  const [activeMemberActionId, setActiveMemberActionId] = useState<string | null>(null);
 
   if (!isRightPanelOpen) return null;
 
@@ -80,12 +93,74 @@ export const RightInfoPanel: React.FC = () => {
     .flatMap((m) => (m.attachments ? m.attachments : []))
     .filter(Boolean);
 
-  const mockActivities = [
-    { text: 'Elena Rostova updated channel topic', time: '2 hours ago' },
-    { text: 'Marcus Chen shared realtime-architecture-v2.png', time: '4 hours ago' },
-    { text: 'Alex Rivera pinned a benchmark report', time: 'Yesterday' },
-    { text: 'David Kim joined the channel', time: '3 days ago' },
-  ];
+  // Dynamic real-time activities based on genuine conversation events
+  const realActivities = conversationMessages.slice(-5).reverse().map((m) => {
+    const author = users.find((u) => u.id === m.senderId)?.name || (m.senderId === currentUser.id ? currentUser.name : 'A member');
+    const time = new Date(m.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    let action = 'sent a message';
+    if (m.attachments && m.attachments.length > 0) {
+      action = `shared ${m.attachments[0].name}`;
+    } else if (m.isPinned) {
+      action = 'pinned a message';
+    }
+    return {
+      text: `${author} ${action}`,
+      time,
+    };
+  });
+
+  const handleChannelAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!activeChannel) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      addToast('Image size should be less than 5MB', 'error');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      if (dataUrl) {
+        updateChannelDetails(activeChannel.id, { avatar: dataUrl });
+        addToast('Channel profile picture updated', 'success');
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleToggleAdmin = (targetUserId: string) => {
+    if (!activeChannel) return;
+    const currentAdmins = activeChannel.adminIds || [];
+    const isAdmin = currentAdmins.includes(targetUserId);
+    const updatedAdmins = isAdmin
+      ? currentAdmins.filter((id) => id !== targetUserId)
+      : [...currentAdmins, targetUserId];
+    updateChannelDetails(activeChannel.id, { adminIds: updatedAdmins });
+    addToast(isAdmin ? 'Removed admin permissions' : 'Promoted member to channel admin', 'info');
+    setActiveMemberActionId(null);
+  };
+
+  const handleRemoveMember = (targetUserId: string) => {
+    if (!activeChannel) return;
+    if (activeChannel.createdBy === targetUserId) {
+      addToast('Cannot remove the channel creator', 'warning');
+      return;
+    }
+    const updatedMemberIds = activeChannel.memberIds.filter((id) => id !== targetUserId);
+    const updatedAdminIds = (activeChannel.adminIds || []).filter((id) => id !== targetUserId);
+    updateChannelDetails(activeChannel.id, {
+      memberIds: updatedMemberIds,
+      adminIds: updatedAdminIds,
+    });
+    addToast('Member removed from channel', 'info');
+    setActiveMemberActionId(null);
+  };
+
+  const handleDirectMessage = (targetUserId: string) => {
+    const dmId = createOrOpenDM([targetUserId]);
+    setActiveView({ type: 'dm', id: dmId });
+    addToast('Opened direct message conversation', 'info');
+  };
 
   return (
     <aside 
@@ -168,6 +243,50 @@ export const RightInfoPanel: React.FC = () => {
           <div className="space-y-4 text-xs">
             {activeChannel ? (
               <>
+                {/* Channel Profile Picture / Avatar */}
+                <div className="p-3 bg-[#181C25] rounded-xl border border-[#252B36] space-y-2.5">
+                  <div className="text-[11px] font-semibold text-[#929BAA] uppercase tracking-wider">
+                    Channel Profile Picture
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 rounded-xl border border-[#252B36] flex items-center justify-center overflow-hidden bg-[#12151C] flex-shrink-0">
+                      {activeChannel.avatar ? (
+                        <img
+                          src={activeChannel.avatar}
+                          alt={activeChannel.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <Hash className="w-6 h-6 text-[#4F8CFF]" />
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center space-x-2">
+                        <label className="px-2.5 py-1 bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 border border-[#4F8CFF]/30 text-[#4F8CFF] text-xs font-medium rounded-lg cursor-pointer transition-colors flex items-center gap-1.5">
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Change Picture</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleChannelAvatarChange}
+                          />
+                        </label>
+                        {activeChannel.avatar && (
+                          <button
+                            type="button"
+                            onClick={() => updateChannelDetails(activeChannel.id, { avatar: undefined })}
+                            className="px-2 py-1 text-xs text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-[#929BAA]">Square image, PNG or JPG, max 5MB.</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="p-3 bg-[#181C25] rounded-xl border border-[#252B36] space-y-2">
                   <div className="text-[11px] font-semibold text-[#929BAA] uppercase tracking-wider">
                     Topic
@@ -207,6 +326,43 @@ export const RightInfoPanel: React.FC = () => {
                     </span>
                   </div>
                 </div>
+
+                {/* Delete Channel Option */}
+                <div className="p-3 bg-[#F05D6C]/10 border border-[#F05D6C]/30 rounded-xl space-y-2.5">
+                  <div className="text-[11px] font-semibold text-[#F05D6C] uppercase tracking-wider flex items-center gap-1.5">
+                    <Trash2 className="w-3.5 h-3.5" /> Delete Channel
+                  </div>
+                  <p className="text-[#929BAA] text-xs">
+                    Permanently delete #{activeChannel.name} and all associated messages. This cannot be undone.
+                  </p>
+                  {confirmDeleteChannel ? (
+                    <div className="flex items-center space-x-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => deleteChannel(activeChannel.id)}
+                        className="px-3 py-1.5 bg-[#F05D6C] hover:bg-[#D94554] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-sm"
+                      >
+                        Confirm Delete
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteChannel(false)}
+                        className="px-2.5 py-1.5 bg-[#181C25] hover:bg-[#252B36] text-[#929BAA] hover:text-[#F5F7FA] text-xs rounded-lg transition-colors cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteChannel(true)}
+                      className="px-3 py-1.5 bg-[#F05D6C]/15 hover:bg-[#F05D6C]/25 border border-[#F05D6C]/40 text-[#F05D6C] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete #{activeChannel.name}</span>
+                    </button>
+                  )}
+                </div>
               </>
             ) : (
               <div className="p-3 bg-[#181C25] rounded-xl border border-[#252B36] space-y-2">
@@ -227,15 +383,21 @@ export const RightInfoPanel: React.FC = () => {
                 <Activity className="w-3.5 h-3.5 text-[#32C48D]" /> Recent Activity
               </div>
               <div className="space-y-2">
-                {mockActivities.map((act, i) => (
-                  <div
-                    key={i}
-                    className="p-2.5 bg-[#12151C] border border-[#252B36] rounded-lg text-xs"
-                  >
-                    <div className="text-[#F5F7FA] font-medium">{act.text}</div>
-                    <div className="text-[10px] text-[#929BAA] mt-0.5">{act.time}</div>
+                {realActivities.length > 0 ? (
+                  realActivities.map((act, i) => (
+                    <div
+                      key={i}
+                      className="p-2.5 bg-[#12151C] border border-[#252B36] rounded-lg text-xs"
+                    >
+                      <div className="text-[#F5F7FA] font-medium">{act.text}</div>
+                      <div className="text-[10px] text-[#929BAA] mt-0.5">{act.time}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-3 bg-[#12151C] border border-[#252B36] rounded-lg text-center text-[#929BAA] text-xs">
+                    No recent activity recorded in this conversation yet.
                   </div>
-                ))}
+                )}
               </div>
             </div>
           </div>
@@ -257,55 +419,129 @@ export const RightInfoPanel: React.FC = () => {
             </div>
 
             <button
-              onClick={() => addToast('Invite link copied to clipboard!', 'success')}
-              className="w-full py-2 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] rounded-lg text-xs font-medium text-[#4F8CFF] flex items-center justify-center space-x-1.5 transition-colors"
+              onClick={() => setIsInviteChannelMembersOpen(true)}
+              className="w-full py-2 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] rounded-lg text-xs font-medium text-[#4F8CFF] flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span>Invite New Teammates</span>
             </button>
 
             <div className="divide-y divide-[#252B36]/60 space-y-1">
-              {filteredMembers.map((member) => (
-                <div
-                  key={member.id}
-                  className="pt-2 pb-2 flex items-center justify-between hover:bg-[#181C25]/50 px-2 rounded-lg transition-colors"
-                >
-                  <div className="flex items-center space-x-2.5 truncate">
-                    <div className="relative flex-shrink-0">
-                      <img
-                        src={member.avatar}
-                        alt={member.name}
-                        className="w-7 h-7 rounded-lg object-cover"
-                      />
-                      <span
-                        className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#0F1117] ${
-                          member.isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
-                        }`}
-                      />
-                    </div>
-                    <div className="truncate">
-                      <div className="text-xs font-semibold text-[#F5F7FA] truncate flex items-center gap-1.5">
-                        {member.name}
-                        {member.id === currentUser.id && (
-                          <span className="text-[10px] text-[#929BAA] font-normal">(you)</span>
+              {filteredMembers.map((member) => {
+                const isChannelAdmin = Boolean(
+                  activeChannel?.adminIds?.includes(member.id) ||
+                  member.role === 'owner' ||
+                  member.role === 'admin' ||
+                  activeChannel?.createdBy === member.id
+                );
+                const isCreator = activeChannel?.createdBy === member.id;
+                const isSelf = member.id === currentUser.id;
+
+                return (
+                  <div
+                    key={member.id}
+                    className="pt-2 pb-2 px-2 rounded-lg hover:bg-[#181C25]/50 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2.5 truncate">
+                        <div className="relative flex-shrink-0">
+                          <img
+                            src={member.avatar}
+                            alt={member.name}
+                            className="w-7 h-7 rounded-lg object-cover"
+                          />
+                          <span
+                            className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-[#0F1117] ${
+                              member.isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
+                            }`}
+                          />
+                        </div>
+                        <div className="truncate">
+                          <div className="text-xs font-semibold text-[#F5F7FA] truncate flex items-center gap-1.5">
+                            {member.name}
+                            {isSelf && (
+                              <span className="text-[10px] text-[#929BAA] font-normal">(you)</span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-[#929BAA] truncate">{member.title}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-1.5 flex-shrink-0">
+                        {isCreator && (
+                          <span className="text-[10px] bg-[#4F8CFF]/20 text-[#4F8CFF] px-1.5 py-0.5 rounded font-medium">
+                            Creator
+                          </span>
+                        )}
+                        {!isCreator && isChannelAdmin && (
+                          <span className="text-[10px] bg-[#32C48D]/20 text-[#32C48D] px-1.5 py-0.5 rounded font-medium">
+                            Admin
+                          </span>
+                        )}
+
+                        {/* Member Action Controls */}
+                        {activeChannel && !isSelf && (
+                          <div className="relative flex items-center space-x-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleDirectMessage(member.id)}
+                              className="p-1 text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
+                              title={`Direct message ${member.name}`}
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActiveMemberActionId(
+                                  activeMemberActionId === member.id ? null : member.id
+                                )
+                              }
+                              className="p-1 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
+                              title="Member options"
+                            >
+                              <MoreVertical className="w-3.5 h-3.5" />
+                            </button>
+
+                            {activeMemberActionId === member.id && (
+                              <div className="absolute right-0 top-7 w-44 bg-[#181C25] border border-[#252B36] rounded-xl shadow-modal z-50 p-1 space-y-0.5 animate-slide-down">
+                                {!isCreator && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleAdmin(member.id)}
+                                    className="w-full text-left px-2.5 py-1.5 text-xs text-[#F5F7FA] hover:bg-[#252B36] rounded-lg flex items-center space-x-2 transition-colors cursor-pointer"
+                                  >
+                                    <ShieldCheck className="w-3.5 h-3.5 text-[#32C48D]" />
+                                    <span>{isChannelAdmin ? 'Demote to Member' : 'Make Channel Admin'}</span>
+                                  </button>
+                                )}
+                                {!isCreator && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveMember(member.id)}
+                                    className="w-full text-left px-2.5 py-1.5 text-xs text-[#F05D6C] hover:bg-[#F05D6C]/10 rounded-lg flex items-center space-x-2 transition-colors cursor-pointer"
+                                  >
+                                    <UserMinus className="w-3.5 h-3.5 text-[#F05D6C]" />
+                                    <span>Remove from Channel</span>
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleDirectMessage(member.id)}
+                                  className="w-full text-left px-2.5 py-1.5 text-xs text-[#F5F7FA] hover:bg-[#252B36] rounded-lg flex items-center space-x-2 transition-colors cursor-pointer"
+                                >
+                                  <MessageSquare className="w-3.5 h-3.5 text-[#4F8CFF]" />
+                                  <span>Send Direct Message</span>
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
-                      <div className="text-[11px] text-[#929BAA] truncate">{member.title}</div>
                     </div>
                   </div>
-
-                  {member.role === 'owner' && (
-                    <span className="text-[10px] bg-[#4F8CFF]/20 text-[#4F8CFF] px-1.5 py-0.5 rounded font-medium flex-shrink-0">
-                      Lead
-                    </span>
-                  )}
-                  {member.role === 'admin' && (
-                    <span className="text-[10px] bg-[#32C48D]/20 text-[#32C48D] px-1.5 py-0.5 rounded font-medium flex-shrink-0">
-                      Admin
-                    </span>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

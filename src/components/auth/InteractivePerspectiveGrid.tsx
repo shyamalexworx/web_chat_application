@@ -39,6 +39,31 @@ export const InteractivePerspectiveGrid: React.FC<InteractivePerspectiveGridProp
     targetMouseRef.current = { x: -1000, y: -1000 };
   }, []);
 
+  // Handle touch events for responsive mobile interaction
+  const handleTouchMove = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || !e.touches[0]) return;
+    targetMouseRef.current = {
+      x: e.touches[0].clientX - rect.left,
+      y: e.touches[0].clientY - rect.top,
+    };
+    isHoveringRef.current = true;
+  }, []);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect || !e.touches[0]) return;
+    targetMouseRef.current = {
+      x: e.touches[0].clientX - rect.left,
+      y: e.touches[0].clientY - rect.top,
+    };
+    isHoveringRef.current = true;
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    isHoveringRef.current = false;
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -73,19 +98,19 @@ export const InteractivePerspectiveGrid: React.FC<InteractivePerspectiveGridProp
 
     // Main animation loop
     const render = () => {
-      timeRef.current += 0.008;
+      timeRef.current += 0.01;
       const t = timeRef.current;
 
-      // Extremely smooth mouse tracking with damping
+      // Smooth mouse tracking with responsive damping
       if (isHoveringRef.current) {
-        mouseRef.current.x += (targetMouseRef.current.x - mouseRef.current.x) * 0.05;
-        mouseRef.current.y += (targetMouseRef.current.y - mouseRef.current.y) * 0.05;
+        mouseRef.current.x += (targetMouseRef.current.x - mouseRef.current.x) * 0.08;
+        mouseRef.current.y += (targetMouseRef.current.y - mouseRef.current.y) * 0.08;
       } else {
-        // Very gentle, imperceptible idle breathing
-        const idleX = width * 0.5 + Math.sin(t * 0.5) * (width * 0.08);
-        const idleY = height * 0.5 + Math.cos(t * 0.4) * (height * 0.06);
-        mouseRef.current.x += (idleX - mouseRef.current.x) * 0.02;
-        mouseRef.current.y += (idleY - mouseRef.current.y) * 0.02;
+        // Dynamic ambient idle movement
+        const idleX = width * 0.5 + Math.sin(t * 0.6) * (width * 0.14);
+        const idleY = height * 0.5 + Math.cos(t * 0.5) * (height * 0.1);
+        mouseRef.current.x += (idleX - mouseRef.current.x) * 0.03;
+        mouseRef.current.y += (idleY - mouseRef.current.y) * 0.03;
       }
 
       const mx = mouseRef.current.x;
@@ -93,40 +118,55 @@ export const InteractivePerspectiveGrid: React.FC<InteractivePerspectiveGridProp
 
       ctx.clearRect(0, 0, width, height);
 
-      // Micro-parallax tilt: extremely subtle and smooth
-      const tiltX = (mx - width * 0.5) * 0.015;
-      const tiltY = (my - height * 0.5) * 0.012;
+      // Parallax horizon tilt based on cursor
+      const tiltX = (mx - width * 0.5) * 0.04;
+      const tiltY = (my - height * 0.5) * 0.03;
       const cx = width * 0.5 + tiltX;
       const cy = height * 0.5 + tiltY;
 
-      // 1. Dark base background with soft ambient vignette
-      const bgRadial = ctx.createRadialGradient(cx, cy, 40, cx, cy, Math.max(width, height) * 0.75);
-      bgRadial.addColorStop(0, 'rgba(15, 18, 26, 0.45)');
-      bgRadial.addColorStop(0.6, 'rgba(11, 13, 18, 0.9)');
-      bgRadial.addColorStop(1, '#07090D');
+      const isLight = document.documentElement.classList.contains('light') || 
+                      document.documentElement.getAttribute('data-theme') === 'light';
+
+      // 1. Base background with soft depth
+      const bgRadial = ctx.createRadialGradient(cx, cy, 50, cx, cy, Math.max(width, height) * 0.85);
+      if (isLight) {
+        bgRadial.addColorStop(0, '#FFFFFF');
+        bgRadial.addColorStop(0.55, '#F8FAFF');
+        bgRadial.addColorStop(1, '#EDF2FE');
+      } else {
+        bgRadial.addColorStop(0, '#0F131C');
+        bgRadial.addColorStop(0.55, '#0B0D13');
+        bgRadial.addColorStop(1, '#06070A');
+      }
       ctx.fillStyle = bgRadial;
       ctx.fillRect(0, 0, width, height);
 
-      // 2. Very subtle ambient flashlight glow following cursor (no harsh laser)
+      // 2. Interactive Spotlight following cursor / touch
       if (mx > 0 && my > 0) {
-        const cursorSpotlight = ctx.createRadialGradient(mx, my, 0, mx, my, 280);
-        cursorSpotlight.addColorStop(0, 'rgba(79, 140, 255, 0.05)');
-        cursorSpotlight.addColorStop(0.5, 'rgba(79, 140, 255, 0.015)');
-        cursorSpotlight.addColorStop(1, 'transparent');
+        const cursorSpotlight = ctx.createRadialGradient(mx, my, 0, mx, my, 340);
+        if (isLight) {
+          cursorSpotlight.addColorStop(0, 'rgba(37, 99, 235, 0.14)');
+          cursorSpotlight.addColorStop(0.5, 'rgba(37, 99, 235, 0.05)');
+          cursorSpotlight.addColorStop(1, 'transparent');
+        } else {
+          cursorSpotlight.addColorStop(0, 'rgba(79, 140, 255, 0.18)');
+          cursorSpotlight.addColorStop(0.5, 'rgba(79, 140, 255, 0.06)');
+          cursorSpotlight.addColorStop(1, 'transparent');
+        }
         ctx.fillStyle = cursorSpotlight;
         ctx.fillRect(0, 0, width, height);
       }
 
-      // 3. Perspective Grid Configuration (dual-plane ceiling and floor like Image 1)
-      const numRays = 34; // Radial lines radiating from horizon
-      const numTransverse = 20; // Horizontal perspective lines per half
+      // 3. Perspective Grid Configuration
+      const numRays = 36;
+      const numTransverse = 22;
       const depthCurve = 2.0;
 
       // Calculate rays
       const rayPoints: { endTopX: number; endBottomX: number }[] = [];
       for (let i = 0; i <= numRays; i++) {
-        const u = (i / numRays) * 2 - 1; // -1 to 1
-        const spread = u * width * 1.5;
+        const u = (i / numRays) * 2 - 1;
+        const spread = u * width * 1.6;
         rayPoints.push({
           endTopX: cx + spread,
           endBottomX: cx + spread,
@@ -137,51 +177,50 @@ export const InteractivePerspectiveGrid: React.FC<InteractivePerspectiveGridProp
       const transverseLines: { y: number; side: 'top' | 'bottom'; factor: number }[] = [];
       for (let j = 1; j <= numTransverse; j++) {
         const p = Math.pow(j / numTransverse, depthCurve);
-        transverseLines.push({ y: cy + p * (height - cy + 60), side: 'bottom', factor: p });
-        transverseLines.push({ y: cy - p * (cy + 60), side: 'top', factor: p });
+        transverseLines.push({ y: cy + p * (height - cy + 80), side: 'bottom', factor: p });
+        transverseLines.push({ y: cy - p * (cy + 80), side: 'top', factor: p });
       }
 
-      // 4. Draw Perspective Rays (Subtle, uniform slate lines, zero laser lights)
+      // 4. Draw Perspective Rays (Crisp, website brand blue lines)
       ctx.lineWidth = 1;
       rayPoints.forEach((ray) => {
-        // Calculate very subtle proximity glow
-        const midY = my >= cy ? cy + (height - cy) * 0.4 : cy - cy * 0.4;
-        const midX = cx + (ray.endBottomX - cx) * 0.4;
+        const midY = my >= cy ? cy + (height - cy) * 0.5 : cy - cy * 0.5;
+        const midX = cx + (ray.endBottomX - cx) * 0.5;
         const distToCursor = Math.hypot(mx - midX, my - midY);
-        const cursorInfluence = Math.max(0, 1 - distToCursor / 260);
+        const cursorInfluence = Math.max(0, 1 - distToCursor / 280);
 
-        // Alpha stays between 0.06 and 0.12 (soft and subtle)
-        const alpha = 0.06 + cursorInfluence * 0.06;
+        const alpha = (0.22 + cursorInfluence * 0.26) * (isLight ? 0.85 : 1);
 
         ctx.beginPath();
-        // Top ray
         ctx.moveTo(cx, cy);
-        ctx.lineTo(ray.endTopX, -60);
-        // Bottom ray
+        ctx.lineTo(ray.endTopX, -80);
         ctx.moveTo(cx, cy);
-        ctx.lineTo(ray.endBottomX, height + 60);
+        ctx.lineTo(ray.endBottomX, height + 80);
 
-        ctx.strokeStyle = `rgba(160, 175, 200, ${alpha})`;
+        ctx.strokeStyle = isLight
+          ? `rgba(37, 99, 235, ${alpha * 1.35})`
+          : `rgba(79, 140, 255, ${alpha})`;
         ctx.stroke();
       });
 
-      // 5. Draw Transverse Horizontal Depth Lines (Zero bright borders, gentle perspective fade)
+      // 5. Draw Transverse Horizontal Lines
       transverseLines.forEach((tLine) => {
         const distToCursor = Math.abs(my - tLine.y);
-        const cursorInfluence = Math.max(0, 1 - distToCursor / 180);
-        const horizonFade = Math.min(1, Math.abs(tLine.y - cy) / 45);
+        const cursorInfluence = Math.max(0, 1 - distToCursor / 200);
+        const horizonFade = Math.min(1, Math.abs(tLine.y - cy) / 35);
 
-        // Alpha stays between 0.05 and 0.11
-        const alpha = (0.05 + cursorInfluence * 0.06) * horizonFade;
+        const alpha = (0.20 + cursorInfluence * 0.22) * Math.max(0.45, horizonFade) * (isLight ? 0.85 : 1);
 
         ctx.beginPath();
         ctx.moveTo(0, tLine.y);
         ctx.lineTo(width, tLine.y);
-        ctx.strokeStyle = `rgba(160, 175, 200, ${alpha})`;
+        ctx.strokeStyle = isLight
+          ? `rgba(37, 99, 235, ${alpha * 1.30})`
+          : `rgba(79, 140, 255, ${alpha})`;
         ctx.stroke();
       });
 
-      // 6. Draw Intersection Dots (Tiny 1px delicate points, no neon halos)
+      // 6. Draw Grid Intersection Points (Visible nodes)
       const dotStep = 2;
       for (let i = 0; i < rayPoints.length; i += dotStep) {
         const ray = rayPoints[i];
@@ -189,7 +228,7 @@ export const InteractivePerspectiveGrid: React.FC<InteractivePerspectiveGridProp
           const tLine = transverseLines[j];
           const isBottom = tLine.side === 'bottom';
           const targetX = isBottom ? ray.endBottomX : ray.endTopX;
-          const targetY = isBottom ? height + 60 : -60;
+          const targetY = isBottom ? height + 80 : -80;
 
           const factor = (tLine.y - cy) / (targetY - cy);
           const x = cx + (targetX - cx) * factor;
@@ -197,35 +236,42 @@ export const InteractivePerspectiveGrid: React.FC<InteractivePerspectiveGridProp
           if (x < -10 || x > width + 10) continue;
 
           const dist = Math.hypot(mx - x, my - tLine.y);
-          const proximity = Math.max(0, 1 - dist / 160);
+          const proximity = Math.max(0, 1 - dist / 180);
 
           ctx.beginPath();
-          ctx.arc(x, tLine.y, 0.9, 0, Math.PI * 2);
-          // Very soft dot opacity: 0.12 to 0.24 max near cursor
-          ctx.fillStyle = `rgba(160, 175, 200, ${0.12 + proximity * 0.12})`;
+          ctx.arc(x, tLine.y, 1.4, 0, Math.PI * 2);
+          ctx.fillStyle = isLight
+            ? `rgba(37, 99, 235, ${0.35 + proximity * 0.45})`
+            : `rgba(110, 170, 255, ${0.30 + proximity * 0.50})`;
           ctx.fill();
         }
       }
 
-      // 7. Subtle Horizon Line
+      // 7. Bright Horizon Line
       ctx.beginPath();
       ctx.moveTo(0, cy);
       ctx.lineTo(width, cy);
-      ctx.strokeStyle = 'rgba(79, 140, 255, 0.08)';
+      ctx.strokeStyle = isLight ? 'rgba(37, 99, 235, 0.50)' : 'rgba(79, 140, 255, 0.40)';
+      ctx.lineWidth = 1.2;
       ctx.stroke();
 
-      // 8. Soft Center Vignette Mask to guarantee maximum clarity for login card
+      // 8. Soft Edge Vignette (Zero black shading in light mode)
       const vignette = ctx.createRadialGradient(
         width * 0.5,
         height * 0.5,
-        Math.min(width, height) * 0.2,
+        Math.min(width, height) * 0.35,
         width * 0.5,
         height * 0.5,
-        Math.max(width, height) * 0.65
+        Math.max(width, height) * 0.85
       );
-      vignette.addColorStop(0, 'rgba(11, 13, 18, 0.4)');
-      vignette.addColorStop(0.7, 'rgba(11, 13, 18, 0.85)');
-      vignette.addColorStop(1, 'rgba(7, 9, 13, 0.98)');
+      vignette.addColorStop(0, 'transparent');
+      if (isLight) {
+        vignette.addColorStop(0.70, 'transparent');
+        vignette.addColorStop(1, 'rgba(219, 234, 254, 0.25)');
+      } else {
+        vignette.addColorStop(0.65, 'rgba(6, 7, 10, 0.25)');
+        vignette.addColorStop(1, 'rgba(6, 7, 10, 0.65)');
+      }
       ctx.fillStyle = vignette;
       ctx.fillRect(0, 0, width, height);
 
@@ -246,22 +292,26 @@ export const InteractivePerspectiveGrid: React.FC<InteractivePerspectiveGridProp
       onMouseMove={handleMouseMove}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`relative w-full h-full min-h-screen overflow-hidden bg-[#07090D] ${className}`}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      className={`relative w-full h-full min-h-screen overflow-hidden bg-slate-50 dark:bg-[#07090D] ${className}`}
     >
-      {/* Subtle Perspective Canvas */}
+      {/* Subtle Perspective Canvas (Fixed in viewport background) */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full pointer-events-none z-0"
+        className="fixed inset-0 w-full h-full pointer-events-none z-0"
       />
 
-      {/* Decorative top & bottom ambient light sweeps */}
-      <div className="absolute top-0 inset-x-0 h-40 bg-gradient-to-b from-[#0B0D12] via-transparent to-transparent pointer-events-none z-1" />
-      <div className="absolute bottom-0 inset-x-0 h-40 bg-gradient-to-t from-[#07090D] via-transparent to-transparent pointer-events-none z-1" />
+      {/* Decorative top & bottom ambient light sweeps (ONLY in dark mode, completely absent in light mode) */}
+      <div className="hidden dark:block fixed top-0 inset-x-0 h-28 bg-gradient-to-b from-[#0B0D12] to-transparent pointer-events-none z-1" />
+      <div className="hidden dark:block fixed bottom-0 inset-x-0 h-28 bg-gradient-to-t from-[#07090D] to-transparent pointer-events-none z-1" />
 
-      {/* Foreground Content (Sign In / Sign Up Card) */}
-      <div className="relative z-10 w-full h-full flex flex-col items-center justify-center">
+      {/* Foreground Content (Sign In / Sign Up Card with clean centering) */}
+      <div className="relative z-10 w-full h-full flex flex-col items-center justify-center p-3 sm:p-4">
         {children}
       </div>
     </div>
   );
 };
+

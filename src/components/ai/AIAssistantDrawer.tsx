@@ -98,7 +98,7 @@ const getBasicConversationResponse = (promptText: string, channelName?: string):
   // Time / Date
   if (/time|date|today/i.test(text)) {
     const now = new Date();
-    return `Today is **${now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}**, and the current time is **${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}**. 🕒`;
+    return `Today is **${now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}**, and the current time is **${now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}**. 🕒`;
   }
 
   // General questions or statements
@@ -188,12 +188,12 @@ export const AIAssistantDrawer: React.FC = () => {
   return (
     <aside 
       aria-label="AI Assistant"
-      className="max-md:fixed max-md:inset-0 max-md:top-12 max-md:w-full max-md:z-40 md:relative md:w-80 lg:w-96 bg-[#0F1117] border-l border-[#252B36] flex flex-col h-full flex-shrink-0 select-none z-30 animate-fade-in shadow-modal"
+      className="max-md:fixed max-md:top-12 max-md:bottom-0 max-md:inset-x-0 max-md:w-full max-md:h-[calc(100dvh-48px)] max-md:z-50 md:relative md:w-80 lg:w-96 bg-[#0F1117] border-l border-[#252B36] flex flex-col h-full flex-shrink-0 z-30 animate-fade-in shadow-modal"
     >
       {/* Header */}
-      <div className="h-14 border-b border-[#252B36] px-4 flex items-center justify-between bg-[#12151C]/80">
+      <div className="h-14 border-b border-[#252B36] px-4 flex items-center justify-between bg-[#12151C]/90 flex-shrink-0">
         <div className="flex items-center space-x-2.5">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#4F8CFF] to-[#A855F7] flex items-center justify-center text-white shadow-accent-glow">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#4F8CFF] to-[#A855F7] flex items-center justify-center text-white shadow-accent-glow flex-shrink-0">
             <Bot className="w-4 h-4" />
           </div>
           <div>
@@ -203,7 +203,7 @@ export const AIAssistantDrawer: React.FC = () => {
                 Online
               </span>
             </div>
-            <div className="text-[10px] text-[#929BAA]">
+            <div className="text-[11px] text-[#929BAA]">
               Friendly workspace assistant
             </div>
           </div>
@@ -212,14 +212,14 @@ export const AIAssistantDrawer: React.FC = () => {
         <div className="flex items-center space-x-1">
           <button
             onClick={handleResetChat}
-            className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors"
+            className="p-2 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
             title="Restart conversation"
           >
-            <RotateCcw className="w-3.5 h-3.5" />
+            <RotateCcw className="w-4 h-4" />
           </button>
           <button
             onClick={() => setIsAIAssistantOpen(false)}
-            className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors"
+            className="p-2 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
             title="Close AI Assistant"
           >
             <X className="w-4 h-4" />
@@ -227,42 +227,42 @@ export const AIAssistantDrawer: React.FC = () => {
         </div>
       </div>
 
-      {/* Suggested Quick Prompt Chips (Simple everyday prompts) */}
-      <div className="px-3 py-2 border-b border-[#252B36] bg-[#0B0D12]/40 flex items-center space-x-1.5 overflow-x-auto text-[11px]">
+      {/* Suggested Quick Prompt Chips */}
+      <div className="px-3 py-2 border-b border-[#252B36] bg-[#0B0D12]/70 flex items-center space-x-2 overflow-x-auto text-xs no-scrollbar flex-shrink-0">
         <button
           onClick={() => handleSendPrompt('Hello! How are you doing today?')}
-          className="px-2.5 py-1 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#929BAA] hover:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1"
+          className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer"
         >
           👋 Say hello
         </button>
         <button
           onClick={() => handleSendPrompt('What can you do?')}
-          className="px-2.5 py-1 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#929BAA] hover:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1"
+          className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer"
         >
           ❓ What can you do?
         </button>
         <button
           onClick={() => handleSendPrompt('Tell me a funny joke!')}
-          className="px-2.5 py-1 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#929BAA] hover:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1"
+          className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer"
         >
           😄 Tell a joke
         </button>
         <button
           onClick={() => handleSendPrompt('Help me draft a friendly message to my team')}
-          className="px-2.5 py-1 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#929BAA] hover:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1"
+          className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer"
         >
           ✍️ Draft message
         </button>
         <button
           onClick={() => handleSendPrompt('Summarize recent messages')}
-          className="px-2.5 py-1 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#929BAA] hover:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1"
+          className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer"
         >
           📋 Recap
         </button>
       </div>
 
       {/* Messages Feed */}
-      <div ref={containerRef} className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div ref={containerRef} className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-[#0B0D12]/30">
         {aiMessages.map((msg) => {
           const isUser = msg.role === 'user';
           return (
@@ -271,50 +271,50 @@ export const AIAssistantDrawer: React.FC = () => {
               className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
             >
               <div
-                className={`max-w-[90%] rounded-2xl p-3 text-xs leading-relaxed ${
+                className={`max-w-[92%] sm:max-w-[85%] rounded-2xl p-3.5 text-sm sm:text-xs leading-relaxed shadow-sm ${
                   isUser
-                    ? 'bg-[#4F8CFF] text-white rounded-br-none shadow-sm'
-                    : 'bg-[#181C25] border border-[#252B36] text-[#F5F7FA] rounded-bl-none shadow-subtle'
+                    ? 'bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] text-white rounded-br-xs'
+                    : 'bg-[#181C25] border border-[#252B36] text-[#F5F7FA] rounded-bl-xs'
                 }`}
               >
-                <div className="selectable-text whitespace-pre-wrap">{msg.content}</div>
+                <div className="select-text whitespace-pre-wrap font-normal text-white">{msg.content}</div>
 
                 {/* Assistant Action Strip */}
                 {!isUser && msg.id !== 'ai-welcome' && (
-                  <div className="mt-2.5 pt-2 border-t border-[#252B36]/60 flex items-center justify-between text-[11px]">
+                  <div className="mt-3 pt-2.5 border-t border-[#252B36] flex items-center justify-between text-xs">
                     <button
                       onClick={() => handleInsertIntoChat(msg.content)}
-                      className="text-[#4F8CFF] hover:underline flex items-center gap-1 font-medium"
+                      className="text-[#4F8CFF] hover:underline flex items-center gap-1 font-semibold cursor-pointer"
                     >
-                      <CornerDownLeft className="w-3 h-3" /> Post to Channel
+                      <CornerDownLeft className="w-3.5 h-3.5" /> Post to Channel
                     </button>
                     <button
                       onClick={() => handleCopy(msg.id, msg.content)}
-                      className="text-[#929BAA] hover:text-[#F5F7FA] p-1 rounded hover:bg-[#12151C] transition-colors"
+                      className="text-[#929BAA] hover:text-[#F5F7FA] p-1.5 rounded hover:bg-[#12151C] transition-colors cursor-pointer"
                       title="Copy"
                     >
                       {copiedId === msg.id ? (
-                        <Check className="w-3.5 h-3.5 text-[#32C48D]" />
+                        <Check className="w-4 h-4 text-[#32C48D]" />
                       ) : (
-                        <Copy className="w-3.5 h-3.5" />
+                        <Copy className="w-4 h-4" />
                       )}
                     </button>
                   </div>
                 )}
               </div>
-              <span className="text-[10px] text-[#636D7E] px-1 mt-1 font-mono">
-                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <span className="text-[10px] text-[#929BAA] px-1 mt-1 font-mono">
+                {new Date(msg.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
               </span>
             </div>
           );
         })}
 
         {isThinking && (
-          <div className="flex items-center space-x-2 p-3 bg-[#181C25] border border-[#252B36] rounded-2xl rounded-bl-none max-w-[70%]">
+          <div className="flex items-center space-x-2 p-3.5 bg-[#181C25] border border-[#252B36] rounded-2xl rounded-bl-xs max-w-[80%]">
             <span className="w-2 h-2 rounded-full bg-[#4F8CFF] animate-bounce [animation-delay:-0.3s]" />
             <span className="w-2 h-2 rounded-full bg-[#4F8CFF] animate-bounce [animation-delay:-0.15s]" />
             <span className="w-2 h-2 rounded-full bg-[#4F8CFF] animate-bounce" />
-            <span className="text-[11px] text-[#929BAA] font-mono ml-1">Analyzing workspace...</span>
+            <span className="text-xs text-[#929BAA] font-mono ml-1.5">Thinking...</span>
           </div>
         )}
 
@@ -322,31 +322,31 @@ export const AIAssistantDrawer: React.FC = () => {
       </div>
 
       {/* Input Composer */}
-      <div className="p-3 border-t border-[#252B36] bg-[#0B0D12]">
+      <div className="p-3 pb-5 sm:p-4 border-t border-[#252B36] bg-[#0F1117] flex-shrink-0 sticky bottom-0 z-10">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSendPrompt(input);
           }}
-          className="bg-[#12151C] border border-[#252B36] focus-within:border-[#4F8CFF] rounded-xl p-2 flex items-center space-x-2 transition-colors"
+          className="bg-[#181C25] border border-[#252B36] focus-within:border-[#4F8CFF] rounded-xl p-2.5 flex items-center space-x-2.5 transition-colors"
         >
           <input
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask AI anything..."
-            className="flex-1 bg-transparent text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none"
+            className="flex-1 bg-transparent text-sm sm:text-xs text-white placeholder-[#929BAA] outline-none"
           />
           <button
             type="submit"
             disabled={!input.trim()}
-            className={`p-1.5 rounded-lg text-xs transition-all ${
+            className={`p-2 rounded-lg text-xs transition-all cursor-pointer ${
               input.trim()
                 ? 'bg-[#4F8CFF] text-white hover:bg-[#3D7AE8] shadow-accent-glow'
-                : 'bg-[#181C25] text-[#929BAA]/40 cursor-not-allowed'
+                : 'bg-[#12151C] text-[#929BAA]/30 cursor-not-allowed'
             }`}
           >
-            <Send className="w-3.5 h-3.5" />
+            <Send className="w-4 h-4" />
           </button>
         </form>
       </div>

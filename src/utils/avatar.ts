@@ -47,11 +47,12 @@ export function generateLetterAvatar(name: string): string {
  */
 export function resolveUserAvatar(avatarUrl?: string | null, name?: string): string {
   if (avatarUrl && (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://') || avatarUrl.startsWith('data:image/'))) {
-    // Avoid old dicebear bot avatars if user wants clean fresh avatars
-    if (!avatarUrl.includes('dicebear.com/7.x/bottts')) {
+    // Avoid old dicebear bot avatars or demo unsplash photos
+    if (!avatarUrl.includes('dicebear.com') && !avatarUrl.includes('images.unsplash.com')) {
       return avatarUrl;
     }
   }
   return generateLetterAvatar(name || 'Member');
 }
+
 

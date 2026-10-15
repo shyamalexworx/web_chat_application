@@ -139,8 +139,8 @@ CREATE INDEX idx_profiles_email ON public.profiles(email);
 CREATE TABLE IF NOT EXISTS public.chat_invites (
   id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
   workspace_id TEXT,
-  sender_id TEXT REFERENCES public.profiles(id) ON DELETE CASCADE,
-  receiver_id TEXT REFERENCES public.profiles(id) ON DELETE CASCADE,
+  sender_id TEXT,
+  receiver_id TEXT,
   conversation_id TEXT,
   channel_id TEXT,
   invite_type TEXT DEFAULT 'dm',
@@ -207,6 +207,7 @@ ALTER TABLE public.channel_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.conversation_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.chat_invites ENABLE ROW LEVEL SECURITY;
 
 -- Seamless Read/Write Policies (Ensures zero 401/403 permission failures when saving messages & profiles)
 DROP POLICY IF EXISTS "profiles_open" ON public.profiles;
@@ -232,6 +233,9 @@ CREATE POLICY "conversation_participants_open" ON public.conversation_participan
 
 DROP POLICY IF EXISTS "messages_open" ON public.messages;
 CREATE POLICY "messages_open" ON public.messages FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "chat_invites_open" ON public.chat_invites;
+CREATE POLICY "chat_invites_open" ON public.chat_invites FOR ALL USING (true) WITH CHECK (true);
 
 -- Storage Policies for chat-media bucket
 DROP POLICY IF EXISTS "chat_media_select" ON storage.objects;
@@ -264,3 +268,8 @@ DO $$ BEGIN
   ALTER PUBLICATION supabase_realtime ADD TABLE public.conversation_participants;
 EXCEPTION WHEN OTHERS THEN null;
 END $$;
+DO $$ BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_invites;
+EXCEPTION WHEN OTHERS THEN null;
+END $$;
+

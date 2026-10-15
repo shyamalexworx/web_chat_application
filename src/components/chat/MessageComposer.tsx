@@ -330,7 +330,7 @@ export const MessageComposer: React.FC = () => {
   }
 
   return (
-    <div className="px-4 pt-1 pb-3 bg-[#0B0D12] select-none flex-shrink-0 relative">
+    <div className="px-4 pt-1 pb-[11px] bg-[#0B0D12] select-none flex-shrink-0 relative">
       {/* Typing Indicator Bar */}
       {typingUsers.length > 0 ? (
         <div className="h-5 px-1 flex items-center space-x-2 text-[11px] text-[#929BAA] animate-fade-in">
@@ -405,7 +405,7 @@ export const MessageComposer: React.FC = () => {
       ) : (
       <div className="bg-[#12151C] border border-[#252B36] focus-within:border-[#4F8CFF] rounded-xl overflow-hidden shadow-subtle transition-colors">
         {/* Formatting Toolbar (Highlighted in Image 2 - 100% Functional with active feedback) */}
-        <div className="px-3 py-1.5 bg-[#181C25]/80 border-b border-[#252B36] flex items-center justify-between text-[#929BAA]">
+        <div className="px-3 py-1.5 bg-[#181C25] border-b border-[#252B36] flex items-center justify-between text-[#929BAA]">
           <div className="flex items-center space-x-1">
             {/* Bold */}
             <button
@@ -535,7 +535,7 @@ export const MessageComposer: React.FC = () => {
         </div>
 
         {/* Composer Bottom Bar (Attachments, Emoji, Voice, Send) */}
-        <div className="px-3 py-2 flex items-center justify-between border-t border-[#252B36]/50">
+        <div className="h-11 px-3 flex items-center justify-between border-t border-[#252B36]/50">
           <div className="flex items-center space-x-1">
             {/* File Upload Input */}
             <input
@@ -579,7 +579,7 @@ export const MessageComposer: React.FC = () => {
             type="button"
             onClick={handleSend}
             disabled={!content.trim() && attachments.length === 0}
-            className={`p-2 rounded-lg font-medium text-xs flex items-center space-x-1.5 transition-all ${
+            className={`h-8 px-2.5 rounded-lg font-medium text-xs flex items-center space-x-1.5 transition-all ${
               content.trim() || attachments.length > 0
                 ? 'bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white shadow-accent-glow cursor-pointer'
                 : 'bg-[#181C25] text-[#929BAA]/50 cursor-not-allowed'

@@ -20,6 +20,8 @@ export interface Workspace {
   slug: string;
   icon: string; // URL or abbreviation
   iconBg?: string;
+  avatar?: string;
+  memberIds?: string[];
   description: string;
   ownerId: string;
   membersCount: number;
@@ -33,8 +35,10 @@ export interface Channel {
   name: string;
   topic: string;
   description: string;
+  avatar?: string;
   isPrivate: boolean;
   memberIds: string[];
+  adminIds?: string[];
   createdBy: string;
   createdAt: string;
   unreadCount: number;
@@ -116,7 +120,7 @@ export interface NotificationItem {
   userId: string;
   title: string;
   body: string;
-  type: 'mention' | 'dm' | 'reaction' | 'invite' | 'system' | 'meet';
+  type: 'mention' | 'dm' | 'reaction' | 'invite' | 'system' | 'meet' | 'channel';
   timestamp: string;
   isRead: boolean;
   targetType: 'channel' | 'dm';

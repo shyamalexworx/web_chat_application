@@ -11,6 +11,7 @@ import {
   X,
   Menu,
   Clock,
+  UserPlus,
 } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
 
@@ -26,6 +27,7 @@ export const ChatHeader: React.FC = () => {
     updateChannelDetails,
     isRightPanelOpen,
     setIsRightPanelOpen,
+    setIsInviteChannelMembersOpen,
     toggleSidebarCollapsed,
     t,
   } = useChat();
@@ -72,7 +74,13 @@ export const ChatHeader: React.FC = () => {
         {activeChannel ? (
           <>
             <div className="flex items-center space-x-1.5 flex-shrink-0">
-              {activeChannel.isPrivate ? (
+              {activeChannel.avatar ? (
+                <img
+                  src={activeChannel.avatar}
+                  alt={activeChannel.name}
+                  className="w-5 h-5 rounded-md object-cover flex-shrink-0 border border-[#252B36]"
+                />
+              ) : activeChannel.isPrivate ? (
                 <Lock className="w-4 h-4 text-[#929BAA]" />
               ) : (
                 <Hash className="w-4 h-4 text-[#929BAA]" />
@@ -191,9 +199,20 @@ export const ChatHeader: React.FC = () => {
         )}
       </div>
 
-      {/* Action Controls on the Right (Panel Toggle) */}
-      {!isRightPanelOpen && (
-        <div className="flex items-center space-x-2 flex-shrink-0">
+      {/* Action Controls on the Right (Add People & Panel Toggle) */}
+      <div className="flex items-center space-x-2 flex-shrink-0">
+        {activeChannel && (
+          <button
+            onClick={() => setIsInviteChannelMembersOpen(true)}
+            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border border-[#4F8CFF]/40 bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 text-[#4F8CFF] text-xs font-medium transition-colors cursor-pointer shadow-sm"
+            title="Invite members to this channel"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Add People</span>
+          </button>
+        )}
+
+        {!isRightPanelOpen && (
           <button
             onClick={() => setIsRightPanelOpen(true)}
             className="p-1.5 rounded-lg border transition-colors bg-[#12151C] text-[#929BAA] hover:text-[#F5F7FA] border-[#252B36] hover:bg-[#181C25] cursor-pointer"
@@ -201,8 +220,8 @@ export const ChatHeader: React.FC = () => {
           >
             <PanelRight className="w-3.5 h-3.5" />
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </header>
   );
 };

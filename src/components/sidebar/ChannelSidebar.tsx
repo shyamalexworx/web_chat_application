@@ -14,8 +14,10 @@ import {
   Mail,
   Check,
   X,
+  Menu,
 } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
+import { WorkspaceRailInner } from './WorkspaceRail';
 
 export const ChannelSidebar: React.FC = () => {
   const {
@@ -64,7 +66,10 @@ export const ChannelSidebar: React.FC = () => {
   const regularDMs = workspaceDMs.filter((d) => !d.isStarred);
 
   const pendingReceivedInvites = invites.filter(
-    (inv) => inv.receiverId === currentUser.id && inv.status === 'pending'
+    (inv) =>
+      (inv.receiverId === currentUser.id ||
+        (currentUser.email && inv.receiverId.toLowerCase() === currentUser.email.toLowerCase())) &&
+      inv.status === 'pending'
   );
 
   const getDMName = (dm: typeof workspaceDMs[0]) => {
@@ -84,53 +89,74 @@ export const ChannelSidebar: React.FC = () => {
 
   const handleSelectView = (view: { type: 'channel' | 'dm'; id: string }) => {
     setActiveView(view);
-    if (typeof window !== 'undefined' && window.innerWidth < 768 && !isSidebarCollapsed) {
-      toggleSidebarCollapsed();
-    }
+    // User requested: menu bar collapses ONLY by clicking the menu bar icon
   };
 
   return (
     <>
-      {/* Mobile overlay backdrop: click outside to dismiss sidebar */}
+      {/* Mobile overlay backdrop */}
       {!isSidebarCollapsed && (
         <div
-          onClick={toggleSidebarCollapsed}
-          className="md:hidden fixed inset-0 top-12 z-30 bg-black/60 backdrop-blur-xs transition-opacity"
-          aria-label="Close channels sidebar"
+          className="md:hidden fixed inset-0 top-12 z-30 bg-black/60 backdrop-blur-xs pointer-events-none transition-opacity"
+          aria-hidden="true"
         />
       )}
 
       <nav 
         aria-label="Workspace channels and messages"
-        className={`bg-[#0F1117] border-r border-[#252B36] flex flex-col h-full select-none flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-left max-md:fixed max-md:left-12 max-md:top-12 max-md:bottom-0 max-md:w-72 max-md:z-40 max-md:shadow-2xl ${
+        className={`bg-[#0F1117] border-r border-[#252B36] sidebar-chat-divider flex flex-row h-full select-none flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-left max-md:fixed max-md:left-0 max-md:top-12 max-md:bottom-0 max-md:w-80 max-md:z-40 max-md:shadow-2xl ${
           isSidebarCollapsed
             ? 'w-0 opacity-0 -translate-x-full md:-translate-x-12 pointer-events-none overflow-hidden border-none'
-            : 'w-64 opacity-100 translate-x-0'
+            : 'w-64 max-md:w-80 opacity-100 translate-x-0'
         }`}
       >
-      {/* Workspace Header: Interactive & Functional (Click to open workspace settings) */}
-      <div className="h-14 min-h-[56px] flex-shrink-0 border-b border-[#252B36] px-3 flex items-center justify-between bg-[#0F1117]">
-        <button
-          onClick={() => setIsWorkspaceSettingsOpen(true)}
-          className="flex items-center space-x-2.5 overflow-hidden flex-1 p-1 rounded-lg hover:bg-[#181C25] transition-colors text-left group"
-          title="Open Workspace Settings & Switcher"
-        >
-          <div 
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 shadow-sm"
-            style={{ backgroundColor: activeWorkspace.iconBg || '#4F8CFF' }}
-          >
-            {activeWorkspace.icon}
+        {/* MOBILE-ONLY WORKSPACE RAIL (Red marked section placed inside the menu bar) */}
+        <div className="w-12 h-full bg-[#0B0D12] border-r border-[#252B36] flex-shrink-0 flex flex-col md:hidden">
+          <WorkspaceRailInner isMobile={true} />
+        </div>
+
+        {/* CHANNELS & DMS MAIN SIDEBAR */}
+        <div className="flex-1 flex flex-col h-full min-w-0 bg-[#0F1117]">
+          {/* Workspace Header: Interactive & Functional (Menu bar collapse in green marked area) */}
+          <div className="h-14 min-h-[56px] flex-shrink-0 border-b border-[#252B36] px-2.5 sm:px-3 flex items-center justify-between bg-[#0F1117]">
+            {/* Collapse Menu Bar Icon (Green marked area) */}
+            <button
+              onClick={toggleSidebarCollapsed}
+              className="md:hidden p-1.5 rounded-lg bg-[#181C25] hover:bg-[#252B36] text-[#4F8CFF] hover:text-white border border-[#252B36] flex-shrink-0 cursor-pointer mr-2"
+              title="Collapse menu bar"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+
+            <button
+              onClick={() => setIsWorkspaceSettingsOpen(true)}
+              className="flex items-center space-x-2.5 overflow-hidden flex-1 p-1 rounded-lg hover:bg-[#181C25] transition-colors text-left group"
+              title="Open Workspace Settings & Switcher"
+            >
+              {activeWorkspace.avatar ? (
+                <img
+                  src={activeWorkspace.avatar}
+                  alt=""
+                  className="w-7 h-7 rounded-lg object-cover flex-shrink-0 shadow-sm border border-[#252B36]"
+                />
+              ) : (
+                <div 
+                  className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 shadow-sm"
+                  style={{ backgroundColor: activeWorkspace.iconBg || '#4F8CFF' }}
+                >
+                  {activeWorkspace.icon}
+                </div>
+              )}
+              <div className="truncate flex-1 min-w-0">
+                <span className="text-sm font-bold text-[#F5F7FA] tracking-tight truncate block leading-tight group-hover:text-[#4F8CFF] transition-colors">
+                  {activeWorkspace.name}
+                </span>
+                <p className="text-[11px] font-medium text-[#929BAA] truncate">
+                  {activeWorkspace.membersCount} {t('members')} &bull; {activeWorkspace.plan}
+                </p>
+              </div>
+            </button>
           </div>
-          <div className="truncate flex-1 min-w-0">
-            <span className="text-sm font-bold text-[#F5F7FA] tracking-tight truncate block leading-tight group-hover:text-[#4F8CFF] transition-colors">
-              {activeWorkspace.name}
-            </span>
-            <p className="text-[11px] font-medium text-[#929BAA] truncate">
-              {activeWorkspace.membersCount} {t('members')} &bull; {activeWorkspace.plan}
-            </p>
-          </div>
-        </button>
-      </div>
 
       {/* Navigation List */}
       <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-4">
@@ -155,7 +181,11 @@ export const ChannelSidebar: React.FC = () => {
                       />
                       <div className="truncate">
                         <p className="text-xs font-semibold text-[#F5F7FA] truncate">{senderName}</p>
-                        <p className="text-[10px] text-[#929BAA] truncate">Chat invite</p>
+                        <p className="text-[10px] text-[#929BAA] truncate">
+                          {inv.inviteType === 'channel'
+                            ? `Channel: #${channels.find((c) => c.id === inv.conversationId)?.name || 'channel'}`
+                            : 'Direct chat invite'}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-1 flex-shrink-0">
@@ -235,10 +265,12 @@ export const ChannelSidebar: React.FC = () => {
                       }`}
                     >
                       <div className="flex items-center space-x-2 truncate">
-                        {ch.isPrivate ? (
-                          <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+                        {ch.avatar ? (
+                          <img src={ch.avatar} alt="" className="w-3.5 h-3.5 rounded object-cover flex-shrink-0" />
+                        ) : ch.isPrivate ? (
+                          <Lock className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-[#929BAA]'}`} />
                         ) : (
-                          <Hash className="w-3.5 h-3.5 flex-shrink-0" />
+                          <Hash className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-[#929BAA]'}`} />
                         )}
                         <span className="truncate">{ch.name}</span>
                       </div>
@@ -345,10 +377,12 @@ export const ChannelSidebar: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center space-x-2 truncate">
-                      {ch.isPrivate ? (
-                        <Lock className="w-3.5 h-3.5 flex-shrink-0 text-[#929BAA] group-hover:text-[#F5F7FA]" />
+                      {ch.avatar ? (
+                        <img src={ch.avatar} alt="" className="w-3.5 h-3.5 rounded object-cover flex-shrink-0" />
+                      ) : ch.isPrivate ? (
+                        <Lock className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-[#929BAA] group-hover:text-[#F5F7FA]'}`} />
                       ) : (
-                        <Hash className="w-3.5 h-3.5 flex-shrink-0 text-[#929BAA] group-hover:text-[#F5F7FA]" />
+                        <Hash className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-[#929BAA] group-hover:text-[#F5F7FA]'}`} />
                       )}
                       <span className="truncate">{ch.name}</span>
                     </div>
@@ -417,8 +451,8 @@ export const ChannelSidebar: React.FC = () => {
                   >
                     <div className="flex items-center space-x-2.5 truncate">
                       {dm.isGroup ? (
-                        <div className="w-4 h-4 rounded bg-[#181C25] border border-[#252B36] flex items-center justify-center flex-shrink-0">
-                          <Users className="w-3.5 h-3.5 text-[#929BAA]" />
+                        <div className={`w-4 h-4 rounded ${isActive ? 'bg-white/20 border-white/30' : 'bg-[#181C25] border-[#252B36]'} border flex items-center justify-center flex-shrink-0`}>
+                          <Users className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-[#929BAA]'}`} />
                         </div>
                       ) : (
                         <div className="relative flex-shrink-0">
@@ -463,6 +497,7 @@ export const ChannelSidebar: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
       </div>
     </nav>
     </>

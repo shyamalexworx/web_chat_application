@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { soundFX } from '../../utils/audio';
 
-export const WorkspaceRail: React.FC = () => {
+export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile }) => {
   const {
     workspaces,
     activeWorkspace,
@@ -41,16 +41,15 @@ export const WorkspaceRail: React.FC = () => {
     const next = !soundEnabled;
     soundFX.setEnabled(next);
     setSoundEnabled(next);
+    if (next) soundFX.play('chime');
     addToast(next ? 'Sound notifications enabled' : 'Sound notifications muted', 'info');
   };
 
   return (
-    <aside 
-      aria-label="Workspaces"
-      className="w-12 h-full bg-[#0B0D12] border-r border-[#252B36] flex flex-col items-center select-none flex-shrink-0 z-30"
-    >
-      {/* Top Header Section: perfectly aligned at 56px (h-14) with ChannelSidebar and ChatHeader */}
-      <div className="h-14 min-h-[56px] w-full border-b border-[#252B36] flex items-center justify-center flex-shrink-0 bg-[#0B0D12]">
+    <div className="w-12 h-full bg-[#0B0D12] workspace-rail-bg flex flex-col items-center justify-between select-none flex-shrink-0 border-r border-[#252B36] sidebar-chat-divider">
+      <div className="w-full flex flex-col items-center flex-1 min-h-0">
+        {/* Top Header Section: perfectly aligned at 56px (h-14) with ChannelSidebar and ChatHeader */}
+        <div className="h-14 min-h-[56px] w-full border-b border-[#252B36] flex items-center justify-center flex-shrink-0 bg-[#0B0D12] workspace-rail-bg">
         <div className="relative group">
           <button
             onClick={toggleAIAssistant}
@@ -107,7 +106,11 @@ export const WorkspaceRail: React.FC = () => {
                 }}
                 title={isActive ? (isSidebarCollapsed ? `Expand ${ws.name} Menu` : `Collapse ${ws.name} Menu`) : ws.name}
               >
-                <span className="text-white drop-shadow-sm">{ws.icon}</span>
+                {ws.avatar ? (
+                  <img src={ws.avatar} alt={ws.name} className="w-full h-full rounded-lg object-cover" />
+                ) : (
+                  <span className="text-white drop-shadow-sm">{ws.icon}</span>
+                )}
 
                 {/* If active & collapsed, show indicator to reopen */}
                 {isActive && isSidebarCollapsed && (
@@ -153,33 +156,26 @@ export const WorkspaceRail: React.FC = () => {
           </div>
         </div>
       </div>
+    </div>
 
-      {/* USER PROFILE SECTION MOVED TO BOTTOM LEFT RAIL (White marked in Image 3) */}
-      <div className="pt-2 border-t border-[#252B36] w-full flex flex-col items-center relative">
-        <div className="relative group">
-          <button
-            onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="w-8 h-8 rounded-lg overflow-hidden border border-[#252B36] hover:border-[#4F8CFF] transition-all relative"
-            title={currentUser.name}
-          >
-            <img
-              src={currentUser.avatar}
-              alt={currentUser.name}
-              className="w-full h-full object-cover"
-            />
-            <span
-              className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-[#0B0D12] ${
-                currentUser.isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
-              }`}
-            />
-          </button>
-
-          {/* Tooltip */}
-          <div className="absolute left-14 px-2.5 py-1.5 bg-[#181C25] text-xs font-medium text-[#F5F7FA] rounded-md shadow-modal border border-[#252B36] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-            {currentUser.name}
-            <span className="block text-[10px] text-[#929BAA]">{currentUser.title}</span>
-          </div>
-        </div>
+      {/* USER PROFILE SECTION MOVED TO BOTTOM LEFT RAIL (Aligned with Chat Composer bottom toolbar) */}
+      <div className="h-[56px] min-h-[56px] border-t border-[#252B36] w-full flex items-center justify-center relative flex-shrink-0">
+        <button
+          onClick={() => setUserMenuOpen(!userMenuOpen)}
+          className="w-8 h-8 rounded-lg overflow-hidden border border-[#252B36] hover:border-[#4F8CFF] transition-all relative cursor-pointer"
+          aria-label="User profile and settings"
+        >
+          <img
+            src={currentUser.avatar}
+            alt={currentUser.name}
+            className="w-full h-full object-cover"
+          />
+          <span
+            className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-[#0B0D12] ${
+              currentUser.isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
+            }`}
+          />
+        </button>
 
         {/* User Flyout Menu with click outside backdrop */}
         {userMenuOpen && (
@@ -264,7 +260,18 @@ export const WorkspaceRail: React.FC = () => {
           </div>
         </>
       )}
+      </div>
     </div>
-  </aside>
+  );
+};
+
+export const WorkspaceRail: React.FC = () => {
+  return (
+    <aside 
+      aria-label="Workspaces"
+      className="hidden md:flex w-12 h-full bg-[#0B0D12] workspace-rail border-r border-[#252B36] sidebar-chat-divider flex-col items-center select-none flex-shrink-0 z-30"
+    >
+      <WorkspaceRailInner />
+    </aside>
   );
 };

@@ -130,14 +130,14 @@ export const ChannelSidebar: React.FC = () => {
 
             <button
               onClick={() => setIsWorkspaceSettingsOpen(true)}
-              className="flex items-center space-x-2.5 overflow-hidden flex-1 p-1 rounded-lg hover:bg-[#181C25] transition-colors text-left group"
+              className="flex items-center space-x-2.5 overflow-hidden flex-1 p-1 rounded-lg hover:bg-slate-200/70 dark:hover:bg-[#181C25] transition-colors text-left group"
               title="Open Workspace Settings & Switcher"
             >
               {activeWorkspace.avatar ? (
                 <img
                   src={activeWorkspace.avatar}
                   alt=""
-                  className="w-7 h-7 rounded-lg object-cover flex-shrink-0 shadow-sm border border-[#252B36]"
+                  className="w-7 h-7 rounded-lg object-cover flex-shrink-0 shadow-sm border border-slate-200 dark:border-[#252B36]"
                 />
               ) : (
                 <div 
@@ -148,11 +148,11 @@ export const ChannelSidebar: React.FC = () => {
                 </div>
               )}
               <div className="truncate flex-1 min-w-0">
-                <span className="text-sm font-bold text-[#F5F7FA] tracking-tight truncate block leading-tight group-hover:text-[#4F8CFF] transition-colors">
+                <span className="text-sm font-bold text-slate-800 dark:text-[#F5F7FA] tracking-tight truncate block leading-tight group-hover:text-[#4F8CFF] transition-colors">
                   {activeWorkspace.name}
                 </span>
-                <p className="text-[11px] font-medium text-[#929BAA] truncate">
-                  {activeWorkspace.membersCount} {t('members')} &bull; {activeWorkspace.plan}
+                <p className="text-[11px] font-medium text-slate-500 dark:text-[#929BAA] truncate">
+                  {activeWorkspace.membersCount} {t('members')}
                 </p>
               </div>
             </button>

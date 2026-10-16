@@ -28,6 +28,8 @@ export const TopNavigation: React.FC = () => {
     users,
     messages,
     activeWorkspace,
+    acceptInvite,
+    declineInvite,
     addToast,
     t,
   } = useChat();
@@ -109,11 +111,11 @@ export const TopNavigation: React.FC = () => {
     searchResults.files.length;
 
   return (
-    <header className="h-12 min-h-[48px] flex-shrink-0 bg-[#0B0D12] border-b border-[#252B36] flex items-center justify-between pr-4 select-none z-40 relative">
+    <header className="h-12 min-h-[48px] flex-shrink-0 bg-white dark:bg-[#0B0D12] border-b border-slate-200 dark:border-[#252B36] flex items-center justify-between pr-4 select-none z-40 relative">
       {/* Left side: Brand Indicator with Website Logo matching AI Assistant size (w-8 h-8) and aligned with WorkspaceRail */}
       <div className="flex items-center flex-shrink-0">
         <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
-          <div className="relative overflow-hidden rounded-lg w-8 h-8 flex-shrink-0 bg-[#12151D] border border-blue-500/25 shadow-sm flex items-center justify-center">
+          <div className="relative overflow-hidden rounded-lg w-8 h-8 flex-shrink-0 bg-slate-100 dark:bg-[#12151D] border border-blue-500/25 shadow-sm flex items-center justify-center">
             <img src="/logo.png" alt="PulseChat" className="w-full h-full object-contain p-1" />
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/35 to-transparent animate-light-sweep pointer-events-none" />
           </div>
@@ -127,10 +129,10 @@ export const TopNavigation: React.FC = () => {
         </div>
       </div>
 
-      {/* Center: Real-time Live Search Input (FIXED: Never blanks out, live inline dropdown) */}
+      {/* Center: Real-time Live Search Input */}
       <div ref={searchContainerRef} className="flex-1 max-w-xl mx-2 sm:mx-4 relative">
         <div className="relative">
-          <Search className="w-3.5 h-3.5 text-[#929BAA] absolute left-3 top-2.5" />
+          <Search className="w-3.5 h-3.5 text-slate-400 dark:text-[#929BAA] absolute left-3 top-2.5" />
           <input
             ref={searchInputRef}
             type="text"
@@ -138,13 +140,13 @@ export const TopNavigation: React.FC = () => {
             onChange={(e) => setSearchInput(e.target.value)}
             onFocus={() => setSearchFocused(true)}
             placeholder={t('search_placeholder')}
-            className="w-full h-8 bg-[#12151C] hover:bg-[#181C25] focus:bg-[#181C25] border border-[#252B36] focus:border-[#4F8CFF] rounded-lg pl-9 pr-14 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none transition-all shadow-sm"
+            className="w-full h-8 bg-slate-100 hover:bg-slate-200/70 focus:bg-white dark:bg-[#12151C] dark:hover:bg-[#181C25] dark:focus:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg pl-9 pr-14 text-xs text-slate-900 dark:text-[#F5F7FA] placeholder-slate-400 dark:placeholder-[#929BAA] outline-none transition-all shadow-sm"
           />
 
           {searchInput ? (
             <button
               onClick={() => setSearchInput('')}
-              className="absolute right-3 top-2 text-[#929BAA] hover:text-[#F5F7FA]"
+              className="absolute right-3 top-2 text-slate-400 hover:text-slate-600 dark:text-[#929BAA] dark:hover:text-[#F5F7FA]"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -157,23 +159,23 @@ export const TopNavigation: React.FC = () => {
               className="absolute right-2.5 top-1.5 hidden sm:flex items-center space-x-1 cursor-pointer"
               title="Press Ctrl+K to search"
             >
-              <kbd className="text-[10px] bg-[#181C25] border border-[#252B36] px-1.5 py-0.5 rounded text-[#929BAA] font-mono">
+              <kbd className="text-[10px] bg-slate-200 dark:bg-[#181C25] border border-slate-300 dark:border-[#252B36] px-1.5 py-0.5 rounded text-slate-600 dark:text-[#929BAA] font-mono">
                 Ctrl
               </kbd>
-              <kbd className="text-[10px] bg-[#181C25] border border-[#252B36] px-1.5 py-0.5 rounded text-[#929BAA] font-mono">
+              <kbd className="text-[10px] bg-slate-200 dark:bg-[#181C25] border border-slate-300 dark:border-[#252B36] px-1.5 py-0.5 rounded text-slate-600 dark:text-[#929BAA] font-mono">
                 K
               </kbd>
             </div>
           )}
         </div>
 
-        {/* Live Search Results Dropdown (Opens on Ctrl+K or Focus) */}
+        {/* Live Search Results Dropdown */}
         {searchFocused && (
-          <div className="absolute top-10 inset-x-0 bg-[#181C25] border border-[#252B36] rounded-xl shadow-modal z-50 overflow-hidden animate-slide-down max-h-96 flex flex-col">
+          <div className="absolute top-10 inset-x-0 bg-white dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-xl shadow-xl z-50 overflow-hidden animate-slide-down max-h-96 flex flex-col">
             {searchInput.trim().length > 0 ? (
               <>
                 {/* Filter pills */}
-                <div className="px-3 py-2 border-b border-[#252B36] bg-[#12151C]/70 flex items-center space-x-1.5 text-xs overflow-x-auto">
+                <div className="px-3 py-2 border-b border-slate-200 dark:border-[#252B36] bg-slate-50 dark:bg-[#12151C]/70 flex items-center space-x-1.5 text-xs overflow-x-auto">
                   {[
                     { id: 'all', label: `All (${totalResultsCount})` },
                 { id: 'channels', label: `Channels (${searchResults.channels.length})` },
@@ -338,13 +340,13 @@ export const TopNavigation: React.FC = () => {
             className={`p-1.5 rounded-lg border transition-colors relative flex items-center justify-center cursor-pointer ${
               notifMenuOpen
                 ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF]'
-                : 'bg-[#12151C] text-[#929BAA] hover:text-[#F5F7FA] border-[#252B36] hover:bg-[#181C25]'
+                : 'bg-slate-100 dark:bg-[#12151C] text-slate-600 dark:text-[#929BAA] hover:text-slate-900 dark:hover:text-[#F5F7FA] border-slate-200 dark:border-[#252B36] hover:bg-slate-200 dark:hover:bg-[#181C25]'
             }`}
             title="Notifications"
           >
             <Bell className="w-4 h-4" />
             {unreadNotificationsCount > 0 && (
-              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-[#F05D6C] text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-[#0B0D12]">
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-[#F05D6C] text-white text-[9px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-[#0B0D12]">
                 {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
               </span>
             )}
@@ -357,12 +359,12 @@ export const TopNavigation: React.FC = () => {
                 className="fixed inset-0 z-40 bg-transparent cursor-pointer" 
                 onClick={() => setNotifMenuOpen(false)} 
               />
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-[#181C25] border border-[#252B36] rounded-2xl shadow-modal z-50 overflow-hidden animate-slide-down">
+              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-2xl shadow-xl z-50 overflow-hidden animate-slide-down">
                 {/* Header */}
-                <div className="px-4 py-3 border-b border-[#252B36] flex items-center justify-between bg-[#12151C]/60">
+                <div className="px-4 py-3 border-b border-slate-200 dark:border-[#252B36] flex items-center justify-between bg-slate-50 dark:bg-[#12151C]/60">
                   <div className="flex items-center space-x-2">
                     <Bell className="w-4 h-4 text-[#4F8CFF]" />
-                    <span className="text-xs font-bold text-[#F5F7FA]">Notifications</span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA]">Notifications</span>
                     {notifications.length > 0 && (
                       <span className="text-[10px] bg-[#4F8CFF]/20 text-[#4F8CFF] font-semibold px-1.5 py-0.5 rounded-full">
                         {notifications.length}
@@ -372,7 +374,7 @@ export const TopNavigation: React.FC = () => {
                   {notifications.length > 0 && (
                     <button
                       onClick={clearAllNotifications}
-                      className="text-[11px] text-[#929BAA] hover:text-[#F05D6C] flex items-center space-x-1 transition-colors cursor-pointer"
+                      className="text-[11px] text-slate-500 hover:text-[#F05D6C] dark:text-[#929BAA] dark:hover:text-[#F05D6C] flex items-center space-x-1 transition-colors cursor-pointer"
                       title="Clear all notifications"
                     >
                       <Trash2 className="w-3 h-3" />
@@ -382,9 +384,9 @@ export const TopNavigation: React.FC = () => {
                 </div>
 
                 {/* Notifications list */}
-                <div className="max-h-80 overflow-y-auto divide-y divide-[#252B36]/40">
+                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-[#252B36]/40">
                   {notifications.length === 0 ? (
-                    <div className="p-8 text-center text-xs text-[#929BAA]">
+                    <div className="p-8 text-center text-xs text-slate-500 dark:text-[#929BAA]">
                       No notifications yet
                     </div>
                   ) : (
@@ -398,27 +400,57 @@ export const TopNavigation: React.FC = () => {
                           }
                           setNotifMenuOpen(false);
                         }}
-                        className="p-3 hover:bg-[#12151C] cursor-pointer transition-colors flex items-start space-x-3 group/notif"
+                        className="p-3 hover:bg-slate-50 dark:hover:bg-[#12151C] cursor-pointer transition-colors flex items-start space-x-3 group/notif"
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-[#F5F7FA] truncate">
+                            <span className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA] truncate">
                               {n.title}
                             </span>
-                            <span className="text-[10px] text-[#929BAA] font-mono">
+                            <span className="text-[10px] text-slate-400 dark:text-[#929BAA] font-mono">
                               {new Date(n.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
                             </span>
                           </div>
-                          <p className="text-xs text-[#929BAA] mt-0.5 line-clamp-2">
+                          <p className="text-xs text-slate-600 dark:text-[#929BAA] mt-0.5 line-clamp-2">
                             {n.body}
                           </p>
+
+                          {/* Quick Accept/Decline action for Invitations */}
+                          {(n.type === 'invite' || n.id.startsWith('notif-inv-')) && (
+                            <div className="flex items-center space-x-2 mt-2 pt-1.5 border-t border-slate-100 dark:border-[#252B36]/50">
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const invId = n.id.replace('notif-inv-', '');
+                                  await acceptInvite(invId);
+                                  removeNotification(n.id);
+                                }}
+                                className="px-2.5 py-1 bg-[#32C48D] hover:bg-[#28A775] text-white text-[11px] font-semibold rounded-md shadow-sm transition-colors cursor-pointer"
+                              >
+                                Accept
+                              </button>
+                              <button
+                                type="button"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  const invId = n.id.replace('notif-inv-', '');
+                                  await declineInvite(invId);
+                                  removeNotification(n.id);
+                                }}
+                                className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-[#252B36] dark:hover:bg-[#323946] text-slate-700 dark:text-[#929BAA] text-[11px] font-medium rounded-md transition-colors cursor-pointer"
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          )}
                         </div>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             removeNotification(n.id);
                           }}
-                          className="opacity-0 group-hover/notif:opacity-100 p-1 hover:bg-[#252B36] rounded text-[#929BAA] hover:text-[#F05D6C] transition-opacity flex-shrink-0 cursor-pointer"
+                          className="opacity-0 group-hover/notif:opacity-100 p-1 hover:bg-slate-200 dark:hover:bg-[#252B36] rounded text-slate-400 hover:text-[#F05D6C] transition-opacity flex-shrink-0 cursor-pointer"
                           title="Dismiss notification"
                         >
                           <X className="w-3.5 h-3.5" />

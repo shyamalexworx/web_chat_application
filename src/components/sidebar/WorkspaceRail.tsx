@@ -184,13 +184,13 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
               className="fixed inset-0 z-40 bg-transparent" 
               onClick={() => setUserMenuOpen(false)} 
             />
-            <div className="absolute bottom-2 left-14 w-64 bg-[#181C25] border border-[#252B36] rounded-2xl shadow-modal p-2 z-50 animate-slide-down space-y-1">
-            <div className="px-3 py-2 border-b border-[#252B36]">
-              <div className="text-xs font-semibold text-[#F5F7FA] flex items-center gap-1.5">
+            <div className="absolute bottom-2 left-14 w-64 bg-white dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-2xl shadow-xl p-2 z-50 animate-slide-down space-y-1">
+            <div className="px-3 py-2 border-b border-slate-200 dark:border-[#252B36]">
+              <div className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA] flex items-center gap-1.5">
                 {currentUser.name}
                 {currentUser.statusEmoji && <span>{currentUser.statusEmoji}</span>}
               </div>
-              <div className="text-[11px] text-[#929BAA]">{currentUser.email}</div>
+              <div className="text-[11px] text-slate-500 dark:text-[#929BAA]">{currentUser.email}</div>
               <div className="text-[10px] text-[#4F8CFF] font-medium mt-0.5 uppercase tracking-wider">
                 {currentUser.role} &bull; {currentUser.title}
               </div>
@@ -202,7 +202,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
                 updateCurrentUserProfile({ isOnline: !currentUser.isOnline });
                 setUserMenuOpen(false);
               }}
-              className="w-full flex items-center justify-between px-3 py-2 text-xs text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#12151C] rounded-lg transition-colors"
+              className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-600 dark:text-[#929BAA] hover:text-slate-900 dark:hover:text-[#F5F7FA] hover:bg-slate-100 dark:hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
             >
               <div className="flex items-center space-x-2">
                 <Circle
@@ -216,22 +216,22 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
               </div>
             </button>
 
-            {/* Profile & Settings (Renamed as requested) */}
+            {/* Profile & Settings */}
             <button
               onClick={() => {
                 setIsUserProfileOpen(true);
                 setUserMenuOpen(false);
               }}
-              className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
+              className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-slate-600 dark:text-[#929BAA] hover:text-slate-900 dark:hover:text-[#F5F7FA] hover:bg-slate-100 dark:hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
             >
               <Settings className="w-3.5 h-3.5 text-[#4F8CFF]" />
-              <span className="font-medium text-[#F5F7FA]">Profile & Settings</span>
+              <span className="font-medium text-slate-800 dark:text-[#F5F7FA]">Profile & Settings</span>
             </button>
 
             {/* Toggle Sound */}
             <button
               onClick={toggleSound}
-              className="w-full flex items-center justify-between px-3 py-2 text-xs text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#12151C] rounded-lg transition-colors"
+              className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-600 dark:text-[#929BAA] hover:text-slate-900 dark:hover:text-[#F5F7FA] hover:bg-slate-100 dark:hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
             >
               <div className="flex items-center space-x-2">
                 {soundEnabled ? (
@@ -245,13 +245,13 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
             </button>
 
             {/* Logout */}
-            <div className="pt-1 border-t border-[#252B36]">
+            <div className="pt-1 border-t border-slate-200 dark:border-[#252B36]">
               <button
                 onClick={() => {
                   setUserMenuOpen(false);
                   logout();
                 }}
-                className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-[#F05D6C] hover:bg-[#F05D6C]/10 rounded-lg transition-colors"
+                className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-[#F05D6C] hover:bg-[#F05D6C]/10 rounded-lg transition-colors cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>{t('log_out')}</span>

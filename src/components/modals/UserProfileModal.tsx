@@ -156,21 +156,21 @@ export const UserProfileModal: React.FC = () => {
   return (
     <div 
       onClick={() => setIsUserProfileOpen(false)}
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 animate-fade-in select-none cursor-pointer"
+      className="fixed inset-0 bg-black/60 dark:bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 animate-fade-in select-none cursor-pointer"
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-[#0F1117] border border-[#252B36] rounded-2xl shadow-modal overflow-hidden flex flex-col cursor-default max-h-[92vh]"
+        className="w-full max-w-2xl bg-white dark:bg-[#0F1117] border border-slate-200 dark:border-[#252B36] rounded-2xl shadow-2xl overflow-hidden flex flex-col cursor-default max-h-[92vh]"
       >
-        {/* Header (Renamed: Profile & Settings) */}
-        <div className="px-5 sm:px-6 py-4 border-b border-[#252B36] flex items-center justify-between bg-[#12151C]/90">
+        {/* Header */}
+        <div className="px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-[#252B36] flex items-center justify-between bg-slate-50 dark:bg-[#12151C]/90">
           <div className="flex items-center space-x-3">
             <div className="w-9 h-9 rounded-xl bg-[#4F8CFF]/15 border border-[#4F8CFF]/30 flex items-center justify-center text-[#4F8CFF]">
               <Settings className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-[#F5F7FA]">Profile & Settings</h2>
-              <p className="text-[11px] text-[#929BAA]">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-[#F5F7FA]">Profile & Settings</h2>
+              <p className="text-[11px] text-slate-500 dark:text-[#929BAA]">
                 Manage your identity, end-to-end encryption armor, and preferences.
               </p>
             </div>
@@ -178,21 +178,21 @@ export const UserProfileModal: React.FC = () => {
 
           <button
             onClick={() => setIsUserProfileOpen(false)}
-            className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] hover:bg-slate-100 dark:hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Navigator */}
-        <div className="px-5 sm:px-6 border-b border-[#252B36] flex items-center space-x-2 bg-[#12151C]/50 text-xs overflow-x-auto no-scrollbar">
+        <div className="px-5 sm:px-6 border-b border-slate-200 dark:border-[#252B36] flex items-center space-x-2 bg-slate-100/80 dark:bg-[#12151C]/50 text-xs overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setActiveTab('profile')}
-            className={`py-3 px-2 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer ${
+            className={`py-3 px-3 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer rounded-t-lg ${
               activeTab === 'profile'
-                ? 'border-[#4F8CFF] text-[#4F8CFF]'
-                : 'border-transparent text-[#929BAA] hover:text-[#F5F7FA]'
+                ? 'border-[#4F8CFF] text-[#4F8CFF] bg-white/70 dark:bg-white/5 font-semibold'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-[#929BAA] dark:hover:text-[#F5F7FA]'
             }`}
           >
             <UserCheck className="w-3.5 h-3.5" />
@@ -202,10 +202,10 @@ export const UserProfileModal: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('security')}
-            className={`py-3 px-2 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer ${
+            className={`py-3 px-3 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer rounded-t-lg ${
               activeTab === 'security'
-                ? 'border-[#32C48D] text-[#32C48D]'
-                : 'border-transparent text-[#929BAA] hover:text-[#F5F7FA]'
+                ? 'border-[#32C48D] text-[#32C48D] bg-white/70 dark:bg-white/5 font-semibold'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-[#929BAA] dark:hover:text-[#F5F7FA]'
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5 text-[#32C48D]" />
@@ -215,10 +215,10 @@ export const UserProfileModal: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('preferences')}
-            className={`py-3 px-2 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer ${
+            className={`py-3 px-3 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer rounded-t-lg ${
               activeTab === 'preferences'
-                ? 'border-[#4F8CFF] text-[#4F8CFF]'
-                : 'border-transparent text-[#929BAA] hover:text-[#F5F7FA]'
+                ? 'border-[#4F8CFF] text-[#4F8CFF] bg-white/70 dark:bg-white/5 font-semibold'
+                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-[#929BAA] dark:hover:text-[#F5F7FA]'
             }`}
           >
             <Settings className="w-3.5 h-3.5" />
@@ -233,7 +233,7 @@ export const UserProfileModal: React.FC = () => {
             <form onSubmit={handleSubmitProfile} className="space-y-4">
               {/* Avatar Selection */}
               <div>
-                <label className="block text-xs font-semibold text-[#F5F7FA] mb-2">
+                <label className="block text-xs font-semibold text-slate-800 dark:text-[#F5F7FA] mb-2">
                   Profile Photo
                 </label>
                 <div className="flex items-center space-x-4">
@@ -241,10 +241,10 @@ export const UserProfileModal: React.FC = () => {
                     <img
                       src={avatar}
                       alt=""
-                      className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F8CFF] shadow-subtle bg-[#181C25]"
+                      className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F8CFF] shadow-subtle bg-slate-100 dark:bg-[#181C25]"
                     />
                     <span
-                      className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-[#181C25] ${
+                      className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#181C25] ${
                         isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
                       }`}
                     />
@@ -287,33 +287,33 @@ export const UserProfileModal: React.FC = () => {
               {/* Full Name & Job Title */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1.5">
                     Display Name
                   </label>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-[#F5F7FA] outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-[#F5F7FA] outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1.5">
                     Title / Role
                   </label>
                   <input
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-[#F5F7FA] outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-[#F5F7FA] outline-none"
                   />
                 </div>
               </div>
 
               {/* Custom Status */}
               <div>
-                <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
+                <label className="block text-xs font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1.5">
                   Custom Status & Emoji
                 </label>
                 <div className="flex items-center space-x-2">
@@ -321,14 +321,14 @@ export const UserProfileModal: React.FC = () => {
                     type="text"
                     value={statusEmoji}
                     onChange={(e) => setStatusEmoji(e.target.value)}
-                    className="w-12 text-center bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl py-2 text-base outline-none"
+                    className="w-12 text-center bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-xl py-2 text-base outline-none"
                   />
                   <input
                     type="text"
                     value={statusText}
                     onChange={(e) => setStatusText(e.target.value)}
                     placeholder="What are you working on right now?"
-                    className="flex-1 bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none"
+                    className="flex-1 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-[#F5F7FA] placeholder-slate-400 dark:placeholder-[#929BAA] outline-none"
                   />
                 </div>
 
@@ -342,7 +342,7 @@ export const UserProfileModal: React.FC = () => {
                         setStatusEmoji(preset.emoji);
                         setStatusText(preset.text);
                       }}
-                      className="px-2 py-1 bg-[#12151C] hover:bg-[#252B36] border border-[#252B36] rounded-md text-[11px] text-[#929BAA] hover:text-[#F5F7FA] flex items-center space-x-1 transition-colors cursor-pointer"
+                      className="px-2 py-1 bg-slate-100 dark:bg-[#12151C] hover:bg-slate-200 dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] rounded-md text-[11px] text-slate-600 hover:text-slate-900 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] flex items-center space-x-1 transition-colors cursor-pointer"
                     >
                       <span>{preset.emoji}</span>
                       <span>{preset.text}</span>
@@ -352,7 +352,7 @@ export const UserProfileModal: React.FC = () => {
               </div>
 
               {/* Online Presence Toggle */}
-              <div className="p-3 bg-[#12151C] border border-[#252B36] rounded-xl flex items-center justify-between">
+              <div className="p-3 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl flex items-center justify-between">
                 <div className="flex items-center space-x-2.5">
                   <Circle
                     className={`w-3.5 h-3.5 fill-current ${
@@ -360,10 +360,10 @@ export const UserProfileModal: React.FC = () => {
                     }`}
                   />
                   <div>
-                    <div className="text-xs font-semibold text-[#F5F7FA]">
+                    <div className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">
                       {isOnline ? 'Active Online Presence' : 'Away / Offline Mode'}
                     </div>
-                    <div className="text-[11px] text-[#929BAA]">
+                    <div className="text-[11px] text-slate-500 dark:text-[#929BAA]">
                       {isOnline
                         ? 'Teammates can see that you are active and available.'
                         : 'Show as offline to colleagues.'}
@@ -375,7 +375,7 @@ export const UserProfileModal: React.FC = () => {
                   type="button"
                   onClick={() => setIsOnline(!isOnline)}
                   className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
-                    isOnline ? 'bg-[#32C48D]' : 'bg-[#252B36]'
+                    isOnline ? 'bg-[#32C48D]' : 'bg-slate-300 dark:bg-[#252B36]'
                   }`}
                 >
                   <div
@@ -398,50 +398,50 @@ export const UserProfileModal: React.FC = () => {
             </form>
           )}
 
-          {/* TAB 2: SECURITY & END-TO-END ENCRYPTION (Placed inside Profile & Settings as requested) */}
+          {/* TAB 2: SECURITY & END-TO-END ENCRYPTION */}
           {activeTab === 'security' && (
             <div className="space-y-4 animate-fade-in">
               {/* Status Header Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <div className="p-3 bg-[#181C25] border border-[#252B36] rounded-xl space-y-1">
+                <div className="p-3 bg-slate-50 dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-1">
                   <div className="flex items-center space-x-1.5 text-[#32C48D]">
                     <Lock className="w-3.5 h-3.5" />
                     <span className="font-semibold text-[10px] uppercase tracking-wider">Cipher Standard</span>
                   </div>
-                  <div className="text-xs font-bold text-[#F5F7FA]">AES-256-GCM</div>
-                  <div className="text-[10px] text-[#929BAA]">128-bit Auth Tag</div>
+                  <div className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA]">AES-256-GCM</div>
+                  <div className="text-[10px] text-slate-500 dark:text-[#929BAA]">128-bit Auth Tag</div>
                 </div>
 
-                <div className="p-3 bg-[#181C25] border border-[#252B36] rounded-xl space-y-1">
+                <div className="p-3 bg-slate-50 dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-1">
                   <div className="flex items-center space-x-1.5 text-[#4F8CFF]">
                     <Key className="w-3.5 h-3.5" />
                     <span className="font-semibold text-[10px] uppercase tracking-wider">Key Derivation</span>
                   </div>
-                  <div className="text-xs font-bold text-[#F5F7FA]">PBKDF2-SHA256</div>
-                  <div className="text-[10px] text-[#929BAA]">100k Iterations</div>
+                  <div className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA]">PBKDF2-SHA256</div>
+                  <div className="text-[10px] text-slate-500 dark:text-[#929BAA]">100k Iterations</div>
                 </div>
 
-                <div className="p-3 bg-[#181C25] border border-[#252B36] rounded-xl space-y-1">
+                <div className="p-3 bg-slate-50 dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-1">
                   <div className="flex items-center space-x-1.5 text-[#A855F7]">
                     <Shield className="w-3.5 h-3.5" />
                     <span className="font-semibold text-[10px] uppercase tracking-wider">Anti-Hacking Armor</span>
                   </div>
-                  <div className="text-xs font-bold text-[#F5F7FA]">Armed & Active</div>
-                  <div className="text-[10px] text-[#929BAA]">Anti-XSS & CSP</div>
+                  <div className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA]">Armed & Active</div>
+                  <div className="text-[10px] text-slate-500 dark:text-[#929BAA]">Anti-XSS & CSP</div>
                 </div>
               </div>
 
               {/* Safety Fingerprint Verification */}
-              <div className="p-4 bg-[#12151C] border border-[#252B36] rounded-xl space-y-2">
+              <div className="p-4 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-2">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Fingerprint className="w-4 h-4 text-[#4F8CFF]" />
-                    <span className="font-bold text-[#F5F7FA]">Conversation Safety Fingerprint</span>
+                    <span className="font-bold text-slate-800 dark:text-[#F5F7FA]">Conversation Safety Fingerprint</span>
                   </div>
                   <button
                     type="button"
                     onClick={handleCopyFingerprint}
-                    className="flex items-center space-x-1 text-[11px] px-2 py-1 rounded bg-[#181C25] hover:bg-[#252B36] text-[#4F8CFF] border border-[#252B36] transition-colors cursor-pointer"
+                    className="flex items-center space-x-1 text-[11px] px-2 py-1 rounded bg-white dark:bg-[#181C25] hover:bg-slate-100 dark:hover:bg-[#252B36] text-[#4F8CFF] border border-slate-200 dark:border-[#252B36] transition-colors cursor-pointer"
                   >
                     {copiedFingerprint ? (
                       <>
@@ -457,26 +457,26 @@ export const UserProfileModal: React.FC = () => {
                   </button>
                 </div>
 
-                <p className="text-[#929BAA] text-[11px] leading-relaxed">
-                  Verify this safety number with colleagues in <strong className="text-[#F5F7FA]">{conversationName}</strong> to cryptographically verify zero eavesdropping or interception.
+                <p className="text-slate-500 dark:text-[#929BAA] text-[11px] leading-relaxed">
+                  Verify this safety number with colleagues in <strong className="text-slate-800 dark:text-[#F5F7FA]">{conversationName}</strong> to cryptographically verify zero eavesdropping or interception.
                 </p>
 
-                <div className="p-2.5 bg-[#0B0D12] rounded-lg border border-[#252B36] font-mono text-center tracking-widest text-xs text-[#32C48D] select-all">
+                <div className="p-2.5 bg-slate-100 dark:bg-[#0B0D12] rounded-lg border border-slate-200 dark:border-[#252B36] font-mono text-center tracking-widest text-xs text-[#32C48D] select-all">
                   {fingerprint}
                 </div>
               </div>
 
               {/* Live Interactive Cryptography Sandbox */}
-              <div className="p-4 bg-[#12151C] border border-[#252B36] rounded-xl space-y-3">
+              <div className="p-4 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
                     <Cpu className="w-4 h-4 text-[#32C48D]" />
-                    <span className="font-bold text-[#F5F7FA]">Live Cryptography Test Bench</span>
+                    <span className="font-bold text-slate-800 dark:text-[#F5F7FA]">Live Cryptography Test Bench</span>
                   </div>
-                  <span className="text-[10px] text-[#929BAA] font-mono">Web Crypto API</span>
+                  <span className="text-[10px] text-slate-500 dark:text-[#929BAA] font-mono">Web Crypto API</span>
                 </div>
 
-                <p className="text-[#929BAA] text-[11px]">
+                <p className="text-slate-500 dark:text-[#929BAA] text-[11px]">
                   Type any test phrase below to see real-time AES-256-GCM encryption and verified local decryption:
                 </p>
 
@@ -489,7 +489,7 @@ export const UserProfileModal: React.FC = () => {
                       handleTestEncrypt(e.target.value);
                     }}
                     placeholder="Type test text..."
-                    className="flex-1 bg-[#181C25] border border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-3 py-2 text-xs text-[#F5F7FA] outline-none"
+                    className="flex-1 bg-white dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-[#F5F7FA] outline-none"
                   />
                   <button
                     type="button"
@@ -503,21 +503,21 @@ export const UserProfileModal: React.FC = () => {
 
                 {testPayload && (
                   <div className="space-y-2 pt-1 font-mono text-[11px]">
-                    <div className="p-2.5 bg-[#0B0D12] rounded-lg border border-[#252B36] space-y-1">
+                    <div className="p-2.5 bg-slate-100 dark:bg-[#0B0D12] rounded-lg border border-slate-200 dark:border-[#252B36] space-y-1">
                       <div className="text-[10px] text-[#4F8CFF] font-semibold flex items-center justify-between">
                         <span>AES-256-GCM CIPHERTEXT (Base64):</span>
-                        <span className="text-[#929BAA]">IV: {testPayload.iv.slice(0, 8)}...</span>
+                        <span className="text-slate-500 dark:text-[#929BAA]">IV: {testPayload.iv.slice(0, 8)}...</span>
                       </div>
-                      <div className="text-[#929BAA] break-all select-all font-mono text-[10px] max-h-16 overflow-y-auto">
+                      <div className="text-slate-500 dark:text-[#929BAA] break-all select-all font-mono text-[10px] max-h-16 overflow-y-auto">
                         {testPayload.ciphertext || '(Empty)'}
                       </div>
                     </div>
 
-                    <div className="p-2 bg-[#0B0D12] rounded-lg border border-[#252B36] flex items-center justify-between">
+                    <div className="p-2 bg-slate-100 dark:bg-[#0B0D12] rounded-lg border border-slate-200 dark:border-[#252B36] flex items-center justify-between">
                       <span className="text-[10px] text-[#32C48D] flex items-center gap-1 font-semibold">
                         <Check className="w-3.5 h-3.5" /> DECRYPTED PLAINTEXT:
                       </span>
-                      <span className="text-[#F5F7FA] font-sans truncate max-w-xs">{testDecrypted}</span>
+                      <span className="text-slate-800 dark:text-[#F5F7FA] font-sans truncate max-w-xs">{testDecrypted}</span>
                     </div>
                   </div>
                 )}
@@ -525,25 +525,25 @@ export const UserProfileModal: React.FC = () => {
 
               {/* Active System Hardening Matrix */}
               <div className="space-y-1.5">
-                <div className="text-[11px] font-semibold text-[#929BAA] uppercase tracking-wider flex items-center gap-1.5">
+                <div className="text-[11px] font-semibold text-slate-500 dark:text-[#929BAA] uppercase tracking-wider flex items-center gap-1.5">
                   <Zap className="w-3.5 h-3.5 text-[#F5A623]" /> Active System Hardening Matrix
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                  <div className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] flex items-center space-x-2">
+                  <div className="p-2 bg-slate-50 dark:bg-[#181C25] rounded-lg border border-slate-200 dark:border-[#252B36] flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-[#32C48D]" />
-                    <span className="text-[#F5F7FA]">Anti-XSS Input Sanitization Engine</span>
+                    <span className="text-slate-800 dark:text-[#F5F7FA]">Anti-XSS Input Sanitization Engine</span>
                   </div>
-                  <div className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] flex items-center space-x-2">
+                  <div className="p-2 bg-slate-50 dark:bg-[#181C25] rounded-lg border border-slate-200 dark:border-[#252B36] flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-[#32C48D]" />
-                    <span className="text-[#F5F7FA]">Unique 96-bit Cryptographic IV per message</span>
+                    <span className="text-slate-800 dark:text-[#F5F7FA]">Unique 96-bit Cryptographic IV per message</span>
                   </div>
-                  <div className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] flex items-center space-x-2">
+                  <div className="p-2 bg-slate-50 dark:bg-[#181C25] rounded-lg border border-slate-200 dark:border-[#252B36] flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-[#32C48D]" />
-                    <span className="text-[#F5F7FA]">Anti-Flooding Rate Limiter Armor</span>
+                    <span className="text-slate-800 dark:text-[#F5F7FA]">Anti-Flooding Rate Limiter Armor</span>
                   </div>
-                  <div className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] flex items-center space-x-2">
+                  <div className="p-2 bg-slate-50 dark:bg-[#181C25] rounded-lg border border-slate-200 dark:border-[#252B36] flex items-center space-x-2">
                     <span className="w-2 h-2 rounded-full bg-[#32C48D]" />
-                    <span className="text-[#F5F7FA]">Content-Security-Policy Strict Headers</span>
+                    <span className="text-slate-800 dark:text-[#F5F7FA]">Content-Security-Policy Strict Headers</span>
                   </div>
                 </div>
               </div>
@@ -554,12 +554,12 @@ export const UserProfileModal: React.FC = () => {
           {activeTab === 'preferences' && (
             <div className="space-y-4 animate-fade-in">
               {/* Interface Theme Selection (Dark, Light, System) */}
-              <div className="p-3.5 bg-[#12151C] border border-[#252B36] rounded-xl space-y-2.5">
+              <div className="p-3.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-2.5">
                 <div className="flex items-center space-x-2">
                   <Sun className="w-4 h-4 text-[#4F8CFF]" />
-                  <span className="text-xs font-semibold text-[#F5F7FA]">Interface Theme</span>
+                  <span className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">Interface Theme</span>
                 </div>
-                <p className="text-[11px] text-[#929BAA]">
+                <p className="text-[11px] text-slate-500 dark:text-[#929BAA]">
                   Select your preferred workspace visual theme.
                 </p>
                 <div className="grid grid-cols-3 gap-2.5">
@@ -572,7 +572,7 @@ export const UserProfileModal: React.FC = () => {
                     className={`p-3 rounded-xl border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1.5 cursor-pointer ${
                       theme === 'dark'
                         ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-2 ring-[#4F8CFF]/30'
-                        : 'bg-[#181C25] text-[#929BAA] border-[#252B36] hover:bg-[#252B36] hover:text-[#F5F7FA]'
+                        : 'bg-white dark:bg-[#181C25] text-slate-600 dark:text-[#929BAA] border-slate-200 dark:border-[#252B36] hover:bg-slate-100 dark:hover:bg-[#252B36] hover:text-slate-900 dark:hover:text-[#F5F7FA]'
                     }`}
                   >
                     <Moon className="w-4 h-4" />
@@ -587,7 +587,7 @@ export const UserProfileModal: React.FC = () => {
                     className={`p-3 rounded-xl border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1.5 cursor-pointer ${
                       theme === 'light'
                         ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-2 ring-[#4F8CFF]/30'
-                        : 'bg-[#181C25] text-[#929BAA] border-[#252B36] hover:bg-[#252B36] hover:text-[#F5F7FA]'
+                        : 'bg-white dark:bg-[#181C25] text-slate-600 dark:text-[#929BAA] border-slate-200 dark:border-[#252B36] hover:bg-slate-100 dark:hover:bg-[#252B36] hover:text-slate-900 dark:hover:text-[#F5F7FA]'
                     }`}
                   >
                     <Sun className="w-4 h-4" />
@@ -602,7 +602,7 @@ export const UserProfileModal: React.FC = () => {
                     className={`p-3 rounded-xl border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1.5 cursor-pointer ${
                       theme === 'system'
                         ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-2 ring-[#4F8CFF]/30'
-                        : 'bg-[#181C25] text-[#929BAA] border-[#252B36] hover:bg-[#252B36] hover:text-[#F5F7FA]'
+                        : 'bg-white dark:bg-[#181C25] text-slate-600 dark:text-[#929BAA] border-slate-200 dark:border-[#252B36] hover:bg-slate-100 dark:hover:bg-[#252B36] hover:text-slate-900 dark:hover:text-[#F5F7FA]'
                     }`}
                   >
                     <Laptop className="w-4 h-4" />
@@ -612,14 +612,14 @@ export const UserProfileModal: React.FC = () => {
               </div>
 
               {/* Sound Notifications Toggle */}
-              <div className="p-3.5 bg-[#12151C] border border-[#252B36] rounded-xl flex items-center justify-between gap-3">
+              <div className="p-3.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl flex items-center justify-between gap-3">
                 <div className="flex items-center space-x-3 min-w-0 flex-1">
-                  <div className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] text-[#4F8CFF] flex-shrink-0">
+                  <div className="p-2 bg-white dark:bg-[#181C25] rounded-lg border border-slate-200 dark:border-[#252B36] text-[#4F8CFF] flex-shrink-0">
                     {soundEnabled ? <Volume2 className="w-4 h-4 text-[#32C48D]" /> : <VolumeX className="w-4 h-4 text-[#F05D6C]" />}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold text-[#F5F7FA]">Sound Chimes & Audio FX</div>
-                    <div className="text-[11px] text-[#929BAA] leading-normal">
+                    <div className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">Sound Chimes & Audio FX</div>
+                    <div className="text-[11px] text-slate-500 dark:text-[#929BAA] leading-normal">
                       Subtle procedural workplace tones for sent messages and incoming notifications.
                     </div>
                   </div>
@@ -631,7 +631,7 @@ export const UserProfileModal: React.FC = () => {
                   aria-checked={soundEnabled}
                   onClick={toggleSound}
                   className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#4F8CFF] ${
-                    soundEnabled ? 'bg-[#32C48D]' : 'bg-[#252B36]'
+                    soundEnabled ? 'bg-[#32C48D]' : 'bg-slate-300 dark:bg-[#252B36]'
                   }`}
                   title={soundEnabled ? 'Disable sound FX' : 'Enable sound FX'}
                 >
@@ -645,10 +645,10 @@ export const UserProfileModal: React.FC = () => {
               </div>
 
               {/* Language Selection */}
-              <div className="p-3.5 bg-[#12151C] border border-[#252B36] rounded-xl space-y-2.5">
+              <div className="p-3.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-2.5">
                 <div className="flex items-center space-x-2">
                   <Languages className="w-4 h-4 text-[#4F8CFF]" />
-                  <span className="text-xs font-semibold text-[#F5F7FA]">Screen Language</span>
+                  <span className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">Screen Language</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   {SUPPORTED_LANGUAGES.map((lang) => (
@@ -662,7 +662,7 @@ export const UserProfileModal: React.FC = () => {
                       className={`p-2 rounded-lg border text-left text-xs transition-colors flex items-center space-x-2 cursor-pointer ${
                         selectedLanguage === lang.code
                           ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF]'
-                          : 'bg-[#181C25] text-[#929BAA] border-[#252B36] hover:bg-[#252B36] hover:text-[#F5F7FA]'
+                          : 'bg-white dark:bg-[#181C25] text-slate-600 dark:text-[#929BAA] border-slate-200 dark:border-[#252B36] hover:bg-slate-100 dark:hover:bg-[#252B36] hover:text-slate-900 dark:hover:text-[#F5F7FA]'
                       }`}
                     >
                       <span className="text-base">{lang.flag}</span>
@@ -676,19 +676,11 @@ export const UserProfileModal: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="px-5 sm:px-6 py-3 border-t border-[#252B36] bg-[#12151C]/90 flex items-center justify-between">
-          <div className="text-[11px] text-[#929BAA] flex items-center gap-1.5">
+        <div className="px-5 sm:px-6 py-3 border-t border-slate-200 dark:border-[#252B36] bg-slate-50 dark:bg-[#12151C]/90 flex items-center justify-between">
+          <div className="text-[11px] text-slate-500 dark:text-[#929BAA] flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[#32C48D] animate-pulse" />
-            <span>Profile & Encryption settings synced</span>
+            <span>Profile &amp; Encryption settings active</span>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setIsUserProfileOpen(false)}
-            className="px-4 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] rounded-lg text-xs font-medium text-[#F5F7FA] transition-colors cursor-pointer"
-          >
-            Close
-          </button>
         </div>
       </div>
     </div>

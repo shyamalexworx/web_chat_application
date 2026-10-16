@@ -44,6 +44,7 @@ import {
   saveMessageToSupabase,
   updateMessageInSupabase,
   deleteMessageFromSupabase,
+  deleteWorkspaceFromSupabase,
   updateProfileInSupabase,
   fetchInvitesFromSupabase,
   saveInviteToSupabase,
@@ -100,6 +101,7 @@ interface ChatContextType {
   setActiveWorkspaceId: (id: string) => void;
   createWorkspace: (name: string, description: string, iconBg?: string) => Workspace;
   updateWorkspace: (id: string, updates: Partial<Workspace>) => void;
+  deleteWorkspace: (id: string) => Promise<void> | void;
 
   // Navigation & Channels
   channels: Channel[];
@@ -488,10 +490,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        // 2. Fetch Workspaces from Supabase
-        const remoteWorkspaces = await fetchWorkspacesFromSupabase();
+        // 2. Fetch Workspaces from Supabase (filtered strictly to this user's created/joined workspaces)
+        const remoteWorkspaces = await fetchWorkspacesFromSupabase(uid);
         if (isMounted && remoteWorkspaces.length > 0) {
           setWorkspaces(remoteWorkspaces);
+          if (!remoteWorkspaces.some((w) => w.id === activeWorkspaceId)) {
+            setActiveWorkspaceIdState(remoteWorkspaces[0].id);
+          }
         }
 
         // 3. Fetch Profiles from Supabase
@@ -724,9 +729,44 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         'postgres_changes',
         { event: '*', schema: 'public', table: 'workspaces' },
         async () => {
-          if (isMounted) {
-            const updated = await fetchWorkspacesFromSupabase();
+          if (isMounted && currentUserId) {
+            const updated = await fetchWorkspacesFromSupabase(currentUserId);
             if (updated.length > 0) setWorkspaces(updated);
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'new_invite' },
+        (payload) => {
+          const inv = payload?.payload as ChatInvite;
+          if (!inv) return;
+          const isForMe =
+            inv.receiverId === currentUserId ||
+            (currentUser.email && inv.receiverId.toLowerCase() === currentUser.email.toLowerCase());
+          if (isForMe && inv.senderId !== currentUserId && isMounted) {
+            setInvites((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
+            soundFX.playMessageReceived();
+            const sender = users.find((u) => u.id === inv.senderId);
+            const senderName = sender ? sender.name : 'A team member';
+            const isChan = inv.inviteType === 'channel';
+            const targetChan = isChan ? channels.find((c) => c.id === inv.channelId || c.id === inv.conversationId) : null;
+            const notifTitle = isChan
+              ? `${senderName} invited you to join #${targetChan?.name || 'channel'}`
+              : `${senderName} sent you a chat invite`;
+            const liveNotif: NotificationItem = {
+              id: 'notif-inv-' + inv.id,
+              userId: currentUserId,
+              title: notifTitle,
+              body: 'Review your invitations in the notification bell to accept and connect.',
+              type: 'invite',
+              timestamp: inv.createdAt || new Date().toISOString(),
+              isRead: false,
+              targetType: isChan ? 'channel' : 'dm',
+              targetId: inv.conversationId || inv.channelId || '',
+            };
+            setNotifications((prev) => [liveNotif, ...prev.filter((n) => n.id !== liveNotif.id)]);
+            addToast(notifTitle, 'info');
           }
         }
       )
@@ -1034,8 +1074,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     createdAt: new Date().toISOString(),
   };
 
+  // Strictly filter workspaces so users only see their own workspaces or those they joined
+  const userWorkspaces: Workspace[] = React.useMemo(() => {
+    if (!currentUserId || currentUserId === 'guest') return workspaces;
+    return workspaces.filter((ws: Workspace) => {
+      if (ws.ownerId === currentUserId) return true;
+      if (ws.memberIds && ws.memberIds.includes(currentUserId)) return true;
+      return false;
+    });
+  }, [workspaces, currentUserId]);
+
   // Active Workspace
-  const activeWorkspace = workspaces.find((w) => w.id === activeWorkspaceId) || workspaces[0] || EMPTY_WORKSPACE;
+  const activeWorkspace: Workspace = React.useMemo(() => {
+    return userWorkspaces.find((w: Workspace) => w.id === activeWorkspaceId) || userWorkspaces[0] || EMPTY_WORKSPACE;
+  }, [userWorkspaces, activeWorkspaceId]);
 
   const setActiveWorkspaceId = useCallback((id: string) => {
     setActiveWorkspaceIdState(id);
@@ -1065,6 +1117,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       iconBg,
       description,
       ownerId: currentUserId,
+      memberIds: [currentUserId],
       membersCount: 1,
       plan: 'Pro',
       createdAt: new Date().toISOString(),
@@ -1127,6 +1180,87 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     addToast('Workspace settings saved', 'success');
   }, [addToast]);
+
+  const deleteWorkspace = useCallback(
+    async (workspaceId: string) => {
+      const wsChannelIds = new Set(channels.filter((c) => c.workspaceId === workspaceId).map((c) => c.id));
+      const wsDmIds = new Set(dms.filter((d) => d.workspaceId === workspaceId).map((d) => d.id));
+
+      setWorkspaces((prev) => prev.filter((w) => w.id !== workspaceId));
+      setChannels((prev) => prev.filter((c) => c.workspaceId !== workspaceId));
+      setDms((prev) => prev.filter((d) => d.workspaceId !== workspaceId));
+      setMessages((prev) => prev.filter((m) => !wsChannelIds.has(m.conversationId) && !wsDmIds.has(m.conversationId)));
+
+      const remaining = userWorkspaces.filter((w: Workspace) => w.id !== workspaceId);
+      if (remaining.length > 0) {
+        setActiveWorkspaceIdState(remaining[0].id);
+        const firstChan = channels.find((c) => c.workspaceId === remaining[0].id);
+        if (firstChan) {
+          setActiveView({ type: 'channel', id: firstChan.id });
+        }
+      } else {
+        const newWs: Workspace = {
+          id: 'ws-' + Date.now(),
+          name: `${currentUser.name}'s Workspace`,
+          slug: `${currentUser.username || 'workspace'}-${Date.now().toString(36).slice(-4)}`,
+          icon: (currentUser.name[0] || 'W').toUpperCase(),
+          iconBg: '#4F8CFF',
+          description: `${currentUser.name}'s workspace`,
+          ownerId: currentUserId,
+          memberIds: [currentUserId],
+          membersCount: 1,
+          plan: 'Pro',
+          createdAt: new Date().toISOString(),
+        };
+        const genChannel: Channel = {
+          id: 'ch-' + Date.now(),
+          workspaceId: newWs.id,
+          name: 'general',
+          topic: `Company-wide discussion for ${newWs.name}`,
+          description: 'Default channel for team updates and general chat',
+          isPrivate: false,
+          memberIds: [currentUserId],
+          createdBy: currentUserId,
+          createdAt: new Date().toISOString(),
+          unreadCount: 0,
+          isStarred: true,
+        };
+        setWorkspaces([newWs]);
+        setChannels((prev) => [...prev, genChannel]);
+        setActiveWorkspaceIdState(newWs.id);
+        setActiveView({ type: 'channel', id: genChannel.id });
+        if (isSupabaseConfigured) {
+          saveWorkspaceToSupabase({
+            id: newWs.id,
+            name: newWs.name,
+            slug: newWs.slug,
+            icon: newWs.icon,
+            iconBg: newWs.iconBg,
+            plan: newWs.plan,
+            createdBy: currentUserId,
+          }).catch(() => {});
+          saveChannelToSupabase({
+            id: genChannel.id,
+            workspaceId: newWs.id,
+            name: genChannel.name,
+            topic: genChannel.topic,
+            description: genChannel.description,
+            isPrivate: false,
+            createdBy: currentUserId,
+            memberIds: [currentUserId],
+          }).catch(() => {});
+        }
+      }
+
+      if (isSupabaseConfigured) {
+        await deleteWorkspaceFromSupabase(workspaceId);
+      }
+
+      setIsWorkspaceSettingsOpen(false);
+      addToast('Workspace deleted permanently', 'success');
+    },
+    [userWorkspaces, channels, currentUser, currentUserId, isSupabaseConfigured, addToast, setIsWorkspaceSettingsOpen]
+  );
 
   // Channels
   const createChannel = useCallback(
@@ -1268,6 +1402,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setInvites((prev) => [newInvite, ...prev.filter((i) => i.id !== newInvite.id)]);
       if (isSupabaseConfigured) {
         saveInviteToSupabase(newInvite).catch(() => {});
+        supabase.channel('pulsechat_live_realtime').send({
+          type: 'broadcast',
+          event: 'new_invite',
+          payload: newInvite,
+        }).catch(() => {});
       }
       addToast('Chat invitation sent! Conversation unlocks once accepted.', 'info');
     } else {
@@ -1301,6 +1440,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setInvites((prev) =>
       prev.map((i) => (i.id === inviteId ? { ...i, status: 'accepted' } : i))
     );
+    setNotifications((prev) => prev.filter((n) => n.id !== 'notif-inv-' + inviteId));
 
     if (inv.inviteType === 'channel' && inv.conversationId) {
       setChannels((prev) =>
@@ -1368,13 +1508,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             senderId: currentUserId,
             receiverId: uid,
             conversationId: channelId,
+            channelId: channelId,
             inviteType: 'channel',
-            status: 'accepted',
+            status: 'pending',
             createdAt: new Date().toISOString(),
           };
           setInvites((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
           if (isSupabaseConfigured) {
             saveInviteToSupabase(inv).catch(() => {});
+            supabase.channel('pulsechat_live_realtime').send({
+              type: 'broadcast',
+              event: 'new_invite',
+              payload: inv,
+            }).catch(() => {});
           }
         }
       }
@@ -1390,6 +1536,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           senderId: currentUserId,
           receiverId: receiverTarget,
           conversationId: channelId,
+          channelId: channelId,
           inviteType: 'channel',
           status: 'pending',
           createdAt: new Date().toISOString(),
@@ -1397,6 +1544,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setInvites((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
         if (isSupabaseConfigured) {
           saveInviteToSupabase(inv).catch(() => {});
+          supabase.channel('pulsechat_live_realtime').send({
+            type: 'broadcast',
+            event: 'new_invite',
+            payload: inv,
+          }).catch(() => {});
         }
       }
 
@@ -1414,6 +1566,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setInvites((prev) =>
       prev.map((i) => (i.id === inviteId ? { ...i, status: 'declined' } : i))
     );
+    setNotifications((prev) => prev.filter((n) => n.id !== 'notif-inv-' + inviteId));
 
     if (inv.conversationId) {
       setDms((prev) =>
@@ -1872,6 +2025,53 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Auto-sync pending received invitations into notification center so bell badge shows
+  useEffect(() => {
+    if (!currentUserId || currentUserId === 'guest') return;
+
+    const myPendingInvites = invites.filter(
+      (inv) =>
+        (inv.receiverId === currentUserId ||
+          (currentUser.email && inv.receiverId.toLowerCase() === currentUser.email.toLowerCase())) &&
+        inv.status === 'pending'
+    );
+
+    if (myPendingInvites.length === 0) return;
+
+    setNotifications((prev) => {
+      const updated = [...prev];
+      let added = false;
+      for (const inv of myPendingInvites) {
+        const notifId = 'notif-inv-' + inv.id;
+        if (!updated.some((n) => n.id === notifId)) {
+          const sender = users.find((u) => u.id === inv.senderId);
+          const senderName = sender ? sender.name : 'A team member';
+          const isChan = inv.inviteType === 'channel';
+          const targetChan = isChan ? channels.find((c) => c.id === inv.channelId || c.id === inv.conversationId) : null;
+          const notifTitle = isChan
+            ? `${senderName} invited you to join #${targetChan?.name || 'channel'}`
+            : `${senderName} sent you a chat invite`;
+
+          updated.unshift({
+            id: notifId,
+            userId: currentUserId,
+            title: notifTitle,
+            body: isChan
+              ? `You were invited to join #${targetChan?.name || 'channel'}. Accept to start messaging.`
+              : 'Direct message invitation received. Accept to connect.',
+            type: 'invite',
+            timestamp: inv.createdAt || new Date().toISOString(),
+            isRead: false,
+            targetType: isChan ? 'channel' : 'dm',
+            targetId: inv.conversationId || inv.channelId || '',
+          });
+          added = true;
+        }
+      }
+      return added ? updated : prev;
+    });
+  }, [invites, currentUserId, currentUser.email, users, channels]);
+
   const typingUsers = users.filter((u) => typingUserIds.includes(u.id));
 
   return (
@@ -1901,11 +2101,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         theme,
         setTheme,
 
-        workspaces,
+        workspaces: userWorkspaces,
         activeWorkspace,
         setActiveWorkspaceId,
         createWorkspace,
         updateWorkspace,
+        deleteWorkspace,
 
         channels,
         dms,

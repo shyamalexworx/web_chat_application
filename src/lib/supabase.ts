@@ -898,32 +898,61 @@ export async function updateProfileInSupabase(
 }
 
 /**
- * Fetch workspaces from Supabase
+ * Fetch workspaces from Supabase, filtering by user membership/ownership if userId provided
  */
-export async function fetchWorkspacesFromSupabase() {
+export async function fetchWorkspacesFromSupabase(userId?: string) {
   if (!isSupabaseConfigured) return [];
-  const { data, error } = await supabase
-    .from('workspaces')
-    .select('*')
-    .order('created_at', { ascending: true });
+  try {
+    const { data, error } = await supabase
+      .from('workspaces')
+      .select(`
+        id,
+        name,
+        slug,
+        icon,
+        icon_bg,
+        plan,
+        created_by,
+        created_at,
+        workspace_members (
+          user_id,
+          role
+        )
+      `)
+      .order('created_at', { ascending: true });
 
-  if (error) {
-    console.warn('Error fetching workspaces from Supabase:', error);
+    if (error) {
+      console.warn('Error fetching workspaces from Supabase:', error);
+      return [];
+    }
+
+    const list = data || [];
+    // Strict isolation: only return workspaces where user is creator/owner or member
+    const accessible = userId
+      ? list.filter((w: any) => {
+          if (w.created_by === userId) return true;
+          const members = w.workspace_members || [];
+          return members.some((m: any) => m.user_id === userId);
+        })
+      : list;
+
+    return accessible.map((w: any) => ({
+      id: w.id,
+      name: w.name,
+      slug: w.slug,
+      icon: w.icon || '⚡',
+      iconBg: w.icon_bg || '#4F8CFF',
+      description: w.name + ' workspace',
+      ownerId: w.created_by || 'system',
+      memberIds: (w.workspace_members || []).map((m: any) => m.user_id),
+      membersCount: Math.max(1, (w.workspace_members || []).length),
+      plan: w.plan || 'Pro',
+      createdAt: w.created_at || new Date().toISOString(),
+    }));
+  } catch (err) {
+    console.warn('fetchWorkspacesFromSupabase exception:', err);
     return [];
   }
-
-  return (data || []).map((w: any) => ({
-    id: w.id,
-    name: w.name,
-    slug: w.slug,
-    icon: w.icon || '⚡',
-    iconBg: w.icon_bg || '#4F8CFF',
-    description: w.name + ' workspace',
-    ownerId: w.created_by || 'system',
-    membersCount: 1,
-    plan: w.plan || 'Pro',
-    createdAt: w.created_at || new Date().toISOString(),
-  }));
 }
 
 /**
@@ -971,6 +1000,28 @@ export async function saveWorkspaceToSupabase(ws: {
   }
 
   return data;
+}
+
+/**
+ * Delete workspace from Supabase and cascade delete its channels and messages
+ */
+export async function deleteWorkspaceFromSupabase(workspaceId: string): Promise<boolean> {
+  if (!isSupabaseConfigured) return false;
+  try {
+    await supabase.from('messages').delete().eq('workspace_id', workspaceId);
+    await supabase.from('channels').delete().eq('workspace_id', workspaceId);
+    await supabase.from('conversations').delete().eq('workspace_id', workspaceId);
+    await supabase.from('workspace_members').delete().eq('workspace_id', workspaceId);
+    const { error } = await supabase.from('workspaces').delete().eq('id', workspaceId);
+    if (error) {
+      console.warn('Supabase deleteWorkspace error:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Supabase deleteWorkspace notice:', err);
+    return false;
+  }
 }
 
 /**

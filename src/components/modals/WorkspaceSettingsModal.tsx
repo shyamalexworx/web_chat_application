@@ -19,6 +19,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
     setIsWorkspaceSettingsOpen,
     activeWorkspace,
     updateWorkspace,
+    deleteWorkspace,
     users,
     currentUser,
     addToast,
@@ -325,8 +326,15 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 </p>
                 <button
                   type="button"
-                  onClick={() => {
-                    addToast('Workspace deletion is disabled in demo mode', 'warning');
+                  onClick={async () => {
+                    if (window.confirm(`Are you sure you want to permanently delete "${activeWorkspace.name}"? This action cannot be undone.`)) {
+                      try {
+                        await deleteWorkspace(activeWorkspace.id);
+                        setIsWorkspaceSettingsOpen(false);
+                      } catch (err) {
+                        addToast('Failed to delete workspace', 'error');
+                      }
+                    }
                   }}
                   className="px-3 py-1.5 bg-[#F05D6C] hover:bg-[#D94554] text-white text-xs font-medium rounded-lg transition-colors cursor-pointer"
                 >

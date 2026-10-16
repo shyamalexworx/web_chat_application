@@ -342,10 +342,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
             {/* Header info for sent message */}
             {!isGrouped && (
               <div className="flex items-center space-x-2 mb-1 justify-end">
-                <span className="text-[11px] text-[#929BAA] font-mono">
-                  {formatTimestamp(message.timestamp)}
-                </span>
-                <span className="text-xs font-semibold text-[#F5F7FA]">
+                <span className="text-xs font-semibold text-slate-700 dark:text-[#F5F7FA]">
                   {currentUser.name}
                 </span>
               </div>

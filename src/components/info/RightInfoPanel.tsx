@@ -25,6 +25,7 @@ import {
   MessageSquare,
   MoreVertical,
 } from 'lucide-react';
+import { resolveUserAvatar } from '../../utils/avatar';
 
 export const RightInfoPanel: React.FC = () => {
   const {
@@ -42,6 +43,7 @@ export const RightInfoPanel: React.FC = () => {
     setIsInviteChannelMembersOpen,
     updateChannelDetails,
     deleteChannel,
+    deleteDM,
     createOrOpenDM,
     setActiveView,
     addToast,
@@ -50,6 +52,7 @@ export const RightInfoPanel: React.FC = () => {
 
   const [memberSearch, setMemberSearch] = useState('');
   const [confirmDeleteChannel, setConfirmDeleteChannel] = useState(false);
+  const [confirmDeleteDM, setConfirmDeleteDM] = useState(false);
   const [activeMemberActionId, setActiveMemberActionId] = useState<string | null>(null);
 
   if (!isRightPanelOpen) return null;
@@ -61,6 +64,12 @@ export const RightInfoPanel: React.FC = () => {
   const activeDM = activeView.type === 'dm'
     ? dms.find((d) => d.id === activeView.id)
     : null;
+
+  const otherUserId = !activeChannel && activeDM && !activeDM.isGroup
+    ? activeDM.participantIds.find((id) => id !== currentUser.id) || activeDM.participantIds[0]
+    : null;
+
+  const otherUser = otherUserId ? users.find((u) => u.id === otherUserId) : null;
 
   // Gather members
   const memberIds = activeChannel
@@ -172,7 +181,13 @@ export const RightInfoPanel: React.FC = () => {
         <div className="flex items-center space-x-2">
           <Info className="w-4 h-4 text-[#4F8CFF]" />
           <h2 className="text-xs font-bold text-[#F5F7FA]">
-            {activeChannel ? `#${activeChannel.name}` : (t('channel_details') || 'Conversation Info')}
+            {activeChannel
+              ? `#${activeChannel.name}`
+              : activeDM?.isGroup
+              ? `${activeDM.groupName || 'Group'} Details`
+              : otherUser
+              ? `${otherUser.name} Details`
+              : 'Conversation Info'}
           </h2>
         </div>
 
@@ -365,16 +380,127 @@ export const RightInfoPanel: React.FC = () => {
                 </div>
               </>
             ) : (
-              <div className="p-3 bg-[#181C25] rounded-xl border border-[#252B36] space-y-2">
-                <div className="text-[11px] font-semibold text-[#929BAA] uppercase tracking-wider">
-                  Conversation Type
+              <>
+                {/* Topic Box */}
+                <div className="p-3 bg-[#181C25] rounded-xl border border-[#252B36] space-y-2">
+                  <div className="text-[11px] font-semibold text-[#929BAA] uppercase tracking-wider">
+                    Topic
+                  </div>
+                  <p className="text-[#F5F7FA] leading-relaxed">
+                    {otherUser?.statusText || (otherUser ? `Discussion topic with ${otherUser.name}` : (activeDM?.isGroup ? (activeDM.groupName || 'Group Discussion') : 'Direct peer-to-peer workspace conversation'))}
+                  </p>
                 </div>
-                <p className="text-[#F5F7FA]">
-                  {activeDM?.isGroup
-                    ? 'Group conversation with multiple participants.'
-                    : 'Direct peer-to-peer workspace conversation.'}
-                </p>
-              </div>
+
+                {/* Description / Profile Box */}
+                <div className="p-3 bg-[#181C25] rounded-xl border border-[#252B36] space-y-2.5">
+                  <div className="text-[11px] font-semibold text-[#929BAA] uppercase tracking-wider">
+                    Description
+                  </div>
+                  {otherUser ? (
+                    <div className="flex items-center space-x-3 pt-0.5">
+                      <div className="relative flex-shrink-0">
+                        <img
+                          src={resolveUserAvatar(otherUser.avatar, otherUser.name)}
+                          alt={otherUser.name}
+                          className="w-10 h-10 rounded-xl object-cover"
+                        />
+                        <span
+                          className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-[#181C25] ${
+                            otherUser.isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
+                          }`}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-[#F5F7FA] truncate">{otherUser.name}</div>
+                        <div className="text-[11px] text-[#929BAA] truncate">
+                          {otherUser.title || 'Member'} &bull; @{otherUser.username}
+                        </div>
+                        {otherUser.email && (
+                          <div className="text-[11px] text-[#4F8CFF] truncate mt-0.5">
+                            {otherUser.email}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[#F5F7FA] leading-relaxed">
+                      {activeDM?.isGroup
+                        ? `Group conversation with ${conversationMembers.length} participants.`
+                        : 'Direct peer-to-peer workspace conversation.'}
+                    </p>
+                  )}
+                </div>
+
+                {/* Channel / Conversation Metadata */}
+                <div className="p-3 bg-[#181C25] rounded-xl border border-[#252B36] space-y-2.5">
+                  <div className="text-[11px] font-semibold text-[#929BAA] uppercase tracking-wider">
+                    Channel Metadata
+                  </div>
+                  <div className="flex items-center justify-between text-[#929BAA]">
+                    <span className="flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-[#4F8CFF]" /> Visibility
+                    </span>
+                    <span className="font-medium text-[#F5F7FA]">
+                      {activeDM?.isGroup ? 'Group Discussion' : 'Direct Message'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[#929BAA]">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-3.5 h-3.5 text-[#32C48D]" /> Security
+                    </span>
+                    <span className="font-medium text-[#32C48D] text-[11px]">
+                      End-to-End Encrypted (AES-256-GCM)
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[#929BAA]">
+                    <span className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-[#4F8CFF]" /> Created
+                    </span>
+                    <span className="font-medium text-[#F5F7FA]">
+                      {activeDM?.lastActivity ? new Date(activeDM.lastActivity).toLocaleDateString() : new Date().toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Delete Conversation Option */}
+                {activeDM && (
+                  <div className="p-3 bg-[#F05D6C]/10 border border-[#F05D6C]/30 rounded-xl space-y-2.5">
+                    <div className="text-[11px] font-semibold text-[#F05D6C] uppercase tracking-wider flex items-center gap-1.5">
+                      <Trash2 className="w-3.5 h-3.5" /> Delete Conversation
+                    </div>
+                    <p className="text-[#929BAA] text-xs">
+                      Permanently delete this direct conversation and all associated messages. This cannot be undone.
+                    </p>
+                    {confirmDeleteDM ? (
+                      <div className="flex items-center space-x-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => deleteDM(activeDM.id)}
+                          className="px-3 py-1.5 bg-[#F05D6C] hover:bg-[#D94554] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-sm"
+                        >
+                          Confirm Delete
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteDM(false)}
+                          className="px-2.5 py-1.5 bg-[#181C25] hover:bg-[#252B36] text-[#929BAA] hover:text-[#F5F7FA] text-xs rounded-lg transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteDM(true)}
+                        className="px-3 py-1.5 bg-[#F05D6C]/15 hover:bg-[#F05D6C]/25 border border-[#F05D6C]/40 text-[#F05D6C] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Conversation</span>
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
             )}
 
             {/* Audit log / activity */}

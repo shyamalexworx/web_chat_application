@@ -50,6 +50,7 @@ import {
   fetchInvitesFromSupabase,
   saveInviteToSupabase,
   updateInviteStatusInSupabase,
+  resolveUserByEmailOrUsername,
 } from '../lib/supabase';
 
 const STORAGE_KEY_PREFIX = 'pulsechat_v6_fresh_';
@@ -120,6 +121,8 @@ interface ChatContextType {
   createOrOpenDM: (participantIds: string[], groupName?: string) => string;
   updateChannelDetails: (channelId: string, updates: Partial<Channel>) => void;
   deleteChannel: (channelId: string) => void;
+  deleteDM: (dmId: string) => void;
+  inviteToDMByEmail: (email: string) => Promise<string | null>;
 
   // Sidebar Collapse (Mac-style Genie animation to workspace button)
   isSidebarCollapsed: boolean;
@@ -636,6 +639,29 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleIncomingMessage = (incomingMsg: Message) => {
       if (!isMounted || !incomingMsg?.id) return;
 
+      // Intercept and route fallback invites
+      if (incomingMsg.content && typeof incomingMsg.content === 'string' && incomingMsg.content.startsWith('[PULSE_INVITE]:')) {
+        try {
+          const invObj = JSON.parse(incomingMsg.content.slice('[PULSE_INVITE]:'.length));
+          const myId = currentUserIdRef.current;
+          const myUser = usersRef.current.find((u) => u.id === myId) || currentUser;
+          const myEmail = myUser?.email?.toLowerCase();
+          const targetId = (invObj.receiverId || '').toLowerCase();
+          const targetEmail = (invObj.receiverEmail || '').toLowerCase();
+
+          const isForMe =
+            (myId && targetId === myId.toLowerCase()) ||
+            (myEmail && (targetId === myEmail || targetEmail === myEmail));
+
+          if (isForMe) {
+            handleIncomingInvite(invObj);
+          }
+        } catch (e) {
+          console.error('Failed to parse PULSE_INVITE payload:', e);
+        }
+        return; // Never store fallback invites into regular chat messages
+      }
+
       let msgToStore = { ...incomingMsg };
 
       // If it's a 1-on-1 DM, normalize to matching DM ID or canonical ID
@@ -751,35 +777,49 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         workspaceId: rawInv.workspaceId || rawInv.workspace_id,
         senderId: rawInv.senderId || rawInv.sender_id,
         receiverId: rawInv.receiverId || rawInv.receiver_id,
+        receiverEmail: rawInv.receiverEmail || rawInv.receiver_email,
+        senderName: rawInv.senderName || rawInv.sender_name,
+        channelName: rawInv.channelName || rawInv.channel_name,
+        workspaceName: rawInv.workspaceName || rawInv.workspace_name,
         conversationId: rawInv.conversationId || rawInv.conversation_id,
         channelId: rawInv.channelId || rawInv.channel_id,
         inviteType: rawInv.inviteType || rawInv.invite_type || 'dm',
         status: rawInv.status || 'pending',
         createdAt: rawInv.createdAt || rawInv.created_at || new Date().toISOString(),
       };
+      const myId = currentUserIdRef.current;
+      const myUser = usersRef.current.find((u) => u.id === myId) || currentUser;
+      const myEmail = myUser?.email?.toLowerCase();
+      const targetId = (inv.receiverId || '').toLowerCase();
+      const targetEmail = (inv.receiverEmail || '').toLowerCase();
+
       const isForMe =
-        inv.receiverId === currentUserId ||
-        (currentUser.email && inv.receiverId.toLowerCase() === currentUser.email.toLowerCase());
-      if (isForMe && inv.senderId !== currentUserId) {
+        (myId && targetId === myId.toLowerCase()) ||
+        (myEmail && (targetId === myEmail || targetEmail === myEmail));
+
+      if (isForMe && inv.senderId !== myId) {
         setInvites((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
         soundFX.playMessageReceived();
         const latestUsers = usersRef.current;
         const latestChannels = channelsRef.current;
         const latestWorkspaces = workspacesRef.current;
         const sender = latestUsers.find((u) => u.id === inv.senderId);
-        const senderName = sender ? sender.name : 'A team member';
+        const senderName = inv.senderName || sender?.name || 'A team member';
         const isChan = inv.inviteType === 'channel';
         const targetChan = isChan ? latestChannels.find((c) => c.id === inv.channelId || c.id === inv.conversationId) : null;
         const targetWs = isChan ? latestWorkspaces.find((w) => w.id === inv.workspaceId) : null;
+        const channelDisplayName = inv.channelName || targetChan?.name || 'channel';
+        const wsDisplayName = inv.workspaceName || targetWs?.name || 'Team Workspace';
+
         const notifTitle = isChan
-          ? `${senderName} invited you to join #${targetChan?.name || 'channel'}`
+          ? `${senderName} invited you to join #${channelDisplayName}`
           : `${senderName} sent you a chat invite`;
         const notifBody = isChan
-          ? `Workspace: ${targetWs?.name || 'Team Workspace'} • Channel: #${targetChan?.name || 'channel'}. Review and accept to join.`
+          ? `Workspace: ${wsDisplayName} • Channel: #${channelDisplayName}. Review and accept to join.`
           : 'Review your invitations in the notification bell to accept and connect.';
         const liveNotif: NotificationItem = {
           id: 'notif-inv-' + inv.id,
-          userId: currentUserId,
+          userId: myId,
           title: notifTitle,
           body: notifBody,
           type: 'invite',
@@ -791,7 +831,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setNotifications((prev) => [liveNotif, ...prev.filter((n) => n.id !== liveNotif.id)]);
         addToast(notifTitle, 'info');
 
-        fetchConversationsFromSupabase(activeWorkspaceId, currentUserId).then((remoteDMs) => {
+        fetchConversationsFromSupabase(activeWorkspaceId, myId).then((remoteDMs) => {
           if (isMounted && remoteDMs.length > 0) setDms(remoteDMs);
         });
       }
@@ -1773,6 +1813,31 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addToast('Channel deleted successfully', 'info');
   }, [channels, activeWorkspaceId, addToast, setIsRightPanelOpen]);
 
+  const deleteDM = useCallback((dmId: string) => {
+    setDms((prev) => prev.filter((d) => d.id !== dmId));
+    setMessages((prev) => prev.filter((m) => !(m.conversationType === 'dm' && m.conversationId === dmId)));
+    if (isSupabaseConfigured) {
+      (async () => {
+        try {
+          await supabase.from('messages').delete().eq('conversation_id', dmId);
+          await supabase.from('conversations').delete().eq('id', dmId);
+        } catch {}
+      })();
+    }
+    setActiveView((prev) => {
+      if (prev.type === 'dm' && prev.id === dmId) {
+        const remaining = channels.filter((c) => c.workspaceId === activeWorkspaceId);
+        if (remaining.length > 0) {
+          return { type: 'channel', id: remaining[0].id };
+        }
+        return { type: 'channel', id: 'general' };
+      }
+      return prev;
+    });
+    setIsRightPanelOpen(false);
+    addToast('Conversation deleted', 'info');
+  }, [channels, activeWorkspaceId, addToast, setIsRightPanelOpen]);
+
   // Direct Messages
   const createOrOpenDM = useCallback((participantIds: string[], groupName?: string): string => {
     const allParticipants = Array.from(new Set([...participantIds, currentUserId]));
@@ -1815,11 +1880,14 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setActiveView({ type: 'dm', id: newDM.id });
 
     if (!isGroup && otherUserId) {
+      const targetUser = users.find((u) => u.id === otherUserId);
       const newInvite: ChatInvite = {
         id: 'inv-' + Date.now(),
         workspaceId: activeWorkspaceId,
         senderId: currentUserId,
         receiverId: otherUserId,
+        receiverEmail: targetUser?.email,
+        senderName: currentUser.name,
         conversationId: newDM.id,
         inviteType: 'dm',
         status: 'pending',
@@ -1828,11 +1896,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setInvites((prev) => [newInvite, ...prev.filter((i) => i.id !== newInvite.id)]);
       if (isSupabaseConfigured) {
         saveInviteToSupabase(newInvite).catch(() => {});
-        supabase.channel('pulsechat_live_realtime').send({
-          type: 'broadcast',
-          event: 'new_invite',
-          payload: newInvite,
-        }).catch(() => {});
+        if (realtimeChannelRef.current) {
+          realtimeChannelRef.current.send({
+            type: 'broadcast',
+            event: 'new_invite',
+            payload: newInvite,
+          }).catch(() => {});
+        }
+      }
+      if (localBroadcastRef.current) {
+        localBroadcastRef.current.postMessage({ type: 'new_invite', payload: newInvite });
       }
       addToast('Chat invitation sent! Conversation unlocks once accepted.', 'info');
     } else {
@@ -1851,7 +1924,43 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     return newDM.id;
-  }, [currentUserId, dms, activeWorkspaceId, addToast]);
+  }, [currentUserId, currentUser.name, users, dms, activeWorkspaceId, addToast]);
+
+  const inviteToDMByEmail = useCallback(async (email: string): Promise<string | null> => {
+    const clean = email.trim().toLowerCase();
+    if (!clean) return null;
+    let targetId = clean;
+    const matched = users.find((u) => u.email.toLowerCase() === clean);
+    if (matched) {
+      targetId = matched.id;
+    } else if (isSupabaseConfigured) {
+      try {
+        const resolved = await resolveUserByEmailOrUsername(clean);
+        if (resolved) {
+          targetId = resolved.id;
+          if (!users.some((u) => u.id === resolved.id)) {
+            setUsers((prev) => [
+              ...prev,
+              {
+                id: resolved.id,
+                name: resolved.name,
+                username: resolved.username,
+                email: resolved.email,
+                avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80`,
+                role: 'member',
+                title: 'Team Member',
+                isOnline: true,
+                joinedDate: new Date().toISOString(),
+              },
+            ]);
+          }
+        }
+      } catch (e) {}
+    }
+
+    const dmId = createOrOpenDM([targetId]);
+    return dmId;
+  }, [users, createOrOpenDM]);
 
   const sendChatInvite = useCallback(async (receiverId: string): Promise<boolean> => {
     if (receiverId === currentUserId) return false;
@@ -2054,23 +2163,39 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       addToast('Joined channel and workspace successfully!', 'success');
     } else {
       // DM invite accept
-      const convId = inv.conversationId;
-      if (convId) {
-        setDms((prev) =>
-          prev.map((d) => (d.id === convId ? { ...d, status: 'accepted' } : d))
-        );
-        setActiveView({ type: 'dm', id: convId });
-      } else {
-        setDms((prev) =>
-          prev.map((d) =>
-            !d.isGroup &&
-            d.participantIds.includes(inv.senderId) &&
-            (d.participantIds.includes(inv.receiverId) || d.participantIds.includes(currentUserId))
-              ? { ...d, status: 'accepted' }
-              : d
-          )
-        );
+      const canonicalId = getCanonicalDMId(inv.senderId, currentUserId);
+      const convId = inv.conversationId || canonicalId;
+
+      setDms((prev) => {
+        const matchingIndex = prev.findIndex((d) => d.id === convId || (!d.isGroup && d.participantIds.includes(inv.senderId) && d.participantIds.includes(currentUserId)));
+        if (matchingIndex !== -1) {
+          return prev.map((d, idx) => (idx === matchingIndex ? { ...d, status: 'accepted' } : d));
+        } else {
+          const newDM: DirectMessageConversation = {
+            id: convId,
+            workspaceId: inv.workspaceId || activeWorkspaceId,
+            participantIds: [inv.senderId, currentUserId],
+            isGroup: false,
+            unreadCount: 0,
+            isStarred: false,
+            lastActivity: new Date().toISOString(),
+            status: 'accepted',
+          };
+          return [newDM, ...prev];
+        }
+      });
+
+      if (isSupabaseConfigured) {
+        saveConversationToSupabase({
+          id: convId,
+          workspaceId: inv.workspaceId || activeWorkspaceId,
+          isGroup: false,
+          participantIds: [inv.senderId, currentUserId],
+          createdBy: inv.senderId,
+        }).catch(() => {});
       }
+
+      setActiveView({ type: 'dm', id: convId });
       soundFX.playMessageReceived();
       addToast('Invitation accepted! You are now connected.', 'success');
     }
@@ -2082,14 +2207,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!channel) return false;
 
       const wsId = channel.workspaceId || activeWorkspaceId;
+      const currentWs = workspaces.find((w) => w.id === wsId);
 
       if (userIds.length > 0) {
         for (const uid of userIds) {
+          const targetUser = users.find((u) => u.id === uid);
           const inv: ChatInvite = {
             id: 'inv-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
             workspaceId: wsId,
             senderId: currentUserId,
             receiverId: uid,
+            receiverEmail: targetUser?.email,
+            senderName: currentUser.name,
+            channelName: channel.name,
+            workspaceName: currentWs?.name,
             conversationId: channelId,
             channelId: channelId,
             inviteType: 'channel',
@@ -2117,14 +2248,43 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (customEmail && customEmail.trim()) {
         const cleanEmail = customEmail.trim().toLowerCase();
-        const matchedUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
-        const receiverTarget = matchedUser ? matchedUser.id : cleanEmail;
+        let matchedUser = users.find((u) => u.email.toLowerCase() === cleanEmail);
+        let receiverTarget = matchedUser ? matchedUser.id : cleanEmail;
+
+        if (!matchedUser && isSupabaseConfigured) {
+          try {
+            const resolved = await resolveUserByEmailOrUsername(cleanEmail);
+            if (resolved) {
+              receiverTarget = resolved.id;
+              if (!users.some((u) => u.id === resolved.id)) {
+                setUsers((prev) => [
+                  ...prev,
+                  {
+                    id: resolved.id,
+                    name: resolved.name,
+                    username: resolved.username,
+                    email: resolved.email,
+                    avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80`,
+                    role: 'member',
+                    title: 'Team Member',
+                    isOnline: true,
+                    joinedDate: new Date().toISOString(),
+                  },
+                ]);
+              }
+            }
+          } catch (e) {}
+        }
 
         const inv: ChatInvite = {
           id: 'inv-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
           workspaceId: wsId,
           senderId: currentUserId,
           receiverId: receiverTarget,
+          receiverEmail: cleanEmail,
+          senderName: currentUser.name,
+          channelName: channel.name,
+          workspaceName: currentWs?.name,
           conversationId: channelId,
           channelId: channelId,
           inviteType: 'channel',
@@ -2153,7 +2313,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       addToast('Channel invitation sent successfully!', 'success');
       return true;
     },
-    [channels, activeWorkspaceId, currentUserId, users, isSupabaseConfigured, addToast]
+    [channels, activeWorkspaceId, currentUserId, currentUser.name, users, workspaces, isSupabaseConfigured, addToast]
   );
 
   const declineInvite = useCallback(async (inviteId: string) => {
@@ -2891,6 +3051,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         createOrOpenDM,
         updateChannelDetails,
         deleteChannel,
+        deleteDM,
+        inviteToDMByEmail,
 
         isSidebarCollapsed,
         setIsSidebarCollapsed,

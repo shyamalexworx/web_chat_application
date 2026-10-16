@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useChat } from '../../context/ChatContext';
-import { X, Search, Check, Users, User, ArrowRight, Send } from 'lucide-react';
+import { X, Search, Check, Users, User, ArrowRight, Send, Mail } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
 
 export const NewDirectMessageModal: React.FC = () => {
@@ -10,10 +10,12 @@ export const NewDirectMessageModal: React.FC = () => {
     users,
     currentUser,
     createOrOpenDM,
+    inviteToDMByEmail,
   } = useChat();
 
   const [search, setSearch] = useState('');
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [customEmail, setCustomEmail] = useState('');
   const [groupName, setGroupName] = useState('');
 
   if (!isNewDMOpen) return null;
@@ -23,7 +25,8 @@ export const NewDirectMessageModal: React.FC = () => {
     (u) =>
       u.name.toLowerCase().includes(search.toLowerCase()) ||
       u.username.toLowerCase().includes(search.toLowerCase()) ||
-      u.title.toLowerCase().includes(search.toLowerCase())
+      (u.title && u.title.toLowerCase().includes(search.toLowerCase())) ||
+      (u.email && u.email.toLowerCase().includes(search.toLowerCase()))
   );
 
   const toggleSelectUser = (id: string) => {
@@ -34,7 +37,17 @@ export const NewDirectMessageModal: React.FC = () => {
     }
   };
 
-  const handleStart = () => {
+  const handleStart = async () => {
+    if (customEmail.trim()) {
+      await inviteToDMByEmail(customEmail.trim());
+      setCustomEmail('');
+      setSelectedUserIds([]);
+      setGroupName('');
+      setSearch('');
+      setIsNewDMOpen(false);
+      return;
+    }
+
     if (selectedUserIds.length === 0) return;
     createOrOpenDM(selectedUserIds, groupName.trim() || undefined);
     setSelectedUserIds([]);
@@ -120,6 +133,35 @@ export const NewDirectMessageModal: React.FC = () => {
               autoFocus
             />
           </div>
+
+          {/* Email Invite Option */}
+          <div className="relative pt-1">
+            <div className="relative flex items-center">
+              <Mail className="w-3.5 h-3.5 text-[#929BAA] absolute left-3 top-2.5" />
+              <input
+                type="email"
+                value={customEmail}
+                onChange={(e) => setCustomEmail(e.target.value)}
+                placeholder="Or enter coworker's email address..."
+                className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl pl-8 pr-20 py-1.5 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleStart();
+                  }
+                }}
+              />
+              {customEmail.trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={handleStart}
+                  className="absolute right-1.5 top-1 px-2.5 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-[11px] font-semibold rounded-lg transition-colors cursor-pointer"
+                >
+                  Invite
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Users list */}
@@ -178,8 +220,10 @@ export const NewDirectMessageModal: React.FC = () => {
         {/* Footer */}
         <div className="p-4 border-t border-[#252B36] flex items-center justify-between">
           <div className="text-xs text-[#929BAA]">
-            {selectedUserIds.length === 0
-              ? 'Select 1 or more participants'
+            {customEmail.trim()
+              ? `Invite via email: ${customEmail.trim()}`
+              : selectedUserIds.length === 0
+              ? 'Select 1 or more participants or enter email'
               : `${selectedUserIds.length} participant${selectedUserIds.length > 1 ? 's' : ''} selected`}
           </div>
 
@@ -192,9 +236,9 @@ export const NewDirectMessageModal: React.FC = () => {
             </button>
             <button
               onClick={handleStart}
-              disabled={selectedUserIds.length === 0}
+              disabled={selectedUserIds.length === 0 && !customEmail.trim()}
               className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition-all ${
-                selectedUserIds.length > 0
+                selectedUserIds.length > 0 || customEmail.trim()
                   ? 'bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white shadow-accent-glow cursor-pointer'
                   : 'bg-[#12151C] text-[#929BAA]/50 cursor-not-allowed'
               }`}

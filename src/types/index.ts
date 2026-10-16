@@ -64,6 +64,10 @@ export interface ChatInvite {
   workspaceId?: string;
   senderId: string;
   receiverId: string;
+  receiverEmail?: string;
+  senderName?: string;
+  channelName?: string;
+  workspaceName?: string;
   conversationId?: string;
   channelId?: string;
   inviteType: 'dm' | 'channel';

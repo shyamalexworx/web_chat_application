@@ -1083,10 +1083,41 @@ export async function updateChannelInSupabase(
 }
 
 /**
+ * Resolve user profile from Supabase by email or username
+ */
+export async function resolveUserByEmailOrUsername(
+  identifier: string
+): Promise<{ id: string; name: string; username: string; email: string } | null> {
+  if (!isSupabaseConfigured) return null;
+  const clean = identifier.trim().toLowerCase();
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id, full_name, username, email')
+      .or(`email.ilike.${clean},username.ilike.${clean}`)
+      .maybeSingle();
+    if (data) {
+      return {
+        id: data.id,
+        name: data.full_name || data.username,
+        username: data.username,
+        email: data.email || clean,
+      };
+    }
+  } catch (err) {
+    console.warn('resolveUserByEmailOrUsername notice:', err);
+  }
+  return null;
+}
+
+/**
  * Fetch chat invitations for a user (sent or received)
  */
 export async function fetchInvitesFromSupabase(userId: string, userEmail?: string): Promise<ChatInvite[]> {
   if (!isSupabaseConfigured) return [];
+  const inviteMap = new Map<string, ChatInvite>();
+
+  // 1. Fetch from chat_invites table
   try {
     let orQuery = `receiver_id.eq.${userId},sender_id.eq.${userId}`;
     if (userEmail) {
@@ -1094,40 +1125,84 @@ export async function fetchInvitesFromSupabase(userId: string, userEmail?: strin
       orQuery += `,receiver_id.eq.${clean},sender_id.eq.${clean}`;
     }
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('chat_invites')
       .select('*')
       .or(orQuery)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      // Table may not exist yet or query issue
-      return [];
+    if (data && data.length > 0) {
+      data.forEach((inv: any) => {
+        inviteMap.set(inv.id, {
+          id: inv.id,
+          workspaceId: inv.workspace_id,
+          senderId: inv.sender_id,
+          receiverId: inv.receiver_id,
+          conversationId: inv.conversation_id,
+          channelId: inv.channel_id,
+          inviteType: inv.invite_type || 'dm',
+          status: inv.status || 'pending',
+          createdAt: inv.created_at,
+        });
+      });
+    }
+  } catch {}
+
+  // 2. Cross-user fallback: Fetch from messages table where conversation_id is inv_<userId> or inv_<userEmail>
+  try {
+    const targetConvIds = ['inv_' + userId];
+    if (userEmail) {
+      targetConvIds.push('inv_' + userEmail.trim().toLowerCase());
     }
 
-    return (data || []).map((inv: any) => ({
-      id: inv.id,
-      workspaceId: inv.workspace_id,
-      senderId: inv.sender_id,
-      receiverId: inv.receiver_id,
-      conversationId: inv.conversation_id,
-      channelId: inv.channel_id,
-      inviteType: inv.invite_type || 'dm',
-      status: inv.status || 'pending',
-      createdAt: inv.created_at,
-    }));
-  } catch {
-    return [];
-  }
+    const { data: msgInvites } = await supabase
+      .from('messages')
+      .select('*')
+      .in('conversation_id', targetConvIds)
+      .order('created_at', { ascending: false });
+
+    if (msgInvites && msgInvites.length > 0) {
+      msgInvites.forEach((m: any) => {
+        let invData: any = null;
+        if (m.content?.startsWith('[PULSE_INVITE]:')) {
+          try {
+            invData = JSON.parse(m.content.slice('[PULSE_INVITE]:'.length));
+          } catch {}
+        } else if (m.attachments?.[0]?.invite) {
+          invData = m.attachments[0].invite;
+        }
+
+        if (invData && invData.id) {
+          if (!inviteMap.has(invData.id)) {
+            inviteMap.set(invData.id, {
+              id: invData.id,
+              workspaceId: invData.workspaceId || invData.workspace_id,
+              senderId: invData.senderId || invData.sender_id,
+              receiverId: invData.receiverId || invData.receiver_id,
+              conversationId: invData.conversationId || invData.conversation_id,
+              channelId: invData.channelId || invData.channel_id,
+              inviteType: invData.inviteType || invData.invite_type || 'dm',
+              status: invData.status || 'pending',
+              createdAt: invData.createdAt || m.created_at,
+            });
+          }
+        }
+      });
+    }
+  } catch {}
+
+  return Array.from(inviteMap.values());
 }
 
 /**
- * Save chat invitation to Supabase
+ * Save chat invitation to Supabase (with dual-storage fallback into messages)
  */
 export async function saveInviteToSupabase(invite: ChatInvite) {
   if (!isSupabaseConfigured) return null;
+
+  // 1. Attempt to save to chat_invites table
   try {
-    const { data, error } = await supabase
+    await supabase
       .from('chat_invites')
       .upsert({
         id: invite.id,
@@ -1138,15 +1213,42 @@ export async function saveInviteToSupabase(invite: ChatInvite) {
         channel_id: invite.channelId || null,
         invite_type: invite.inviteType,
         status: invite.status,
-      })
-      .select()
-      .maybeSingle();
+      }, { onConflict: 'id' });
+  } catch (err) {
+    console.warn('Notice saving invite to chat_invites table:', err);
+  }
 
-    if (error) {
-      console.warn('Notice saving invite to Supabase:', error.message);
+  // 2. Reliable cross-user fallback: Save to messages table with [PULSE_INVITE]
+  // This table has 100% open RLS and triggers real-time INSERT events to all clients immediately!
+  try {
+    const inviteConvId = 'inv_' + invite.receiverId;
+    const { data } = await supabase.from('messages').upsert({
+      id: 'msg-inv-' + invite.id,
+      workspace_id: invite.workspaceId || 'default',
+      conversation_type: 'dm',
+      conversation_id: inviteConvId,
+      sender_id: invite.senderId,
+      content: '[PULSE_INVITE]:' + JSON.stringify(invite),
+      attachments: [{ type: 'invite', invite }],
+      is_pinned: false,
+    }, { onConflict: 'id' }).select().maybeSingle();
+
+    if (invite.receiverEmail && invite.receiverEmail.trim().toLowerCase() !== invite.receiverId.toLowerCase()) {
+      await supabase.from('messages').upsert({
+        id: 'msg-inv-em-' + invite.id,
+        workspace_id: invite.workspaceId || 'default',
+        conversation_type: 'dm',
+        conversation_id: 'inv_' + invite.receiverEmail.trim().toLowerCase(),
+        sender_id: invite.senderId,
+        content: '[PULSE_INVITE]:' + JSON.stringify(invite),
+        attachments: [{ type: 'invite', invite }],
+        is_pinned: false,
+      }, { onConflict: 'id' });
     }
+
     return data;
-  } catch {
+  } catch (msgErr) {
+    console.warn('Notice saving fallback invite to messages:', msgErr);
     return null;
   }
 }
@@ -1156,14 +1258,21 @@ export async function saveInviteToSupabase(invite: ChatInvite) {
  */
 export async function updateInviteStatusInSupabase(inviteId: string, status: 'accepted' | 'declined') {
   if (!isSupabaseConfigured) return;
+  // 1. Update in chat_invites
   try {
     await supabase
       .from('chat_invites')
       .update({ status, updated_at: new Date().toISOString() })
       .eq('id', inviteId);
-  } catch (e) {
-    console.warn('Notice updating invite status:', e);
-  }
+  } catch {}
+
+  // 2. Clean up from messages
+  try {
+    await supabase
+      .from('messages')
+      .delete()
+      .in('id', ['msg-inv-' + inviteId, 'msg-inv-em-' + inviteId]);
+  } catch {}
 }
 
 

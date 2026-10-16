@@ -237,6 +237,11 @@ CREATE POLICY "messages_open" ON public.messages FOR ALL USING (true) WITH CHECK
 DROP POLICY IF EXISTS "chat_invites_open" ON public.chat_invites;
 CREATE POLICY "chat_invites_open" ON public.chat_invites FOR ALL USING (true) WITH CHECK (true);
 
+-- Storage bucket creation
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('chat-media', 'chat-media', true)
+ON CONFLICT (id) DO NOTHING;
+
 -- Storage Policies for chat-media bucket
 DROP POLICY IF EXISTS "chat_media_select" ON storage.objects;
 CREATE POLICY "chat_media_select" ON storage.objects FOR SELECT USING (bucket_id = 'chat-media');

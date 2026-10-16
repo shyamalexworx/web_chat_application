@@ -15,6 +15,7 @@ import {
   Check,
   X,
   Menu,
+  Settings,
 } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
 import { WorkspaceRailInner } from './WorkspaceRail';
@@ -41,6 +42,7 @@ export const ChannelSidebar: React.FC = () => {
     startGoogleMeet,
     setIsGlobalSearchOpen,
     setIsWorkspaceSettingsOpen,
+    setIsUserProfileOpen,
     t,
   } = useChat();
 
@@ -94,40 +96,35 @@ export const ChannelSidebar: React.FC = () => {
 
   return (
     <>
-      {/* Mobile overlay backdrop */}
+      {/* Mobile overlay backdrop: absorbs all touches so yellow section is completely non-reactive */}
       {!isSidebarCollapsed && (
         <div
-          className="md:hidden fixed inset-0 top-12 z-30 bg-black/60 backdrop-blur-xs pointer-events-none transition-opacity"
+          onClick={(e) => {
+            // Absorb touches: yellow section (chat interface) is completely non-reactive
+            e.stopPropagation();
+          }}
+          className="md:hidden fixed inset-0 top-12 z-30 bg-black/60 backdrop-blur-xs pointer-events-auto transition-opacity cursor-default"
           aria-hidden="true"
         />
       )}
 
       <nav 
         aria-label="Workspace channels and messages"
-        className={`bg-[#0F1117] border-r border-[#252B36] sidebar-chat-divider flex flex-row h-full select-none flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-left max-md:fixed max-md:left-0 max-md:top-12 max-md:bottom-0 max-md:w-80 max-md:z-40 max-md:shadow-2xl ${
+        className={`bg-[#0F1117] border-r border-[#252B36] sidebar-chat-divider flex flex-row select-none flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-left max-md:fixed max-md:left-0 max-md:top-12 max-md:bottom-0 max-md:h-[calc(100dvh-48px)] md:h-full max-md:w-80 max-md:z-40 max-md:shadow-2xl ${
           isSidebarCollapsed
             ? 'w-0 opacity-0 -translate-x-full md:-translate-x-12 pointer-events-none overflow-hidden border-none'
             : 'w-64 max-md:w-80 opacity-100 translate-x-0'
         }`}
       >
         {/* MOBILE-ONLY WORKSPACE RAIL (Red marked section placed inside the menu bar) */}
-        <div className="w-12 h-full bg-[#0B0D12] border-r border-[#252B36] flex-shrink-0 flex flex-col md:hidden">
+        <div className="w-12 h-full bg-slate-50 dark:bg-[#0B0D12] border-r border-slate-200 dark:border-[#252B36] flex-shrink-0 flex flex-col md:hidden">
           <WorkspaceRailInner isMobile={true} />
         </div>
 
         {/* CHANNELS & DMS MAIN SIDEBAR */}
-        <div className="flex-1 flex flex-col h-full min-w-0 bg-[#0F1117]">
-          {/* Workspace Header: Interactive & Functional (Menu bar collapse in green marked area) */}
-          <div className="h-14 min-h-[56px] flex-shrink-0 border-b border-[#252B36] px-2.5 sm:px-3 flex items-center justify-between bg-[#0F1117]">
-            {/* Collapse Menu Bar Icon (Green marked area) */}
-            <button
-              onClick={toggleSidebarCollapsed}
-              className="md:hidden p-1.5 rounded-lg bg-[#181C25] hover:bg-[#252B36] text-[#4F8CFF] hover:text-white border border-[#252B36] flex-shrink-0 cursor-pointer mr-2"
-              title="Collapse menu bar"
-            >
-              <Menu className="w-4 h-4" />
-            </button>
-
+        <div className="flex-1 flex flex-col h-full min-w-0 bg-white dark:bg-[#0F1117]">
+          {/* Workspace Header: Interactive & Functional */}
+          <div className="h-14 min-h-[56px] flex-shrink-0 border-b border-slate-200 dark:border-[#252B36] px-2.5 sm:px-3 flex items-center justify-between bg-white dark:bg-[#0F1117]">
             <button
               onClick={() => setIsWorkspaceSettingsOpen(true)}
               className="flex items-center space-x-2.5 overflow-hidden flex-1 p-1 rounded-lg hover:bg-slate-200/70 dark:hover:bg-[#181C25] transition-colors text-left group"
@@ -497,6 +494,35 @@ export const ChannelSidebar: React.FC = () => {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Mobile-only Account Section across the bottom (marked in green by user) */}
+      <div className="md:hidden h-14 min-h-[56px] border-t border-slate-200 dark:border-[#252B36] px-3 flex items-center justify-between bg-slate-50 dark:bg-[#0B0D12] flex-shrink-0">
+        <button
+          onClick={() => setIsUserProfileOpen(true)}
+          className="flex items-center space-x-2.5 overflow-hidden flex-1 p-1 rounded-lg hover:bg-slate-200/70 dark:hover:bg-[#181C25] transition-colors text-left group cursor-pointer"
+          title="Open Profile & Settings"
+        >
+          <div className="truncate flex-1 min-w-0">
+            <span className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA] truncate block leading-tight group-hover:text-[#4F8CFF]">
+              {currentUser.name}
+            </span>
+            <div className="flex items-center space-x-1.5 mt-0.5">
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${currentUser.isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'}`} />
+              <span className="text-[10px] text-slate-500 dark:text-[#929BAA] truncate">
+                {currentUser.isOnline ? t('online') : t('offline')} &bull; {currentUser.role}
+              </span>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => setIsUserProfileOpen(true)}
+          className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] hover:bg-slate-200 dark:hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
+          title="Profile & Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
       </div>
       </div>
     </nav>

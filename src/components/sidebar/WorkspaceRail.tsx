@@ -12,6 +12,7 @@ import {
   VolumeX,
   LogOut,
   Sparkles,
+  Menu,
 } from 'lucide-react';
 import { soundFX } from '../../utils/audio';
 
@@ -46,82 +47,104 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
   };
 
   return (
-    <div className="w-12 h-full bg-[#0B0D12] workspace-rail-bg flex flex-col items-center justify-between select-none flex-shrink-0 border-r border-[#252B36] sidebar-chat-divider">
+    <div className="w-12 h-full bg-slate-50 dark:bg-[#0B0D12] workspace-rail-bg flex flex-col items-center justify-between select-none flex-shrink-0 border-r border-slate-200 dark:border-[#252B36] sidebar-chat-divider">
       <div className="w-full flex flex-col items-center flex-1 min-h-0">
         {/* Top Header Section: perfectly aligned at 56px (h-14) with ChannelSidebar and ChatHeader */}
-        <div className="h-14 min-h-[56px] w-full border-b border-[#252B36] flex items-center justify-center flex-shrink-0 bg-[#0B0D12] workspace-rail-bg">
-        <div className="relative group">
-          <button
-            onClick={toggleAIAssistant}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white transition-all duration-200 ${
-              isAIAssistantOpen
-                ? 'bg-gradient-to-tr from-[#4F8CFF] to-[#A855F7] ring-2 ring-[#4F8CFF] shadow-accent-glow scale-105'
-                : 'bg-gradient-to-tr from-[#1E2330] to-[#252B36] hover:from-[#4F8CFF] hover:to-[#A855F7] border border-[#252B36]'
-            }`}
-            title="Pulse AI Assistant / Copilot"
-          >
-            <Bot className="w-4 h-4 text-white" />
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#4F8CFF] rounded-full animate-pulse" />
-          </button>
-
-          {/* Tooltip */}
-          <div className="absolute left-14 px-2.5 py-1.5 bg-[#181C25] text-xs font-medium text-[#F5F7FA] rounded-md shadow-modal border border-[#252B36] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-            {t('ai_assistant')}
-            <span className="block text-[10px] text-[#4F8CFF]">Copilot</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Workspaces list */}
-      <div className="flex-1 w-full flex flex-col items-center space-y-2 overflow-y-auto overflow-x-hidden py-2.5">
-        {workspaces.map((ws) => {
-          const isActive = ws.id === activeWorkspace.id;
-          return (
-            <div key={ws.id} className="relative group flex items-center justify-center w-full">
-              {/* Active indicator bar */}
-              <div
-                className={`absolute left-0 w-0.5 rounded-r transition-all duration-200 ${
-                  isActive
-                    ? 'h-6 bg-[#4F8CFF]'
-                    : 'h-2 bg-transparent group-hover:h-4 group-hover:bg-[#929BAA]'
-                }`}
-              />
-
+        <div className="h-14 min-h-[56px] w-full border-b border-slate-200 dark:border-[#252B36] flex items-center justify-center flex-shrink-0 bg-slate-50 dark:bg-[#0B0D12] workspace-rail-bg">
+          {isMobile ? (
+            <button
+              onClick={toggleSidebarCollapsed}
+              className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#181C25] hover:bg-[#252B36] text-[#4F8CFF] hover:text-white border border-[#252B36] transition-all cursor-pointer shadow-sm active:scale-95"
+              title="Close menu bar"
+              aria-label="Close menu bar"
+            >
+              <Menu className="w-4 h-4" />
+            </button>
+          ) : (
+            <div className="relative group">
               <button
-                onClick={() => {
-                  if (isActive) {
-                    // Click active workspace to collapse/expand channel menu (Mac genie style)
-                    toggleSidebarCollapsed();
-                  } else {
-                    setActiveWorkspaceId(ws.id);
-                  }
-                }}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs transition-all duration-200 relative ${
-                  isActive
-                    ? 'ring-2 ring-[#4F8CFF] text-white shadow-lg scale-105'
-                    : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25]'
+                onClick={toggleAIAssistant}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white transition-all duration-200 ${
+                  isAIAssistantOpen
+                    ? 'bg-gradient-to-tr from-[#4F8CFF] to-[#A855F7] ring-2 ring-[#4F8CFF] shadow-accent-glow scale-105'
+                    : 'bg-gradient-to-tr from-[#1E2330] to-[#252B36] hover:from-[#4F8CFF] hover:to-[#A855F7] border border-[#252B36]'
                 }`}
-                style={{
-                  backgroundColor: ws.iconBg || '#181C25',
-                }}
-                title={isActive ? (isSidebarCollapsed ? `Expand ${ws.name} Menu` : `Collapse ${ws.name} Menu`) : ws.name}
+                title="Pulse AI Assistant / Copilot"
               >
-                {ws.avatar ? (
-                  <img src={ws.avatar} alt={ws.name} className="w-full h-full rounded-lg object-cover" />
-                ) : (
-                  <span className="text-white drop-shadow-sm">{ws.icon}</span>
-                )}
-
-                {/* If active & collapsed, show indicator to reopen */}
-                {isActive && isSidebarCollapsed && (
-                  <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-[#4F8CFF] text-white rounded-full flex items-center justify-center text-[8px] shadow-sm">
-                    <ChevronRight className="w-2 h-2" />
-                  </span>
-                )}
+                <Bot className="w-4 h-4 text-white" />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#4F8CFF] rounded-full animate-pulse" />
               </button>
 
-              {/* Tooltip on hover */}
+              {/* Tooltip */}
               <div className="absolute left-14 px-2.5 py-1.5 bg-[#181C25] text-xs font-medium text-[#F5F7FA] rounded-md shadow-modal border border-[#252B36] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                {t('ai_assistant')}
+                <span className="block text-[10px] text-[#4F8CFF]">Copilot</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Workspaces list */}
+        <div className="flex-1 w-full flex flex-col items-center space-y-2 overflow-y-auto overflow-x-hidden py-2.5">
+          {/* Mobile view: AI Assistant stepped down one slot */}
+          {isMobile && (
+            <div className="relative group flex items-center justify-center w-full pb-1 border-b border-[#252B36]/50">
+              <button
+                onClick={toggleAIAssistant}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white transition-all duration-200 ${
+                  isAIAssistantOpen
+                    ? 'bg-gradient-to-tr from-[#4F8CFF] to-[#A855F7] ring-2 ring-[#4F8CFF] shadow-accent-glow scale-105'
+                    : 'bg-gradient-to-tr from-[#1E2330] to-[#252B36] hover:from-[#4F8CFF] hover:to-[#A855F7] border border-[#252B36]'
+                }`}
+                title="Pulse AI Assistant / Copilot"
+              >
+                <Bot className="w-4 h-4 text-white" />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#4F8CFF] rounded-full animate-pulse" />
+              </button>
+
+              <div className="absolute left-14 px-2.5 py-1.5 bg-[#181C25] text-xs font-medium text-[#F5F7FA] rounded-md shadow-modal border border-[#252B36] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                {t('ai_assistant')}
+                <span className="block text-[10px] text-[#4F8CFF]">Copilot</span>
+              </div>
+            </div>
+          )}
+
+          {workspaces.map((ws) => {
+            const isActive = ws.id === activeWorkspace.id;
+            return (
+              <div key={ws.id} className="relative group flex items-center justify-center w-full">
+                {/* Active indicator bar */}
+                <div
+                  className={`absolute left-0 w-0.5 rounded-r transition-all duration-200 ${
+                    isActive
+                      ? 'h-6 bg-[#4F8CFF]'
+                      : 'h-2 bg-transparent group-hover:h-4 group-hover:bg-[#929BAA]'
+                  }`}
+                />
+
+                <button
+                  onClick={() => {
+                    setActiveWorkspaceId(ws.id);
+                  }}
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs transition-all duration-200 relative ${
+                    isActive
+                      ? 'ring-2 ring-[#4F8CFF] text-white shadow-lg scale-105'
+                      : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25]'
+                  }`}
+                  style={{
+                    backgroundColor: ws.iconBg || '#181C25',
+                  }}
+                  title={ws.name}
+                >
+                  {ws.avatar ? (
+                    <img src={ws.avatar} alt={ws.name} className="w-full h-full rounded-lg object-cover" />
+                  ) : (
+                    <span className="text-white drop-shadow-sm">{ws.icon}</span>
+                  )}
+                </button>
+
+                {/* Tooltip on hover */}
+                <div className="absolute left-14 px-2.5 py-1.5 bg-[#181C25] text-xs font-medium text-[#F5F7FA] rounded-md shadow-modal border border-[#252B36] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
                 {ws.name}
               </div>
             </div>
@@ -159,10 +182,10 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
     </div>
 
       {/* USER PROFILE SECTION MOVED TO BOTTOM LEFT RAIL (Aligned with Chat Composer bottom toolbar) */}
-      <div className="h-[56px] min-h-[56px] border-t border-[#252B36] w-full flex items-center justify-center relative flex-shrink-0">
+      <div className="h-[56px] min-h-[56px] border-t border-slate-200 dark:border-[#252B36] w-full flex items-center justify-center relative flex-shrink-0 bg-slate-50 dark:bg-[#0B0D12]">
         <button
           onClick={() => setUserMenuOpen(!userMenuOpen)}
-          className="w-8 h-8 rounded-lg overflow-hidden border border-[#252B36] hover:border-[#4F8CFF] transition-all relative cursor-pointer"
+          className="w-8 h-8 rounded-lg overflow-hidden border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF] transition-all relative cursor-pointer"
           aria-label="User profile and settings"
         >
           <img
@@ -171,7 +194,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
             className="w-full h-full object-cover"
           />
           <span
-            className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-[#0B0D12] ${
+            className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-white dark:border-[#0B0D12] ${
               currentUser.isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
             }`}
           />

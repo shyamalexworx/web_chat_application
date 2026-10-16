@@ -25,6 +25,7 @@ import { SecurityModal } from './components/modals/SecurityModal';
 import { InviteChannelMembersModal } from './components/modals/InviteChannelMembersModal';
 import { ToastContainer } from './components/toast/ToastContainer';
 import { AuthPage } from './components/auth/AuthPage';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 const ChatDashboard: React.FC = () => {
   const {
@@ -88,18 +89,20 @@ const ChatDashboard: React.FC = () => {
           </div>
 
           {/* Modals & Overlays */}
-          <CreateChannelModal />
-          <BrowseChannelsModal />
-          <NewDirectMessageModal />
-          <CreateWorkspaceModal />
-          <WorkspaceSettingsModal />
-          <UserProfileModal />
-          <GlobalSearchModal />
-          <KeyboardShortcutsModal />
-          <TranslationModal />
-          <GoogleMeetModal />
-          <SecurityModal />
-          <InviteChannelMembersModal />
+          <ErrorBoundary>
+            <CreateChannelModal />
+            <BrowseChannelsModal />
+            <NewDirectMessageModal />
+            <CreateWorkspaceModal />
+            <WorkspaceSettingsModal />
+            <UserProfileModal />
+            <GlobalSearchModal />
+            <KeyboardShortcutsModal />
+            <TranslationModal />
+            <GoogleMeetModal />
+            <SecurityModal />
+            <InviteChannelMembersModal />
+          </ErrorBoundary>
         </div>
       )}
 

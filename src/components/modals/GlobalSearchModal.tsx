@@ -27,8 +27,6 @@ export const GlobalSearchModal: React.FC = () => {
   const [query, setQuery] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'messages' | 'channels' | 'people' | 'files'>('all');
 
-  if (!isGlobalSearchOpen) return null;
-
   const results = useMemo(() => {
     if (!query.trim()) return { channels: [], users: [], messages: [], files: [] };
 
@@ -81,6 +79,8 @@ export const GlobalSearchModal: React.FC = () => {
     setIsGlobalSearchOpen(false);
     addToast('Jumped to message in conversation', 'info');
   };
+
+  if (!isGlobalSearchOpen) return null;
 
   return (
     <div 

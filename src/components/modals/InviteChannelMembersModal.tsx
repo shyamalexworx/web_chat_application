@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { useChat } from '../../context/ChatContext';
-import { X, Search, Check, UserPlus, Hash, Lock, Mail, Users } from 'lucide-react';
+import { X, Search, Check, UserPlus, Hash, Lock, Mail } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
 
 export const InviteChannelMembersModal: React.FC = () => {
@@ -20,35 +20,18 @@ export const InviteChannelMembersModal: React.FC = () => {
   const [customEmail, setCustomEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (!isInviteChannelMembersOpen) return null;
+  // Unconditionally compute activeChannel
+  const activeChannel = useMemo(() => {
+    return activeView.type === 'channel'
+      ? channels.find((c) => c.id === activeView.id) || null
+      : null;
+  }, [activeView.type, activeView.id, channels]);
 
-  const activeChannel = activeView.type === 'channel'
-    ? channels.find((c) => c.id === activeView.id)
-    : null;
-
-  if (!activeChannel) {
-    return (
-      <div
-        onClick={() => setIsInviteChannelMembersOpen(false)}
-        className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-      >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-sm bg-[#181C25] border border-[#252B36] rounded-2xl p-6 text-center shadow-modal text-[#F5F7FA]"
-        >
-          <p className="text-sm font-semibold mb-3">Please select a channel to invite people.</p>
-          <button
-            onClick={() => setIsInviteChannelMembersOpen(false)}
-            className="px-4 py-2 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white rounded-xl text-xs font-semibold cursor-pointer"
-          >
-            Close
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const currentMemberIds = Array.isArray(activeChannel.memberIds) ? activeChannel.memberIds : [];
+  const currentMemberIds = useMemo(() => {
+    return activeChannel && Array.isArray(activeChannel.memberIds)
+      ? activeChannel.memberIds
+      : [];
+  }, [activeChannel]);
 
   // Available users to invite: all other users who aren't already members of this channel
   const availableUsers = useMemo(() => {
@@ -68,35 +51,64 @@ export const InviteChannelMembersModal: React.FC = () => {
     );
   }, [availableUsers, search]);
 
-  const toggleSelectUser = (id: string) => {
-    if (selectedUserIds.includes(id)) {
-      setSelectedUserIds((prev) => prev.filter((uid) => uid !== id));
-    } else {
-      setSelectedUserIds((prev) => [...prev, id]);
-    }
-  };
+  const toggleSelectUser = useCallback((id: string) => {
+    setSelectedUserIds((prev) =>
+      prev.includes(id) ? prev.filter((uid) => uid !== id) : [...prev, id]
+    );
+  }, []);
 
-  const handleInviteSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (selectedUserIds.length === 0 && !customEmail.trim()) {
-      addToast('Please select at least one coworker or enter an email address.', 'warning');
-      return;
-    }
+  const handleInviteSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!activeChannel) return;
 
-    setIsSubmitting(true);
-    try {
-      await inviteUsersToChannel(activeChannel.id, selectedUserIds, customEmail.trim() || undefined);
-      addToast(`Invitation sent to join #${activeChannel.name}!`, 'success');
-      setSelectedUserIds([]);
-      setCustomEmail('');
-      setSearch('');
-      setIsInviteChannelMembersOpen(false);
-    } catch (err: any) {
-      addToast(err?.message || 'Failed to send channel invitations', 'error');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      if (selectedUserIds.length === 0 && !customEmail.trim()) {
+        addToast('Please select at least one coworker or enter an email address.', 'warning');
+        return;
+      }
+
+      setIsSubmitting(true);
+      try {
+        await inviteUsersToChannel(activeChannel.id, selectedUserIds, customEmail.trim() || undefined);
+        addToast(`Invitation sent to join #${activeChannel.name}!`, 'success');
+        setSelectedUserIds([]);
+        setCustomEmail('');
+        setSearch('');
+        setIsInviteChannelMembersOpen(false);
+      } catch (err: any) {
+        addToast(err?.message || 'Failed to send channel invitations', 'error');
+      } finally {
+        setIsSubmitting(false);
+      }
+    },
+    [activeChannel, selectedUserIds, customEmail, inviteUsersToChannel, addToast, setIsInviteChannelMembersOpen]
+  );
+
+  // Strict: All hooks have been declared unconditionally above this line!
+  if (!isInviteChannelMembersOpen) return null;
+
+  if (!activeChannel) {
+    return (
+      <div
+        onClick={() => setIsInviteChannelMembersOpen(false)}
+        className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in"
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-sm bg-[#181C25] border border-[#252B36] rounded-2xl p-6 text-center shadow-modal text-[#F5F7FA]"
+        >
+          <p className="text-sm font-semibold mb-3">Please select a channel to invite people.</p>
+          <button
+            type="button"
+            onClick={() => setIsInviteChannelMembersOpen(false)}
+            className="px-4 py-2 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white rounded-xl text-xs font-semibold cursor-pointer"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

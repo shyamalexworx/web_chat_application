@@ -54,6 +54,11 @@ import {
 
 const STORAGE_KEY_PREFIX = 'pulsechat_v6_fresh_';
 
+export const getCanonicalDMId = (userIdA: string, userIdB: string): string => {
+  const sorted = [userIdA, userIdB].sort();
+  return `dm_${sorted[0]}_${sorted[1]}`;
+};
+
 const GUEST_FALLBACK_USER: User = {
   id: 'guest',
   name: 'Team Member',
@@ -594,68 +599,86 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleIncomingMessage = (incomingMsg: Message) => {
       if (!isMounted || !incomingMsg?.id) return;
 
-      setMessages((prev) => {
-        const idx = prev.findIndex((m) => m.id === incomingMsg.id);
-        if (idx !== -1) {
-          return prev.map((m) => (m.id === incomingMsg.id ? { ...m, ...incomingMsg } : m));
-        }
-        if (incomingMsg.parentId) {
-          return prev
-            .map((m) =>
-              m.id === incomingMsg.parentId
-                ? {
-                    ...m,
-                    replyCount: (m.replyCount || 0) + 1,
-                    lastReplyAt: incomingMsg.timestamp,
-                  }
-                : m
-            )
-            .concat(incomingMsg);
-        }
-        return [...prev, incomingMsg];
-      });
+      let msgToStore = { ...incomingMsg };
 
-      // If it's a DM, make sure the DM conversation exists in state
-      if (incomingMsg.conversationType === 'dm') {
-        const hasDM = dmsRef.current.some((d) => d.id === incomingMsg.conversationId);
-        if (!hasDM && isSupabaseConfigured && currentUserId) {
-          fetchConversationsFromSupabase(activeWorkspaceId, currentUserId).then((remoteDMs) => {
-            if (isMounted && remoteDMs.length > 0) {
-              setDms((prev) => {
-                const map = new Map(prev.map((d) => [d.id, d]));
-                remoteDMs.forEach((d) => map.set(d.id, d));
-                return Array.from(map.values());
-              });
-            }
-          });
+      // If it's a 1-on-1 DM, normalize to matching DM ID or canonical ID
+      if (msgToStore.conversationType === 'dm' && currentUserIdRef.current) {
+        const canonicalId = getCanonicalDMId(msgToStore.senderId, currentUserIdRef.current);
+        const matchingDM = dmsRef.current.find(
+          (d) =>
+            !d.isGroup &&
+            d.participantIds.includes(msgToStore.senderId) &&
+            d.participantIds.includes(currentUserIdRef.current)
+        );
+
+        if (matchingDM) {
+          msgToStore.conversationId = matchingDM.id;
+        } else {
+          msgToStore.conversationId = canonicalId;
+          // Ensure DM conversation exists in state so recipient has it in their sidebar
+          const newDMEntry: DirectMessageConversation = {
+            id: canonicalId,
+            workspaceId: activeWorkspaceId,
+            participantIds: [currentUserIdRef.current, msgToStore.senderId],
+            isGroup: false,
+            unreadCount: 1,
+            isStarred: false,
+            lastActivity: msgToStore.timestamp || new Date().toISOString(),
+            status: 'accepted',
+          };
+          setDms((prev) => [newDMEntry, ...prev.filter((d) => d.id !== canonicalId)]);
         }
       }
 
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === msgToStore.id);
+        if (idx !== -1) {
+          return prev.map((m) => (m.id === msgToStore.id ? { ...m, ...msgToStore } : m));
+        }
+        if (msgToStore.parentId) {
+          return prev
+            .map((m) =>
+              m.id === msgToStore.parentId
+                ? {
+                    ...m,
+                    replyCount: (m.replyCount || 0) + 1,
+                    lastReplyAt: msgToStore.timestamp,
+                  }
+                : m
+            )
+            .concat(msgToStore);
+        }
+        return [...prev, msgToStore];
+      });
+
       // If sent by someone else, play sound and trigger notification
-      if (incomingMsg.senderId !== currentUserIdRef.current) {
+      if (msgToStore.senderId !== currentUserIdRef.current) {
         soundFX.playMessageReceived();
 
         const latestUsers = usersRef.current;
         const latestChannels = channelsRef.current;
-        const sender = latestUsers.find((u) => u.id === incomingMsg.senderId);
+        const sender = latestUsers.find((u) => u.id === msgToStore.senderId);
         const senderName = sender ? sender.name : 'Team member';
-        const isChannel = incomingMsg.conversationType === 'channel';
-        const targetChan = isChannel ? latestChannels.find((c) => c.id === incomingMsg.conversationId) : null;
+        const isChannel = msgToStore.conversationType === 'channel';
+        const targetChan = isChannel ? latestChannels.find((c) => c.id === msgToStore.conversationId) : null;
+        
         const notifTitle = isChannel
-          ? `${senderName} in #${targetChan?.name || 'channel'}`
+          ? `New message in #${targetChan?.name || 'channel'}`
           : `New message from ${senderName}`;
-        const notifBody = incomingMsg.content || (incomingMsg.attachments?.length ? 'Sent an attachment' : 'New message');
+        const notifBody = isChannel
+          ? `You got a message from ${senderName} in #${targetChan?.name || 'channel'}`
+          : `You got a message from ${senderName}`;
 
         const liveNotif: NotificationItem = {
-          id: 'notif-msg-' + incomingMsg.id,
+          id: 'notif-msg-' + msgToStore.id,
           userId: currentUserIdRef.current,
           title: notifTitle,
-          body: notifBody.slice(0, 90),
+          body: notifBody,
           type: isChannel ? 'channel' : 'dm',
-          timestamp: incomingMsg.timestamp || new Date().toISOString(),
+          timestamp: msgToStore.timestamp || new Date().toISOString(),
           isRead: false,
-          targetType: incomingMsg.conversationType,
-          targetId: incomingMsg.conversationId,
+          targetType: msgToStore.conversationType,
+          targetId: msgToStore.conversationId,
         };
         setNotifications((prev) => [liveNotif, ...prev.filter((n) => n.id !== liveNotif.id)]);
       }
@@ -943,23 +966,48 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const pullMessages = async () => {
       try {
-        const remoteMsgs = await fetchMessagesFromSupabase(activeView.type, activeView.id);
+        let convIds: string[] = [activeView.id];
+        if (activeView.type === 'dm') {
+          const currentDMs = dmsRef.current;
+          const activeDM = currentDMs.find((d) => d.id === activeView.id);
+          if (activeDM && !activeDM.isGroup && activeDM.participantIds?.length === 2) {
+            const canonicalId = getCanonicalDMId(activeDM.participantIds[0], activeDM.participantIds[1]);
+            convIds.push(canonicalId);
+            currentDMs.forEach((d) => {
+              if (
+                !d.isGroup &&
+                d.participantIds.length === 2 &&
+                d.participantIds.includes(activeDM.participantIds[0]) &&
+                d.participantIds.includes(activeDM.participantIds[1])
+              ) {
+                convIds.push(d.id);
+              }
+            });
+          }
+        }
+        convIds = Array.from(new Set(convIds));
+
+        const remoteMsgs = await fetchMessagesFromSupabase(activeView.type, convIds);
         if (isMounted && remoteMsgs.length > 0) {
           setMessages((prev) => {
             const map = new Map(prev.map((m) => [m.id, m]));
             let hasChanges = false;
             remoteMsgs.forEach((m) => {
-              const existing = map.get(m.id);
+              const normalizedM = convIds.includes(m.conversationId)
+                ? { ...m, conversationId: activeView.id }
+                : m;
+              const existing = map.get(normalizedM.id);
               if (!existing) {
-                map.set(m.id, m);
+                map.set(normalizedM.id, normalizedM);
                 hasChanges = true;
               } else if (
-                existing.content !== m.content ||
-                JSON.stringify(existing.reactions) !== JSON.stringify(m.reactions) ||
-                existing.isPinned !== m.isPinned ||
-                existing.editedAt !== m.editedAt
+                existing.content !== normalizedM.content ||
+                JSON.stringify(existing.reactions) !== JSON.stringify(normalizedM.reactions) ||
+                existing.isPinned !== normalizedM.isPinned ||
+                existing.editedAt !== normalizedM.editedAt ||
+                existing.conversationId !== normalizedM.conversationId
               ) {
-                map.set(m.id, { ...existing, ...m });
+                map.set(normalizedM.id, { ...existing, ...normalizedM });
                 hasChanges = true;
               }
             });
@@ -1569,8 +1617,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Direct Messages
   const createOrOpenDM = useCallback((participantIds: string[], groupName?: string): string => {
     const allParticipants = Array.from(new Set([...participantIds, currentUserId]));
+    const isGroup = allParticipants.length > 2;
+    const otherUserId = participantIds.find((id) => id !== currentUserId) || participantIds[0];
+    const canonicalId = !isGroup && otherUserId ? getCanonicalDMId(currentUserId, otherUserId) : null;
     
     const existing = dms.find((d) => {
+      if (canonicalId && d.id === canonicalId) return true;
       if (allParticipants.length === 2 && !d.isGroup) {
         return (
           d.participantIds.length === 2 &&
@@ -1586,10 +1638,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return existing.id;
     }
 
-    const isGroup = allParticipants.length > 2;
-    const otherUserId = participantIds.find((id) => id !== currentUserId) || participantIds[0];
+    const dmId = canonicalId || 'dm-' + Date.now();
     const newDM: DirectMessageConversation = {
-      id: 'dm-' + Date.now(),
+      id: dmId,
       workspaceId: activeWorkspaceId,
       participantIds: allParticipants,
       isGroup,
@@ -1807,13 +1858,38 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Filter messages for active conversation and dynamically translate whole screen to selected language
   const activeConversationMessages = React.useMemo(() => {
+    let dmParticipantIds: string[] | null = null;
+    let canonicalDMId: string | null = null;
+    if (activeView.type === 'dm') {
+      const activeDM = dms.find((d) => d.id === activeView.id);
+      if (activeDM && !activeDM.isGroup && activeDM.participantIds?.length === 2) {
+        dmParticipantIds = activeDM.participantIds;
+        canonicalDMId = getCanonicalDMId(activeDM.participantIds[0], activeDM.participantIds[1]);
+      }
+    }
+
     const raw = messages.filter((m) => {
       if (m.parentId) return false;
       if (m.hiddenForUserIds?.includes(currentUserId)) return false;
       if (activeView.type === 'channel') {
         return m.conversationType === 'channel' && m.conversationId === activeView.id;
       } else {
-        return m.conversationType === 'dm' && m.conversationId === activeView.id;
+        if (m.conversationType !== 'dm') return false;
+        if (m.conversationId === activeView.id) return true;
+        if (canonicalDMId && m.conversationId === canonicalDMId) return true;
+        if (dmParticipantIds && dmParticipantIds.length === 2) {
+          const otherUserId = dmParticipantIds.find((id) => id !== currentUserId);
+          if (otherUserId && (m.senderId === otherUserId || m.senderId === currentUserId)) {
+            const msgDM = dms.find((d) => d.id === m.conversationId);
+            if (msgDM && !msgDM.isGroup) {
+              return msgDM.participantIds.includes(otherUserId) && msgDM.participantIds.includes(currentUserId);
+            }
+            if (m.conversationId.includes(otherUserId) || m.senderId === otherUserId) {
+              return true;
+            }
+          }
+        }
+        return false;
       }
     });
 
@@ -1824,7 +1900,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       content: translateText(m.content, selectedLanguage),
       isTranslated: true,
     }));
-  }, [messages, activeView, selectedLanguage, currentUserId]);
+  }, [messages, activeView, dms, selectedLanguage, currentUserId]);
 
   const activeThreadMessage = React.useMemo(() => {
     if (!activeThreadMessageId) return null;
@@ -1891,10 +1967,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const cleanContent = sanitizeInput(content.trim());
       const msgId = 'msg-' + Date.now();
 
+      let targetConvId = activeView.id;
+      if (activeView.type === 'dm') {
+        const activeDM = dms.find((d) => d.id === activeView.id);
+        if (activeDM && !activeDM.isGroup && activeDM.participantIds?.length === 2) {
+          targetConvId = getCanonicalDMId(activeDM.participantIds[0], activeDM.participantIds[1]);
+        }
+      }
+
       const newMsg: Message = {
         id: msgId,
         conversationType: activeView.type,
-        conversationId: activeView.id,
+        conversationId: targetConvId,
         senderId: currentUserId,
         content: cleanContent,
         timestamp: new Date().toISOString(),
@@ -1904,7 +1988,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       // Encrypt message with AES-256-GCM and persist to Supabase
-      encryptMessage(cleanContent, activeView.id).then((payload) => {
+      encryptMessage(cleanContent, targetConvId).then((payload) => {
         setMessages((prev) =>
           prev.map((m) => (m.id === msgId ? { ...m, encryptedPayload: payload } : m))
         );
@@ -1914,7 +1998,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             id: msgId,
             workspaceId: activeWorkspaceId,
             conversationType: activeView.type,
-            conversationId: activeView.id,
+            conversationId: targetConvId,
             senderId: currentUserId,
             content: cleanContent,
             attachments: attachments && attachments.length > 0 ? attachments : [],
@@ -1926,7 +2010,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
-      setMessages((prev) => [...prev, newMsg]);
+      setMessages((prev) => [...prev, { ...newMsg, conversationId: activeView.id }]);
       soundFX.playMessageSent();
 
       // Immediately broadcast over live Supabase Realtime channel and local cross-tab channel
@@ -1960,7 +2044,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
     },
-    [activeView, currentUserId, activeWorkspaceId, addToast]
+    [activeView, currentUserId, activeWorkspaceId, dms, addToast]
   );
 
   // Edit Message

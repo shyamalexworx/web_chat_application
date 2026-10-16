@@ -677,7 +677,6 @@ export async function fetchConversationsFromSupabase(workspaceId: string, userId
         user_id
       )
     `)
-    .eq('workspace_id', workspaceId)
     .order('last_activity', { ascending: false });
 
   if (error) {
@@ -685,9 +684,13 @@ export async function fetchConversationsFromSupabase(workspaceId: string, userId
     return [];
   }
 
-  // Filter conversations where user is participant
+  // Filter conversations where user is participant (1-on-1 DMs persist across workspaces)
   return (data || [])
-    .filter((conv: any) => (conv.conversation_participants || []).some((p: any) => p.user_id === userId))
+    .filter((conv: any) => {
+      const isParticipant = (conv.conversation_participants || []).some((p: any) => p.user_id === userId);
+      if (!isParticipant) return false;
+      return conv.workspace_id === workspaceId || !conv.is_group;
+    })
     .map((conv: any) => ({
       id: conv.id,
       workspaceId: conv.workspace_id,
@@ -747,16 +750,27 @@ export async function saveConversationToSupabase(conv: {
  */
 export async function fetchMessagesFromSupabase(
   conversationType: 'channel' | 'dm',
-  conversationId: string
+  conversationId: string | string[]
 ) {
   if (!isSupabaseConfigured) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('messages')
     .select('*')
-    .eq('conversation_type', conversationType)
-    .eq('conversation_id', conversationId)
-    .order('created_at', { ascending: true });
+    .eq('conversation_type', conversationType);
+
+  if (Array.isArray(conversationId)) {
+    if (conversationId.length === 0) return [];
+    if (conversationId.length === 1) {
+      query = query.eq('conversation_id', conversationId[0]);
+    } else {
+      query = query.in('conversation_id', conversationId);
+    }
+  } else {
+    query = query.eq('conversation_id', conversationId);
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: true });
 
   if (error) {
     console.warn('Error fetching messages from Supabase:', error);

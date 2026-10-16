@@ -17,11 +17,12 @@ import {
   Shield,
   ShieldCheck,
   Languages,
+  RotateCcw,
   X,
   User as UserIcon,
   Users as UsersIcon,
 } from 'lucide-react';
-import { translateText } from '../../utils/translation';
+import { translateText, SUPPORTED_LANGUAGES } from '../../utils/translation';
 import { resolveUserAvatar } from '../../utils/avatar';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 
@@ -42,6 +43,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
     deleteMessage,
     setActiveThreadMessageId,
     setIsUserProfileOpen,
+    translateSingleMessage,
+    restoreOriginalSingleMessage,
     selectedLanguage,
     addToast,
     t,
@@ -56,6 +59,106 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
   const [showOriginal, setShowOriginal] = useState(false);
   const [showCipherModal, setShowCipherModal] = useState(false);
   const [copiedCipher, setCopiedCipher] = useState(false);
+
+  // Action bar visibility and per-message language picker state
+  const [showActionBar, setShowActionBar] = useState(false);
+  const [showLangMenu, setShowLangMenu] = useState(false);
+
+  const messageRef = React.useRef<HTMLDivElement>(null);
+  const longPressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchMoved = React.useRef(false);
+  const touchStartPos = React.useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const isTouchInteraction = React.useRef(false);
+  const touchResetTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Dismiss action bar & language menu on outside click or tap
+  React.useEffect(() => {
+    if (!showActionBar && !showLangMenu && !showEmojiPicker) return;
+
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (messageRef.current && !messageRef.current.contains(e.target as Node)) {
+        setShowActionBar(false);
+        setShowLangMenu(false);
+        setShowEmojiPicker(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [showActionBar, showLangMenu, showEmojiPicker]);
+
+  // Touch handlers for mobile and tablet: Long press opens action bar (~450ms)
+  const handleTouchStart = (e: React.TouchEvent) => {
+    isTouchInteraction.current = true;
+    touchMoved.current = false;
+    if (e.touches.length > 0) {
+      touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+    longPressTimer.current = setTimeout(() => {
+      if (!touchMoved.current) {
+        setShowActionBar(true);
+        if (navigator.vibrate) {
+          try {
+            navigator.vibrate(35);
+          } catch {}
+        }
+      }
+    }, 450);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length > 0) {
+      const dx = Math.abs(e.touches[0].clientX - touchStartPos.current.x);
+      const dy = Math.abs(e.touches[0].clientY - touchStartPos.current.y);
+      if (dx > 8 || dy > 8) {
+        touchMoved.current = true;
+        if (longPressTimer.current) {
+          clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+        }
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    if (touchResetTimer.current) clearTimeout(touchResetTimer.current);
+    touchResetTimer.current = setTimeout(() => {
+      isTouchInteraction.current = false;
+    }, 400);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (isTouchInteraction.current) {
+      e.preventDefault();
+      setShowActionBar(true);
+    }
+  };
+
+  // Laptop/Desktop left click handler: Left click on message opens/toggles action bar
+  const handleMessageClick = (e: React.MouseEvent) => {
+    // If mobile/tablet touch interaction, ignore synthetic click (long press is used instead)
+    if (isTouchInteraction.current) {
+      return;
+    }
+    // If text was selected by mouse, do not toggle
+    const selection = window.getSelection();
+    if (selection && selection.toString().trim().length > 0) {
+      return;
+    }
+    if (isEditing) return;
+
+    setShowActionBar((prev) => !prev);
+  };
 
   // Check if current user is the author
   const isCurrentUser = Boolean(
@@ -101,13 +204,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
       editMessage(message.id, editDraft.trim());
     }
     setIsEditing(false);
-  };
-
-  const handleSingleTranslate = () => {
-    const original = message.originalContent || message.content;
-    const translated = translateText(original, selectedLanguage);
-    editMessage(message.id, translated);
-    addToast('Translated message', 'success');
   };
 
   const formatTimestamp = (iso: string) => {
@@ -226,95 +322,206 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
     });
   };
 
-  // Hover Action Bar component
-  const renderActionBar = () => (
-    <div
-      className={`message-actions absolute -top-3.5 flex items-center bg-[#181C25] border border-[#252B36] rounded-lg shadow-elevated p-0.5 z-20 space-x-0.5 ${
-        isCurrentUser ? 'right-4' : 'left-12'
-      }`}
-    >
-      {COMMON_EMOJIS.slice(0, 4).map((emoji) => (
-        <button
-          key={emoji}
-          type="button"
-          onClick={() => toggleReaction(message.id, emoji)}
-          className="p-1.5 hover:bg-[#252B36] rounded text-xs transition-colors hover:scale-110 cursor-pointer"
-          title={`React with ${emoji}`}
-        >
-          {emoji}
-        </button>
-      ))}
+  // Action Bar component (dismisses on reaction/action, opens on click/long-press)
+  const renderActionBar = () => {
+    if (!showActionBar) return null;
 
-      <div className="w-[1px] h-3.5 bg-[#252B36] mx-0.5" />
-
-      <button
-        type="button"
-        onClick={handleSingleTranslate}
-        className="p-1.5 text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
-        title="Translate message"
-      >
-        <Languages className="w-3.5 h-3.5" />
-      </button>
-
-      <button
-        type="button"
-        onClick={() => setActiveThreadMessageId(message.id)}
-        className="p-1.5 text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
-        title="Reply in thread"
-      >
-        <MessageSquare className="w-3.5 h-3.5" />
-      </button>
-
-      <button
-        type="button"
-        onClick={() => togglePinMessage(message.id)}
-        className={`p-1.5 rounded transition-colors cursor-pointer ${
-          message.isPinned
-            ? 'text-[#4F8CFF] bg-[#4F8CFF]/15'
-            : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36]'
+    return (
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className={`message-actions absolute -top-3.5 flex items-center bg-[#181C25] border border-[#252B36] rounded-lg shadow-elevated p-0.5 z-20 space-x-0.5 ${
+          isCurrentUser ? 'right-4' : 'left-12'
         }`}
-        title={message.isPinned ? 'Unpin message' : 'Pin message'}
       >
-        <Pin className="w-3.5 h-3.5" />
-      </button>
+        {COMMON_EMOJIS.slice(0, 4).map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleReaction(message.id, emoji);
+              setShowActionBar(false);
+              setShowLangMenu(false);
+              setShowEmojiPicker(false);
+            }}
+            className="p-1.5 hover:bg-[#252B36] rounded text-xs transition-colors hover:scale-110 cursor-pointer"
+            title={`React with ${emoji}`}
+          >
+            {emoji}
+          </button>
+        ))}
 
-      <button
-        type="button"
-        onClick={handleCopyText}
-        className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
-        title="Copy text"
-      >
-        <Copy className="w-3.5 h-3.5" />
-      </button>
+        <div className="w-[1px] h-3.5 bg-[#252B36] mx-0.5" />
 
-      {isCurrentUser && (
+        {/* Translation Icon (marked in black) with Language Picker Popup */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowLangMenu((prev) => !prev);
+            }}
+            className={`p-1.5 rounded transition-colors cursor-pointer ${
+              showLangMenu
+                ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]'
+                : 'text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36]'
+            }`}
+            title="Translate message"
+          >
+            <Languages className="w-3.5 h-3.5" />
+          </button>
+
+          {showLangMenu && (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className={`absolute top-full mt-2 w-56 max-h-64 overflow-y-auto bg-[#181C25] border border-[#252B36] rounded-xl shadow-2xl p-1.5 z-50 animate-slide-down custom-scrollbar ${
+                isCurrentUser ? 'right-0' : 'left-0'
+              }`}
+            >
+              <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#929BAA] border-b border-[#252B36] mb-1 flex items-center justify-between">
+                <span>Select Language</span>
+                <Languages className="w-3 h-3 text-[#4F8CFF]" />
+              </div>
+
+              {message.isTranslated && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    restoreOriginalSingleMessage(message.id);
+                    setShowLangMenu(false);
+                    setShowActionBar(false);
+                    addToast('Restored original message', 'info');
+                  }}
+                  className="w-full flex items-center space-x-2 px-2.5 py-1.5 mb-1 rounded-lg text-left text-xs text-[#929BAA] hover:text-white hover:bg-[#252B36] transition-colors border-b border-[#252B36]/60 cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3 text-[#929BAA]" />
+                  <span>Show Original</span>
+                </button>
+              )}
+
+              <div className="space-y-0.5">
+                {SUPPORTED_LANGUAGES.map((lang) => {
+                  const isSelected = message.translatedLanguage === lang.code;
+                  return (
+                    <button
+                      key={lang.code}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        translateSingleMessage(message.id, lang.code);
+                        setShowLangMenu(false);
+                        setShowActionBar(false);
+                        addToast(`Message translated to ${lang.name}`, 'success');
+                      }}
+                      className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left text-xs transition-colors cursor-pointer ${
+                        isSelected
+                          ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] font-medium'
+                          : 'text-[#F5F7FA] hover:bg-[#252B36]'
+                      }`}
+                    >
+                      <div className="flex items-center space-x-2 truncate">
+                        <span className="text-sm shrink-0">{lang.flag}</span>
+                        <span className="truncate">{lang.name}</span>
+                        {lang.nativeName && lang.nativeName !== lang.name && (
+                          <span className="text-[10px] text-[#929BAA] truncate">
+                            ({lang.nativeName})
+                          </span>
+                        )}
+                      </div>
+                      {isSelected && <Check className="w-3 h-3 text-[#4F8CFF] shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         <button
           type="button"
-          onClick={() => {
-            setEditDraft(message.content);
-            setIsEditing(true);
+          onClick={(e) => {
+            e.stopPropagation();
+            setActiveThreadMessageId(message.id);
+            setShowActionBar(false);
           }}
           className="p-1.5 text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
-          title="Edit message"
+          title="Reply in thread"
         >
-          <Edit2 className="w-3.5 h-3.5" />
+          <MessageSquare className="w-3.5 h-3.5" />
         </button>
-      )}
 
-      <button
-        type="button"
-        onClick={() => setShowDeleteModal(true)}
-        className="p-1.5 text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
-        title="Delete message"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
-    </div>
-  );
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePinMessage(message.id);
+            setShowActionBar(false);
+          }}
+          className={`p-1.5 rounded transition-colors cursor-pointer ${
+            message.isPinned
+              ? 'text-[#4F8CFF] bg-[#4F8CFF]/15'
+              : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36]'
+          }`}
+          title={message.isPinned ? 'Unpin message' : 'Pin message'}
+        >
+          <Pin className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            handleCopyText();
+            setShowActionBar(false);
+          }}
+          className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
+          title="Copy text"
+        >
+          <Copy className="w-3.5 h-3.5" />
+        </button>
+
+        {isCurrentUser && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditDraft(message.content);
+              setIsEditing(true);
+              setShowActionBar(false);
+            }}
+            className="p-1.5 text-[#929BAA] hover:text-[#4F8CFF] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
+            title="Edit message"
+          >
+            <Edit2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowDeleteModal(true);
+            setShowActionBar(false);
+          }}
+          className="p-1.5 text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#252B36] rounded transition-colors cursor-pointer"
+          title="Delete message"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    );
+  };
 
   return (
     <div
-      className={`message-row group relative px-4 sm:px-6 py-1.5 transition-colors ${
+      ref={messageRef}
+      onClick={handleMessageClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onContextMenu={handleContextMenu}
+      className={`message-row group relative px-4 sm:px-6 py-1.5 transition-colors cursor-pointer select-text ${
         message.isPinned ? 'bg-[#4F8CFF]/5 border-l-2 border-[#4F8CFF]' : 'hover:bg-[#12151C]/40'
       }`}
     >
@@ -330,7 +537,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
         </div>
       )}
 
-      {/* Action Bar on hover */}
+      {/* Action Bar (rendered when active) */}
       {renderActionBar()}
 
       {/* ========================================================================= */}
@@ -392,7 +599,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                           return (
                             <div
                               key={att.id}
-                              onClick={() => setLightboxImage(att.previewUrl || att.url)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLightboxImage(att.previewUrl || att.url);
+                              }}
                               className="group/img relative rounded-xl border border-white/20 overflow-hidden max-w-sm cursor-zoom-in shadow-sm"
                             >
                               <img
@@ -412,6 +622,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                           return (
                             <div
                               key={att.id}
+                              onClick={(e) => e.stopPropagation()}
                               className="group/vid relative rounded-xl border border-white/20 overflow-hidden max-w-md bg-black shadow-sm"
                             >
                               <video
@@ -429,19 +640,21 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
 
                         if (att.type === 'audio') {
                           return (
-                            <VoiceMessagePlayer
-                              key={att.id}
-                              url={att.url}
-                              name={att.name}
-                              duration={att.duration}
-                              senderAvatar={senderAvatar}
-                            />
+                            <div key={att.id} onClick={(e) => e.stopPropagation()}>
+                              <VoiceMessagePlayer
+                                url={att.url}
+                                name={att.name}
+                                duration={att.duration}
+                                senderAvatar={senderAvatar}
+                              />
+                            </div>
                           );
                         }
 
                         return (
                           <div
                             key={att.id}
+                            onClick={(e) => e.stopPropagation()}
                             className="flex items-center space-x-3 px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs max-w-xs transition-colors"
                           >
                             <div className="p-2 bg-white/20 rounded-lg text-white">
@@ -457,7 +670,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                             </div>
                             <button
                               type="button"
-                              onClick={() => addToast(`Downloaded ${att.name}`, 'success')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addToast(`Downloaded ${att.name}`, 'success');
+                              }}
                               className="p-1 text-white/80 hover:text-white rounded hover:bg-white/20 transition-colors cursor-pointer"
                               title="Download file"
                             >
@@ -475,7 +691,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                     {message.isTranslated && (
                       <button
                         type="button"
-                        onClick={() => setShowOriginal(!showOriginal)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowOriginal(!showOriginal);
+                        }}
                         className="text-[10px] text-white underline cursor-pointer"
                       >
                         {showOriginal ? t('showing_original') : t('translated')}
@@ -497,7 +716,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                     <button
                       key={emoji}
                       type="button"
-                      onClick={() => toggleReaction(message.id, emoji)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleReaction(message.id, emoji);
+                        setShowActionBar(false);
+                      }}
                       className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs transition-all cursor-pointer ${
                         hasReacted
                           ? 'bg-[#4F8CFF]/20 border border-[#4F8CFF]/50 text-[#4F8CFF]'
@@ -512,7 +735,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
 
                 <button
                   type="button"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowEmojiPicker(!showEmojiPicker);
+                  }}
                   className="p-1 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] rounded-full text-[#929BAA] hover:text-[#F5F7FA] transition-colors cursor-pointer"
                   title="Add reaction"
                 >
@@ -525,7 +751,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
             {message.replyCount && message.replyCount > 0 ? (
               <button
                 type="button"
-                onClick={() => setActiveThreadMessageId(message.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveThreadMessageId(message.id);
+                }}
                 className="mt-1.5 inline-flex items-center space-x-2 px-2.5 py-1 bg-[#181C25]/80 hover:bg-[#1E2330] border border-[#252B36] rounded-md text-xs text-[#4F8CFF] group/thread transition-colors cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
@@ -548,7 +777,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
               <img
                 src={senderAvatar}
                 alt={sender.name}
-                onClick={() => setIsUserProfileOpen(true)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsUserProfileOpen(true);
+                }}
                 className="w-9 h-9 rounded-xl object-cover border border-[#252B36] hover:scale-105 transition-transform bg-[#0E1118]"
               />
               <span
@@ -566,7 +798,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
             {!isGrouped && (
               <div className="flex items-center space-x-2 mb-1">
                 <span
-                  onClick={() => setIsUserProfileOpen(true)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsUserProfileOpen(true);
+                  }}
                   className="text-xs font-semibold text-[#F5F7FA] hover:text-[#4F8CFF] cursor-pointer transition-colors"
                 >
                   {sender.name}
@@ -632,7 +867,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                           return (
                             <div
                               key={att.id}
-                              onClick={() => setLightboxImage(att.previewUrl || att.url)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setLightboxImage(att.previewUrl || att.url);
+                              }}
                               className="group/img relative rounded-xl border border-[#252B36] overflow-hidden max-w-sm cursor-zoom-in"
                             >
                               <img
@@ -652,6 +890,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                           return (
                             <div
                               key={att.id}
+                              onClick={(e) => e.stopPropagation()}
                               className="group/vid relative rounded-xl border border-[#252B36] overflow-hidden max-w-md bg-black/60"
                             >
                               <video
@@ -669,19 +908,21 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
 
                         if (att.type === 'audio') {
                           return (
-                            <VoiceMessagePlayer
-                              key={att.id}
-                              url={att.url}
-                              name={att.name}
-                              duration={att.duration}
-                              senderAvatar={senderAvatar}
-                            />
+                            <div key={att.id} onClick={(e) => e.stopPropagation()}>
+                              <VoiceMessagePlayer
+                                url={att.url}
+                                name={att.name}
+                                duration={att.duration}
+                                senderAvatar={senderAvatar}
+                              />
+                            </div>
                           );
                         }
 
                         return (
                           <div
                             key={att.id}
+                            onClick={(e) => e.stopPropagation()}
                             className="flex items-center space-x-3 px-3 py-2 bg-[#12151C] hover:bg-[#1E2330] border border-[#252B36] rounded-xl text-xs max-w-xs transition-colors"
                           >
                             <div className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] text-[#4F8CFF]">
@@ -697,7 +938,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                             </div>
                             <button
                               type="button"
-                              onClick={() => addToast(`Downloaded ${att.name}`, 'success')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                addToast(`Downloaded ${att.name}`, 'success');
+                              }}
                               className="p-1 text-[#929BAA] hover:text-[#F5F7FA] rounded hover:bg-[#252B36] transition-colors cursor-pointer"
                               title="Download file"
                             >
@@ -715,7 +959,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                     {message.isTranslated && (
                       <button
                         type="button"
-                        onClick={() => setShowOriginal(!showOriginal)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setShowOriginal(!showOriginal);
+                        }}
                         className="text-[10px] text-[#4F8CFF] hover:underline cursor-pointer"
                       >
                         {showOriginal ? t('showing_original') : t('translated')}
@@ -736,7 +983,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                     <button
                       key={emoji}
                       type="button"
-                      onClick={() => toggleReaction(message.id, emoji)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleReaction(message.id, emoji);
+                        setShowActionBar(false);
+                      }}
                       className={`flex items-center space-x-1 px-2 py-0.5 rounded-full text-xs transition-all cursor-pointer ${
                         hasReacted
                           ? 'bg-[#4F8CFF]/20 border border-[#4F8CFF]/50 text-[#4F8CFF]'
@@ -751,7 +1002,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
 
                 <button
                   type="button"
-                  onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowEmojiPicker(!showEmojiPicker);
+                  }}
                   className="p-1 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] rounded-full text-[#929BAA] hover:text-[#F5F7FA] transition-colors cursor-pointer"
                   title="Add reaction"
                 >
@@ -764,7 +1018,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
             {message.replyCount && message.replyCount > 0 ? (
               <button
                 type="button"
-                onClick={() => setActiveThreadMessageId(message.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveThreadMessageId(message.id);
+                }}
                 className="mt-1.5 inline-flex items-center space-x-2 px-2.5 py-1 bg-[#181C25]/80 hover:bg-[#1E2330] border border-[#252B36] rounded-md text-xs text-[#4F8CFF] group/thread transition-colors cursor-pointer"
               >
                 <MessageSquare className="w-3.5 h-3.5" />
@@ -781,8 +1038,15 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
       {/* Emoji Picker Popup with outside click backdrop */}
       {showEmojiPicker && (
         <>
-          <div className="fixed inset-0 z-20 bg-transparent" onClick={() => setShowEmojiPicker(false)} />
           <div
+            className="fixed inset-0 z-20 bg-transparent"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowEmojiPicker(false);
+            }}
+          />
+          <div
+            onClick={(e) => e.stopPropagation()}
             className={`absolute mt-1 bg-[#181C25] border border-[#252B36] rounded-xl shadow-modal p-2 z-30 flex items-center space-x-1 animate-slide-down ${
               isCurrentUser ? 'right-6' : 'left-14'
             }`}
@@ -791,9 +1055,12 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
               <button
                 key={e}
                 type="button"
-                onClick={() => {
+                onClick={(evt) => {
+                  evt.stopPropagation();
                   toggleReaction(message.id, e);
                   setShowEmojiPicker(false);
+                  setShowActionBar(false);
+                  setShowLangMenu(false);
                 }}
                 className="p-1.5 hover:bg-[#252B36] rounded-lg text-sm hover:scale-115 transition-transform cursor-pointer"
               >

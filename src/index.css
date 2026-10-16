@@ -72,18 +72,20 @@
   user-select: text;
 }
 
-/* Message hover action bar transition */
-.message-row:hover .message-actions {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
+/* Message action bar transition */
+.message-actions {
+  animation: messageActionsFadeIn 0.15s ease-out;
 }
 
-.message-actions {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(4px);
-  transition: all 0.15s ease-in-out;
+@keyframes messageActionsFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Smooth badges and status rings */

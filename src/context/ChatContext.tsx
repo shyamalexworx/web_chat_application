@@ -157,6 +157,8 @@ interface ChatContextType {
   autoTranslateEnabled: boolean;
   setAutoTranslateEnabled: (enabled: boolean) => void;
   translateActiveConversation: (lang: string) => void;
+  translateSingleMessage: (messageId: string, lang: string) => void;
+  restoreOriginalSingleMessage: (messageId: string) => void;
   resetTranslations: () => void;
   t: (key: string) => string;
 
@@ -1779,25 +1781,29 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [currentUserId, addToast]
   );
 
-  // Toggle Reaction
+  // Toggle Reaction - Enforces single emoji reaction per user per message
   const toggleReaction = useCallback((messageId: string, emoji: string) => {
     setMessages((prev) =>
       prev.map((m) => {
         if (m.id !== messageId) return m;
 
         const currentReactors = m.reactions[emoji] || [];
-        const hasReacted = currentReactors.includes(currentUserId);
+        const hadReactedWithThisEmoji = currentReactors.includes(currentUserId);
 
-        const newReactions = { ...m.reactions };
-        if (hasReacted) {
-          const filtered = currentReactors.filter((id) => id !== currentUserId);
-          if (filtered.length === 0) {
-            delete newReactions[emoji];
-          } else {
-            newReactions[emoji] = filtered;
+        const newReactions: Record<string, string[]> = {};
+
+        // 1. Remove current user from ALL emojis on this message
+        Object.entries(m.reactions).forEach(([e, userIds]) => {
+          const filtered = userIds.filter((id) => id !== currentUserId);
+          if (filtered.length > 0) {
+            newReactions[e] = filtered;
           }
-        } else {
-          newReactions[emoji] = [...currentReactors, currentUserId];
+        });
+
+        // 2. If the user had not already reacted with this emoji, add them
+        if (!hadReactedWithThisEmoji) {
+          const existing = newReactions[emoji] || [];
+          newReactions[emoji] = [...existing, currentUserId];
         }
 
         if (isSupabaseConfigured) {
@@ -1919,6 +1925,50 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           isTranslated: true,
           translatedLanguage: lang,
         };
+      })
+    );
+  }, []);
+
+  const translateSingleMessage = useCallback((messageId: string, lang: string) => {
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const original = m.originalContent || m.content;
+        const translated = translateText(original, lang);
+        const updated = {
+          ...m,
+          originalContent: original,
+          content: translated,
+          isTranslated: true,
+          translatedLanguage: lang,
+        };
+        if (isSupabaseConfigured) {
+          updateMessageInSupabase(messageId, {
+            content: translated,
+          }).catch((err) => console.warn('Supabase translate message notice:', err));
+        }
+        return updated;
+      })
+    );
+  }, []);
+
+  const restoreOriginalSingleMessage = useCallback((messageId: string) => {
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+        const restoredContent = m.originalContent || m.content;
+        const updated = {
+          ...m,
+          content: restoredContent,
+          isTranslated: false,
+          translatedLanguage: undefined,
+        };
+        if (isSupabaseConfigured) {
+          updateMessageInSupabase(messageId, {
+            content: restoredContent,
+          }).catch((err) => console.warn('Supabase restore message notice:', err));
+        }
+        return updated;
       })
     );
   }, []);
@@ -2155,6 +2205,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         autoTranslateEnabled,
         setAutoTranslateEnabled,
         translateActiveConversation,
+        translateSingleMessage,
+        restoreOriginalSingleMessage,
         resetTranslations,
         t,
 

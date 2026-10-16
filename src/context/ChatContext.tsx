@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import type {
   User,
   Workspace,
@@ -277,6 +278,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [activeThreadMessageId, setActiveThreadMessageId] = useState<string | null>(null);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
 
+  // Live Realtime Channel & State Sync Refs (Eliminates stale closure bugs)
+  const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
+  const localBroadcastRef = useRef<BroadcastChannel | null>(null);
+  const usersRef = useRef<User[]>(users);
+  const channelsRef = useRef<Channel[]>(channels);
+  const dmsRef = useRef<DirectMessageConversation[]>(dms);
+  const activeViewRef = useRef<ActiveView>(activeView);
+  const currentUserIdRef = useRef<string>(currentUserId);
+
+  useEffect(() => { usersRef.current = users; }, [users]);
+  useEffect(() => { channelsRef.current = channels; }, [channels]);
+  useEffect(() => { dmsRef.current = dms; }, [dms]);
+  useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
+  useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
+
   // Translation State
   const [isTranslationOpen, setIsTranslationOpen] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
@@ -553,14 +569,187 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     syncFromSupabase();
 
+    // Initialize cross-tab local broadcast channel
+    let localBroadcast: BroadcastChannel | null = null;
+    try {
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        localBroadcast = new BroadcastChannel('pulsechat_cross_tab_sync');
+        localBroadcastRef.current = localBroadcast;
+        localBroadcast.onmessage = (event) => {
+          const { type, payload } = event.data || {};
+          if (type === 'new_message' && payload) {
+            handleIncomingMessage(payload);
+          } else if (type === 'update_message' && payload) {
+            handleUpdateMessage(payload);
+          } else if (type === 'delete_message' && payload?.id) {
+            handleDeleteMessage(payload.id);
+          } else if (type === 'new_invite' && payload) {
+            handleIncomingInvite(payload);
+          }
+        };
+      }
+    } catch (e) {}
+
+    // Unified incoming message handler
+    const handleIncomingMessage = (incomingMsg: Message) => {
+      if (!isMounted || !incomingMsg?.id) return;
+
+      setMessages((prev) => {
+        const idx = prev.findIndex((m) => m.id === incomingMsg.id);
+        if (idx !== -1) {
+          return prev.map((m) => (m.id === incomingMsg.id ? { ...m, ...incomingMsg } : m));
+        }
+        if (incomingMsg.parentId) {
+          return prev
+            .map((m) =>
+              m.id === incomingMsg.parentId
+                ? {
+                    ...m,
+                    replyCount: (m.replyCount || 0) + 1,
+                    lastReplyAt: incomingMsg.timestamp,
+                  }
+                : m
+            )
+            .concat(incomingMsg);
+        }
+        return [...prev, incomingMsg];
+      });
+
+      // If it's a DM, make sure the DM conversation exists in state
+      if (incomingMsg.conversationType === 'dm') {
+        const hasDM = dmsRef.current.some((d) => d.id === incomingMsg.conversationId);
+        if (!hasDM && isSupabaseConfigured && currentUserId) {
+          fetchConversationsFromSupabase(activeWorkspaceId, currentUserId).then((remoteDMs) => {
+            if (isMounted && remoteDMs.length > 0) {
+              setDms((prev) => {
+                const map = new Map(prev.map((d) => [d.id, d]));
+                remoteDMs.forEach((d) => map.set(d.id, d));
+                return Array.from(map.values());
+              });
+            }
+          });
+        }
+      }
+
+      // If sent by someone else, play sound and trigger notification
+      if (incomingMsg.senderId !== currentUserIdRef.current) {
+        soundFX.playMessageReceived();
+
+        const latestUsers = usersRef.current;
+        const latestChannels = channelsRef.current;
+        const sender = latestUsers.find((u) => u.id === incomingMsg.senderId);
+        const senderName = sender ? sender.name : 'Team member';
+        const isChannel = incomingMsg.conversationType === 'channel';
+        const targetChan = isChannel ? latestChannels.find((c) => c.id === incomingMsg.conversationId) : null;
+        const notifTitle = isChannel
+          ? `${senderName} in #${targetChan?.name || 'channel'}`
+          : `New message from ${senderName}`;
+        const notifBody = incomingMsg.content || (incomingMsg.attachments?.length ? 'Sent an attachment' : 'New message');
+
+        const liveNotif: NotificationItem = {
+          id: 'notif-msg-' + incomingMsg.id,
+          userId: currentUserIdRef.current,
+          title: notifTitle,
+          body: notifBody.slice(0, 90),
+          type: isChannel ? 'channel' : 'dm',
+          timestamp: incomingMsg.timestamp || new Date().toISOString(),
+          isRead: false,
+          targetType: incomingMsg.conversationType,
+          targetId: incomingMsg.conversationId,
+        };
+        setNotifications((prev) => [liveNotif, ...prev.filter((n) => n.id !== liveNotif.id)]);
+      }
+    };
+
+    const handleUpdateMessage = (update: { id: string; content?: string; reactions?: Record<string, string[]>; isPinned?: boolean; attachments?: any[]; editedAt?: string }) => {
+      if (!isMounted || !update?.id) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === update.id
+            ? {
+                ...m,
+                ...(update.content !== undefined ? { content: update.content } : {}),
+                ...(update.reactions !== undefined ? { reactions: update.reactions } : {}),
+                ...(update.isPinned !== undefined ? { isPinned: update.isPinned } : {}),
+                ...(update.attachments !== undefined ? { attachments: update.attachments } : {}),
+                ...(update.editedAt !== undefined ? { editedAt: update.editedAt } : {}),
+              }
+            : m
+        )
+      );
+    };
+
+    const handleDeleteMessage = (messageId: string) => {
+      if (!isMounted || !messageId) return;
+      setMessages((prev) => prev.filter((m) => m.id !== messageId && m.parentId !== messageId));
+    };
+
+    const handleIncomingInvite = (inv: ChatInvite) => {
+      if (!isMounted || !inv) return;
+      const isForMe =
+        inv.receiverId === currentUserId ||
+        (currentUser.email && inv.receiverId.toLowerCase() === currentUser.email.toLowerCase());
+      if (isForMe && inv.senderId !== currentUserId) {
+        setInvites((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
+        soundFX.playMessageReceived();
+        const latestUsers = usersRef.current;
+        const latestChannels = channelsRef.current;
+        const sender = latestUsers.find((u) => u.id === inv.senderId);
+        const senderName = sender ? sender.name : 'A team member';
+        const isChan = inv.inviteType === 'channel';
+        const targetChan = isChan ? latestChannels.find((c) => c.id === inv.channelId || c.id === inv.conversationId) : null;
+        const notifTitle = isChan
+          ? `${senderName} invited you to join #${targetChan?.name || 'channel'}`
+          : `${senderName} sent you a chat invite`;
+        const liveNotif: NotificationItem = {
+          id: 'notif-inv-' + inv.id,
+          userId: currentUserId,
+          title: notifTitle,
+          body: 'Review your invitations in the notification bell to accept and connect.',
+          type: 'invite',
+          timestamp: inv.createdAt || new Date().toISOString(),
+          isRead: false,
+          targetType: isChan ? 'channel' : 'dm',
+          targetId: inv.conversationId || inv.channelId || '',
+        };
+        setNotifications((prev) => [liveNotif, ...prev.filter((n) => n.id !== liveNotif.id)]);
+        addToast(notifTitle, 'info');
+
+        fetchConversationsFromSupabase(activeWorkspaceId, currentUserId).then((remoteDMs) => {
+          if (isMounted && remoteDMs.length > 0) setDms(remoteDMs);
+        });
+      }
+    };
+
     // Realtime channel across messages, channels, conversations, profiles, chat_invites
     const channel = supabase
-      .channel('pulsechat_live_realtime')
+      .channel('pulsechat_live_realtime', {
+        config: {
+          broadcast: { self: false, ack: false },
+        },
+      })
+      .on('broadcast', { event: 'new_message' }, (payload) => {
+        const msg = payload?.payload as Message;
+        if (msg) handleIncomingMessage(msg);
+      })
+      .on('broadcast', { event: 'update_message' }, (payload) => {
+        const update = payload?.payload;
+        if (update?.id) handleUpdateMessage(update);
+      })
+      .on('broadcast', { event: 'delete_message' }, (payload) => {
+        const id = payload?.payload?.id;
+        if (id) handleDeleteMessage(id);
+      })
+      .on('broadcast', { event: 'new_invite' }, (payload) => {
+        const inv = payload?.payload as ChatInvite;
+        if (inv) handleIncomingInvite(inv);
+      })
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const row = payload.new as any;
+          if (!row?.id) return;
           const incomingMsg: Message = {
             id: row.id,
             conversationType: row.conversation_type,
@@ -575,37 +764,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             encryptedPayload: row.encrypted_payload || undefined,
             isEncrypted: Boolean(row.encrypted_payload),
           };
-
-          if (isMounted) {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === incomingMsg.id)) return prev;
-              return [...prev, incomingMsg];
-            });
-            if (row.sender_id !== currentUserId) {
-              soundFX.playMessageReceived();
-              const sender = users.find((u) => u.id === row.sender_id);
-              const senderName = sender ? sender.name : 'Team member';
-              const isChannel = row.conversation_type === 'channel';
-              const targetChan = isChannel ? channels.find((c) => c.id === row.conversation_id) : null;
-              const notifTitle = isChannel
-                ? `${senderName} in #${targetChan?.name || 'channel'}`
-                : `New message from ${senderName}`;
-              const notifBody = row.content || (row.attachments?.length ? 'Sent an attachment' : 'New message');
-
-              const liveNotif: NotificationItem = {
-                id: 'notif-msg-' + row.id,
-                userId: currentUserId,
-                title: notifTitle,
-                body: notifBody.slice(0, 90),
-                type: isChannel ? 'channel' : 'dm',
-                timestamp: row.created_at || new Date().toISOString(),
-                isRead: false,
-                targetType: row.conversation_type,
-                targetId: row.conversation_id,
-              };
-              setNotifications((prev) => [liveNotif, ...prev.filter((n) => n.id !== liveNotif.id)]);
-            }
-          }
+          handleIncomingMessage(incomingMsg);
         }
       )
       .on(
@@ -613,20 +772,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         { event: 'UPDATE', schema: 'public', table: 'messages' },
         (payload) => {
           const row = payload.new as any;
-          if (isMounted) {
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === row.id
-                  ? {
-                      ...m,
-                      content: row.content,
-                      isPinned: Boolean(row.is_pinned),
-                      reactions: row.reactions || {},
-                      attachments: row.attachments || [],
-                    }
-                  : m
-              )
-            );
+          if (row?.id) {
+            handleUpdateMessage({
+              id: row.id,
+              content: row.content,
+              isPinned: Boolean(row.is_pinned),
+              reactions: row.reactions || {},
+              attachments: row.attachments || [],
+              editedAt: row.edited_at,
+            });
           }
         }
       )
@@ -635,8 +789,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         { event: 'DELETE', schema: 'public', table: 'messages' },
         (payload) => {
           const row = payload.old as any;
-          if (row?.id && isMounted) {
-            setMessages((prev) => prev.filter((m) => m.id !== row.id));
+          if (row?.id) {
+            handleDeleteMessage(row.id);
           }
         }
       )
@@ -697,32 +851,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
             if (payload.eventType === 'INSERT') {
               const row = payload.new as any;
-              const isForMe = row && (
-                row.receiver_id === currentUserId ||
-                (currentUser.email && row.receiver_id?.toLowerCase() === currentUser.email.toLowerCase())
-              );
-              if (isForMe && row.sender_id !== currentUserId) {
-                soundFX.playMessageReceived();
-                const sender = users.find((u) => u.id === row.sender_id);
-                const senderName = sender ? sender.name : 'A team member';
-                const isChan = row.invite_type === 'channel';
-                const notifTitle = isChan
-                  ? `${senderName} invited you to join a channel`
-                  : `${senderName} sent you a chat invite`;
-                const notif: NotificationItem = {
-                  id: 'notif-inv-' + row.id,
-                  userId: currentUserId,
-                  title: notifTitle,
-                  body: 'Review your invitations in the sidebar to accept and connect.',
-                  type: 'invite',
-                  timestamp: row.created_at || new Date().toISOString(),
-                  isRead: false,
-                  targetType: isChan ? 'channel' : 'dm',
-                  targetId: row.conversation_id || '',
-                };
-                setNotifications((prev) => [notif, ...prev.filter((n) => n.id !== notif.id)]);
-                addToast(notifTitle, 'info');
-              }
+              if (row) handleIncomingInvite(row);
             }
           }
         }
@@ -737,42 +866,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
       )
-      .on(
-        'broadcast',
-        { event: 'new_invite' },
-        (payload) => {
-          const inv = payload?.payload as ChatInvite;
-          if (!inv) return;
-          const isForMe =
-            inv.receiverId === currentUserId ||
-            (currentUser.email && inv.receiverId.toLowerCase() === currentUser.email.toLowerCase());
-          if (isForMe && inv.senderId !== currentUserId && isMounted) {
-            setInvites((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
-            soundFX.playMessageReceived();
-            const sender = users.find((u) => u.id === inv.senderId);
-            const senderName = sender ? sender.name : 'A team member';
-            const isChan = inv.inviteType === 'channel';
-            const targetChan = isChan ? channels.find((c) => c.id === inv.channelId || c.id === inv.conversationId) : null;
-            const notifTitle = isChan
-              ? `${senderName} invited you to join #${targetChan?.name || 'channel'}`
-              : `${senderName} sent you a chat invite`;
-            const liveNotif: NotificationItem = {
-              id: 'notif-inv-' + inv.id,
-              userId: currentUserId,
-              title: notifTitle,
-              body: 'Review your invitations in the notification bell to accept and connect.',
-              type: 'invite',
-              timestamp: inv.createdAt || new Date().toISOString(),
-              isRead: false,
-              targetType: isChan ? 'channel' : 'dm',
-              targetId: inv.conversationId || inv.channelId || '',
-            };
-            setNotifications((prev) => [liveNotif, ...prev.filter((n) => n.id !== liveNotif.id)]);
-            addToast(notifTitle, 'info');
-          }
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('[Supabase Realtime] Connected to live channel');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.warn('[Supabase Realtime] Channel status:', status, err);
         }
-      )
-      .subscribe();
+      });
+
+    realtimeChannelRef.current = channel;
 
     const { data: authSub } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       if (currentSession?.user && (event === 'SIGNED_IN' || event === 'USER_UPDATED')) {
@@ -824,26 +926,118 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => {
       isMounted = false;
+      realtimeChannelRef.current = null;
       supabase.removeChannel(channel);
       authSub?.subscription?.unsubscribe();
+      if (localBroadcast) {
+        localBroadcast.close();
+        localBroadcastRef.current = null;
+      }
     };
   }, [activeWorkspaceId, currentUserId]);
 
-  // Load conversation messages on conversation switch
+  // Live Active Conversation Sync & Continuous Real-time Polling
   useEffect(() => {
-    if (!isSupabaseConfigured) return;
+    if (!isSupabaseConfigured || !activeView.id) return;
     let isMounted = true;
-    fetchMessagesFromSupabase(activeView.type, activeView.id).then((remoteMsgs) => {
-      if (isMounted && remoteMsgs.length > 0) {
-        setMessages((prev) => {
-          const map = new Map(prev.map((m) => [m.id, m]));
-          remoteMsgs.forEach((m) => map.set(m.id, m));
-          return Array.from(map.values());
-        });
+
+    const pullMessages = async () => {
+      try {
+        const remoteMsgs = await fetchMessagesFromSupabase(activeView.type, activeView.id);
+        if (isMounted && remoteMsgs.length > 0) {
+          setMessages((prev) => {
+            const map = new Map(prev.map((m) => [m.id, m]));
+            let hasChanges = false;
+            remoteMsgs.forEach((m) => {
+              const existing = map.get(m.id);
+              if (!existing) {
+                map.set(m.id, m);
+                hasChanges = true;
+              } else if (
+                existing.content !== m.content ||
+                JSON.stringify(existing.reactions) !== JSON.stringify(m.reactions) ||
+                existing.isPinned !== m.isPinned ||
+                existing.editedAt !== m.editedAt
+              ) {
+                map.set(m.id, { ...existing, ...m });
+                hasChanges = true;
+              }
+            });
+            return hasChanges ? Array.from(map.values()) : prev;
+          });
+        }
+      } catch (err) {}
+    };
+
+    // Immediate pull on view switch
+    pullMessages();
+
+    // 2-second interval polling fallback ensures real-time updates even without websockets
+    const interval = setInterval(pullMessages, 2000);
+
+    // Immediate pull on window focus / tab visibility
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        pullMessages();
       }
-    });
-    return () => { isMounted = false; };
+    };
+    document.addEventListener('visibilitychange', onVisibilityOrFocus);
+    window.addEventListener('focus', onVisibilityOrFocus);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus);
+      window.removeEventListener('focus', onVisibilityOrFocus);
+    };
   }, [activeView.type, activeView.id]);
+
+  // Periodic background sync for DMs, invites and presence so new incoming chats pop up live
+  useEffect(() => {
+    if (!isSupabaseConfigured || !currentUserId) return;
+    let isMounted = true;
+
+    const pullSidebarData = async () => {
+      try {
+        const [remoteDMs, remoteInvites] = await Promise.all([
+          fetchConversationsFromSupabase(activeWorkspaceId, currentUserId),
+          fetchInvitesFromSupabase(currentUserId, currentUser.email),
+        ]);
+
+        if (isMounted) {
+          if (remoteDMs.length > 0) {
+            setDms((prev) => {
+              const map = new Map(prev.map((d) => [d.id, d]));
+              let changed = false;
+              remoteDMs.forEach((d) => {
+                const existing = map.get(d.id);
+                if (!existing || existing.lastActivity !== d.lastActivity || existing.unreadCount !== d.unreadCount) {
+                  map.set(d.id, { ...existing, ...d });
+                  changed = true;
+                }
+              });
+              return changed ? Array.from(map.values()) : prev;
+            });
+          }
+
+          if (remoteInvites.length >= 0) {
+            setInvites((prev) => {
+              if (JSON.stringify(prev) !== JSON.stringify(remoteInvites)) {
+                return remoteInvites;
+              }
+              return prev;
+            });
+          }
+        }
+      } catch (err) {}
+    };
+
+    const interval = setInterval(pullSidebarData, 3500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [activeWorkspaceId, currentUserId, currentUser.email]);
 
   const recordSavedAccount = (accEmail: string, accName: string, accAvatar?: string) => {
     try {
@@ -1735,6 +1929,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setMessages((prev) => [...prev, newMsg]);
       soundFX.playMessageSent();
 
+      // Immediately broadcast over live Supabase Realtime channel and local cross-tab channel
+      try {
+        if (isSupabaseConfigured && realtimeChannelRef.current) {
+          realtimeChannelRef.current.send({
+            type: 'broadcast',
+            event: 'new_message',
+            payload: newMsg,
+          }).catch(() => {});
+        }
+      } catch (e) {}
+      try {
+        localBroadcastRef.current?.postMessage({
+          type: 'new_message',
+          payload: newMsg,
+        });
+      } catch (e) {}
+
       if (activeView.type === 'channel') {
         setChannels((prev) =>
           prev.map((c) => (c.id === activeView.id ? { ...c, unreadCount: 0 } : c))
@@ -1754,13 +1965,29 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Edit Message
   const editMessage = useCallback((messageId: string, newContent: string) => {
+    const editedAt = new Date().toISOString();
     setMessages((prev) =>
       prev.map((m) =>
         m.id === messageId
-          ? { ...m, content: newContent, editedAt: new Date().toISOString() }
+          ? { ...m, content: newContent, editedAt }
           : m
       )
     );
+    try {
+      if (isSupabaseConfigured && realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'update_message',
+          payload: { id: messageId, content: newContent, editedAt },
+        }).catch(() => {});
+      }
+    } catch (e) {}
+    try {
+      localBroadcastRef.current?.postMessage({
+        type: 'update_message',
+        payload: { id: messageId, content: newContent, editedAt },
+      });
+    } catch (e) {}
     if (isSupabaseConfigured) {
       updateMessageInSupabase(messageId, { content: newContent }).catch((err) =>
         console.warn('Supabase editMessage notice:', err)
@@ -1792,6 +2019,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setMessages((prev) =>
           prev.filter((m) => m.id !== messageId && m.parentId !== messageId)
         );
+        try {
+          if (isSupabaseConfigured && realtimeChannelRef.current) {
+            realtimeChannelRef.current.send({
+              type: 'broadcast',
+              event: 'delete_message',
+              payload: { id: messageId },
+            }).catch(() => {});
+          }
+        } catch (e) {}
+        try {
+          localBroadcastRef.current?.postMessage({
+            type: 'delete_message',
+            payload: { id: messageId },
+          });
+        } catch (e) {}
         if (isSupabaseConfigured) {
           deleteMessageFromSupabase(messageId).catch(() => {});
         }
@@ -1832,6 +2074,22 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           );
         }
 
+        try {
+          if (isSupabaseConfigured && realtimeChannelRef.current) {
+            realtimeChannelRef.current.send({
+              type: 'broadcast',
+              event: 'update_message',
+              payload: { id: messageId, reactions: newReactions },
+            }).catch(() => {});
+          }
+        } catch (e) {}
+        try {
+          localBroadcastRef.current?.postMessage({
+            type: 'update_message',
+            payload: { id: messageId, reactions: newReactions },
+          });
+        } catch (e) {}
+
         return { ...m, reactions: newReactions };
       })
     );
@@ -1848,6 +2106,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.warn('Supabase pin notice:', err)
           );
         }
+        try {
+          if (isSupabaseConfigured && realtimeChannelRef.current) {
+            realtimeChannelRef.current.send({
+              type: 'broadcast',
+              event: 'update_message',
+              payload: { id: messageId, isPinned: isNowPinned },
+            }).catch(() => {});
+          }
+        } catch (e) {}
+        try {
+          localBroadcastRef.current?.postMessage({
+            type: 'update_message',
+            payload: { id: messageId, isPinned: isNowPinned },
+          });
+        } catch (e) {}
         addToast(isNowPinned ? 'Message pinned to conversation' : 'Message unpinned', 'info');
         return { ...m, isPinned: isNowPinned };
       })
@@ -1917,9 +2190,25 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return [...updated, replyMsg];
       });
 
+      try {
+        if (isSupabaseConfigured && realtimeChannelRef.current) {
+          realtimeChannelRef.current.send({
+            type: 'broadcast',
+            event: 'new_message',
+            payload: replyMsg,
+          }).catch(() => {});
+        }
+      } catch (e) {}
+      try {
+        localBroadcastRef.current?.postMessage({
+          type: 'new_message',
+          payload: replyMsg,
+        });
+      } catch (e) {}
+
       soundFX.playMessageSent();
     },
-    [currentUserId, messages, addToast]
+    [currentUserId, activeWorkspaceId, messages, addToast]
   );
 
   const setSelfTyping = useCallback((_isTyping: boolean) => {

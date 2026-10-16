@@ -776,6 +776,7 @@ export async function fetchMessagesFromSupabase(
     parentId: m.parent_id || undefined,
     encryptedPayload: m.encrypted_payload || undefined,
     isEncrypted: Boolean(m.encrypted_payload),
+    editedAt: m.edited_at || undefined,
   }));
 }
 

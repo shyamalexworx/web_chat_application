@@ -124,9 +124,20 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
 
                 <button
                   onClick={() => {
-                    setActiveWorkspaceId(ws.id);
+                    if (isMobile) {
+                      setActiveWorkspaceId(ws.id);
+                    } else {
+                      if (isActive) {
+                        toggleSidebarCollapsed();
+                      } else {
+                        setActiveWorkspaceId(ws.id);
+                        if (isSidebarCollapsed) {
+                          toggleSidebarCollapsed();
+                        }
+                      }
+                    }
                   }}
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs transition-all duration-200 relative ${
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs transition-all duration-200 relative cursor-pointer ${
                     isActive
                       ? 'ring-2 ring-[#4F8CFF] text-white shadow-lg scale-105'
                       : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25]'
@@ -134,12 +145,17 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
                   style={{
                     backgroundColor: ws.iconBg || '#181C25',
                   }}
-                  title={ws.name}
+                  title={!isMobile && isActive ? (isSidebarCollapsed ? `Expand ${ws.name} Sidebar` : `Collapse ${ws.name} Sidebar`) : ws.name}
                 >
                   {ws.avatar ? (
                     <img src={ws.avatar} alt={ws.name} className="w-full h-full rounded-lg object-cover" />
                   ) : (
                     <span className="text-white drop-shadow-sm">{ws.icon}</span>
+                  )}
+
+                  {/* Indicator if active workspace & collapsed in desktop view */}
+                  {!isMobile && isActive && isSidebarCollapsed && (
+                    <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#4F8CFF] rounded-full ring-2 ring-[#0B0D12]" />
                   )}
                 </button>
 

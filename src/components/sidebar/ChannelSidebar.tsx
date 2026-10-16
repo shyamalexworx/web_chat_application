@@ -153,6 +153,13 @@ export const ChannelSidebar: React.FC = () => {
                 </p>
               </div>
             </button>
+            <button
+              onClick={toggleSidebarCollapsed}
+              className="hidden md:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#181C25] transition-colors cursor-pointer"
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
           </div>
 
       {/* Navigation List */}

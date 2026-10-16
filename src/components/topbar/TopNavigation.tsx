@@ -117,7 +117,6 @@ export const TopNavigation: React.FC = () => {
         <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
           <div className="relative overflow-hidden rounded-lg w-8 h-8 flex-shrink-0 bg-slate-100 dark:bg-[#12151D] border border-blue-500/25 shadow-sm flex items-center justify-center">
             <img src="/logo.png" alt="PulseChat" className="w-full h-full object-contain p-1" />
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/35 to-transparent animate-light-sweep pointer-events-none" />
           </div>
         </div>
         <div className="pl-2 pr-3 flex items-center cursor-pointer">

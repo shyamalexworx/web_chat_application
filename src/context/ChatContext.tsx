@@ -845,6 +845,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => { isMounted = false; };
   }, [activeView.type, activeView.id]);
 
+  const recordSavedAccount = (accEmail: string, accName: string, accAvatar?: string) => {
+    try {
+      const raw = localStorage.getItem('pulsechat_saved_accounts');
+      const list = raw ? JSON.parse(raw) : [];
+      const updated = [
+        { email: accEmail.toLowerCase(), name: accName, avatar: accAvatar },
+        ...list.filter((a: any) => a.email?.toLowerCase() !== accEmail.toLowerCase()),
+      ];
+      localStorage.setItem('pulsechat_saved_accounts', JSON.stringify(updated));
+    } catch (e) {
+      // ignore
+    }
+  };
+
   const login = useCallback(
     async (email: string, password?: string) => {
       const cleanEmail = email.trim().toLowerCase();
@@ -856,6 +870,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const uid = res.user.id;
             const userName = res.user.user_metadata?.full_name || cleanEmail.split('@')[0];
             const userHandle = res.user.user_metadata?.username || cleanEmail.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+            const loggedInAvatar = resolveUserAvatar(res.user.user_metadata?.avatar_url, userName);
+            recordSavedAccount(cleanEmail, userName, loggedInAvatar);
             const loggedInUser: User = {
               id: uid,
               name: userName,
@@ -885,6 +901,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Demo/local mode: strictly check if user exists in registered list
       const existing = users.find((u) => u.email.toLowerCase() === cleanEmail);
       if (existing) {
+        recordSavedAccount(existing.email, existing.name, existing.avatar);
         setCurrentUserId(existing.id);
         setIsAuthenticated(true);
         localStorage.setItem('pulsechat_auth', 'true');
@@ -934,6 +951,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               joinedDate: 'Today',
             };
             setUsers((prev) => [newUser, ...prev.filter((u) => u.id !== uid)]);
+            recordSavedAccount(cleanEmail, cleanName, newUser.avatar);
             setCurrentUserId(uid);
             setIsAuthenticated(true);
             localStorage.setItem('pulsechat_auth', 'true');
@@ -972,6 +990,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         joinedDate: 'Just now',
       };
       setUsers((prev) => [...prev, newUser]);
+      recordSavedAccount(cleanEmail, cleanName, resolvedAvatar);
       setCurrentUserId(newUser.id);
       setIsAuthenticated(true);
       localStorage.setItem('pulsechat_auth', 'true');
@@ -1039,6 +1058,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
 
       setUsers((prev) => [verifiedUser, ...prev.filter((u) => u.id !== uid && u.email.toLowerCase() !== cleanEmail)]);
+      recordSavedAccount(cleanEmail, cleanName, resolvedAvatar);
       setCurrentUserId(uid);
       setIsAuthenticated(true);
       localStorage.setItem('pulsechat_auth', 'true');

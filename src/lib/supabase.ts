@@ -397,6 +397,10 @@ export async function supabaseSignInWithOAuth(provider: 'google' | 'apple') {
     provider,
     options: {
       redirectTo: window.location.origin,
+      queryParams: provider === 'google' ? {
+        prompt: 'select_account',
+        access_type: 'offline',
+      } : undefined,
     },
   });
   if (error) {

@@ -817,10 +817,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                     Admin
                   </span>
                 )}
-
-                <span className="text-[11px] text-[#929BAA] font-mono cursor-default">
-                  {formatTimestamp(message.timestamp)}
-                </span>
               </div>
             )}
 
@@ -1101,7 +1097,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
               </div>
               <div>
                 <h3 className="text-sm font-bold text-[#F5F7FA]">Delete Message</h3>
-                <p className="text-xs text-[#929BAA]">Choose how to delete this message:</p>
+                <p className="text-xs text-[#929BAA]">
+                  {isCurrentUser ? 'Choose how to delete this message:' : 'Delete this message from your device:'}
+                </p>
               </div>
             </div>
 
@@ -1125,24 +1123,26 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                 <UserIcon className="w-4 h-4 text-[#929BAA] group-hover:text-[#4F8CFF]" />
               </button>
 
-              <button
-                type="button"
-                onClick={() => {
-                  deleteMessage(message.id, 'everyone');
-                  setShowDeleteModal(false);
-                }}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-[#F05D6C]/10 hover:bg-[#F05D6C]/20 border border-[#F05D6C]/30 text-left transition-colors flex items-center justify-between group cursor-pointer"
-              >
-                <div>
-                  <div className="text-xs font-semibold text-[#F05D6C]">
-                    Delete for everyone
+              {isCurrentUser && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    deleteMessage(message.id, 'everyone');
+                    setShowDeleteModal(false);
+                  }}
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-[#F05D6C]/10 hover:bg-[#F05D6C]/20 border border-[#F05D6C]/30 text-left transition-colors flex items-center justify-between group cursor-pointer"
+                >
+                  <div>
+                    <div className="text-xs font-semibold text-[#F05D6C]">
+                      Delete for everyone
+                    </div>
+                    <div className="text-[11px] text-[#929BAA]">
+                      Permanently removes message for all members
+                    </div>
                   </div>
-                  <div className="text-[11px] text-[#929BAA]">
-                    Permanently removes message for all members
-                  </div>
-                </div>
-                <UsersIcon className="w-4 h-4 text-[#F05D6C]" />
-              </button>
+                  <UsersIcon className="w-4 h-4 text-[#F05D6C]" />
+                </button>
+              )}
             </div>
 
             <div className="pt-2 border-t border-[#252B36] flex justify-end">

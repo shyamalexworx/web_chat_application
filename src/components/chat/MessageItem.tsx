@@ -166,6 +166,15 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
     (currentUser?.email && message.senderId === currentUser.email)
   );
 
+  // Check if current user pinned this message (only pinner can unpin)
+  const pinnedBy = message.pinnedBy || message.reactions?.__pinnedBy?.[0];
+  const isPinnedByMe = Boolean(
+    message.isPinned && (
+      (currentUser?.id && pinnedBy === currentUser.id) ||
+      (currentUser?.email && pinnedBy === currentUser.email)
+    )
+  );
+
   // Robust sender resolution: NEVER fall back to Unsplash demo or 'Unknown Member'
   const sender: User = isCurrentUser
     ? currentUser
@@ -451,22 +460,31 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
           <MessageSquare className="w-3.5 h-3.5" />
         </button>
 
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            togglePinMessage(message.id);
-            setShowActionBar(false);
-          }}
-          className={`p-1.5 rounded transition-colors cursor-pointer ${
-            message.isPinned
-              ? 'text-[#4F8CFF] bg-[#4F8CFF]/15'
-              : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36]'
-          }`}
-          title={message.isPinned ? 'Unpin message' : 'Pin message'}
-        >
-          <Pin className="w-3.5 h-3.5" />
-        </button>
+        {(!message.isPinned || isPinnedByMe) ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePinMessage(message.id);
+              setShowActionBar(false);
+            }}
+            className={`p-1.5 rounded transition-colors cursor-pointer ${
+              message.isPinned
+                ? 'text-[#4F8CFF] bg-[#4F8CFF]/15'
+                : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36]'
+            }`}
+            title={message.isPinned ? 'Unpin message' : 'Pin message'}
+          >
+            <Pin className="w-3.5 h-3.5" />
+          </button>
+        ) : (
+          <div
+            className="p-1.5 rounded text-[#4F8CFF]/50 cursor-default"
+            title="Pinned by another member (only they can unpin)"
+          >
+            <Pin className="w-3.5 h-3.5 opacity-60" />
+          </div>
+        )}
 
         <button
           type="button"
@@ -708,9 +726,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
             </div>
 
             {/* Reactions Strip (Sent Message - Aligned Right) */}
-            {Object.keys(message.reactions).length > 0 && (
+            {Object.keys(message.reactions).filter((k) => !k.startsWith('__')).length > 0 && (
               <div className="mt-1.5 flex flex-wrap gap-1.5 items-center justify-end">
-                {Object.entries(message.reactions).map(([emoji, reactors]) => {
+                {Object.entries(message.reactions).filter(([k]) => !k.startsWith('__')).map(([emoji, reactors]) => {
                   const hasReacted = reactors.includes(currentUser.id);
                   return (
                     <button
@@ -971,9 +989,9 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
             </div>
 
             {/* Reactions Strip (Received Message - Aligned Left) */}
-            {Object.keys(message.reactions).length > 0 && (
+            {Object.keys(message.reactions).filter((k) => !k.startsWith('__')).length > 0 && (
               <div className="mt-1.5 flex flex-wrap gap-1.5 items-center justify-start">
-                {Object.entries(message.reactions).map(([emoji, reactors]) => {
+                {Object.entries(message.reactions).filter(([k]) => !k.startsWith('__')).map(([emoji, reactors]) => {
                   const hasReacted = reactors.includes(currentUser.id);
                   return (
                     <button

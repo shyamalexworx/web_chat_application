@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useChat } from '../../context/ChatContext';
 import {
   Hash,
@@ -11,6 +11,7 @@ import {
   X,
   Menu,
   Clock,
+  Pin,
 } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
 
@@ -20,12 +21,14 @@ export const ChatHeader: React.FC = () => {
     channels,
     dms,
     users,
+    messages,
     currentUser,
     toggleStarChannel,
     toggleStarDM,
     updateChannelDetails,
     isRightPanelOpen,
     setIsRightPanelOpen,
+    setRightPanelTab,
     toggleSidebarCollapsed,
     t,
   } = useChat();
@@ -48,6 +51,27 @@ export const ChatHeader: React.FC = () => {
   };
 
   const dmPartner = getDMParticipant();
+
+  // Find messages pinned in this conversation by the current user
+  const pinnedMessagesByMe = useMemo(() => {
+    return messages.filter((m) => {
+      if (activeView.type === 'channel') {
+        if (m.conversationType !== 'channel' || m.conversationId !== activeView.id) return false;
+      } else if (activeView.type === 'dm') {
+        if (m.conversationType !== 'dm' || m.conversationId !== activeView.id) return false;
+      } else {
+        return false;
+      }
+      if (!m.isPinned) return false;
+      const pBy = m.pinnedBy || m.reactions?.__pinnedBy?.[0];
+      return Boolean(
+        (currentUser?.id && pBy === currentUser.id) ||
+        (currentUser?.email && pBy === currentUser.email)
+      );
+    });
+  }, [messages, activeView, currentUser]);
+
+  const hasPinnedByMe = pinnedMessagesByMe.length > 0;
 
   const handleSaveTopic = () => {
     if (activeChannel) {
@@ -197,8 +221,24 @@ export const ChatHeader: React.FC = () => {
         )}
       </div>
 
-      {/* Action Controls on the Right (Panel Toggle) */}
+      {/* Action Controls on the Right (Pin Indication & Panel Toggle) */}
       <div className="flex items-center space-x-2 flex-shrink-0">
+        {/* Pinned Messages Indicator (Only visible when there is a message pinned in the chat AND only for the person who pinned it) */}
+        {hasPinnedByMe && (
+          <button
+            type="button"
+            onClick={() => {
+              setRightPanelTab('pinned');
+              setIsRightPanelOpen(true);
+            }}
+            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg border border-[#4F8CFF]/40 bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 text-[#4F8CFF] text-xs font-semibold transition-all cursor-pointer shadow-sm group animate-fade-in"
+            title={`${pinnedMessagesByMe.length} message${pinnedMessagesByMe.length > 1 ? 's' : ''} pinned by you in this chat. Click to view.`}
+          >
+            <Pin className="w-3.5 h-3.5 fill-[#4F8CFF] rotate-45" />
+            <span className="font-mono text-[11px] font-bold">{pinnedMessagesByMe.length}</span>
+          </button>
+        )}
+
         {!isRightPanelOpen && (
           <button
             onClick={() => setIsRightPanelOpen(true)}

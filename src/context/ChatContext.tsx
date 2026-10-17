@@ -460,11 +460,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const addToast = useCallback((message: string, type: ToastItem['type'] = 'info') => {
-    const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3800);
+    setToasts((prev) => {
+      if (prev.some((t) => t.message === message)) {
+        return prev;
+      }
+      const id = 'toast-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+      setTimeout(() => {
+        setToasts((current) => current.filter((t) => t.id !== id));
+      }, 3800);
+      return [...prev, { id, message, type }];
+    });
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -747,7 +752,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     };
 
-    const handleUpdateMessage = (update: { id: string; content?: string; reactions?: Record<string, string[]>; isPinned?: boolean; attachments?: any[]; editedAt?: string }) => {
+    const handleUpdateMessage = (update: { id: string; content?: string; reactions?: Record<string, string[]>; isPinned?: boolean; pinnedBy?: string; attachments?: any[]; editedAt?: string }) => {
       if (!isMounted || !update?.id) return;
       setMessages((prev) =>
         prev.map((m) =>
@@ -757,6 +762,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 ...(update.content !== undefined ? { content: update.content } : {}),
                 ...(update.reactions !== undefined ? { reactions: update.reactions } : {}),
                 ...(update.isPinned !== undefined ? { isPinned: update.isPinned } : {}),
+                pinnedBy: update.isPinned !== undefined
+                  ? (update.isPinned ? (update.pinnedBy || update.reactions?.__pinnedBy?.[0] || m.pinnedBy) : undefined)
+                  : m.pinnedBy,
                 ...(update.attachments !== undefined ? { attachments: update.attachments } : {}),
                 ...(update.editedAt !== undefined ? { editedAt: update.editedAt } : {}),
               }
@@ -919,6 +927,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               id: row.id,
               content: row.content,
               isPinned: Boolean(row.is_pinned),
+              pinnedBy: row.reactions?.__pinnedBy?.[0] || undefined,
               reactions: row.reactions || {},
               attachments: row.attachments || [],
               editedAt: row.edited_at,
@@ -2669,37 +2678,109 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   }, [currentUserId]);
 
-  // Toggle Pin
+  // Toggle Pin with Creator-Only Unpin Permissions and Single Notification
   const togglePinMessage = useCallback((messageId: string) => {
-    setMessages((prev) =>
-      prev.map((m) => {
-        if (m.id !== messageId) return m;
-        const isNowPinned = !m.isPinned;
-        if (isSupabaseConfigured) {
-          updateMessageInSupabase(messageId, { isPinned: isNowPinned }).catch((err) =>
-            console.warn('Supabase pin notice:', err)
-          );
+    let targetMsg: Message | undefined;
+
+    setMessages((prev) => {
+      targetMsg = prev.find((m) => m.id === messageId);
+      if (!targetMsg) return prev;
+
+      // Permission check: if message is currently pinned, only the pinner can unpin it
+      if (targetMsg.isPinned) {
+        const pBy = targetMsg.pinnedBy || targetMsg.reactions?.__pinnedBy?.[0];
+        const isPinnedByMe = Boolean(
+          (currentUserId && pBy === currentUserId) ||
+          (currentUser?.email && pBy === currentUser.email)
+        );
+        if (!isPinnedByMe && pBy) {
+          return prev;
         }
-        try {
-          if (isSupabaseConfigured && realtimeChannelRef.current) {
-            realtimeChannelRef.current.send({
-              type: 'broadcast',
-              event: 'update_message',
-              payload: { id: messageId, isPinned: isNowPinned },
-            }).catch(() => {});
-          }
-        } catch (e) {}
-        try {
-          localBroadcastRef.current?.postMessage({
-            type: 'update_message',
-            payload: { id: messageId, isPinned: isNowPinned },
-          });
-        } catch (e) {}
-        addToast(isNowPinned ? 'Message pinned to conversation' : 'Message unpinned', 'info');
-        return { ...m, isPinned: isNowPinned };
-      })
-    );
-  }, [addToast]);
+      }
+
+      const isNowPinned = !targetMsg.isPinned;
+      const newReactions = { ...targetMsg.reactions };
+      if (isNowPinned) {
+        newReactions.__pinnedBy = [currentUserId];
+      } else {
+        delete newReactions.__pinnedBy;
+      }
+
+      return prev.map((m) => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          isPinned: isNowPinned,
+          pinnedBy: isNowPinned ? currentUserId : undefined,
+          reactions: newReactions,
+        };
+      });
+    });
+
+    if (!targetMsg) return;
+
+    // Check if unpin was disallowed for user feedback
+    if (targetMsg.isPinned) {
+      const pBy = targetMsg.pinnedBy || targetMsg.reactions?.__pinnedBy?.[0];
+      const isPinnedByMe = Boolean(
+        (currentUserId && pBy === currentUserId) ||
+        (currentUser?.email && pBy === currentUser.email)
+      );
+      if (!isPinnedByMe && pBy) {
+        addToast('Only the person who pinned this message can unpin it', 'warning');
+        return;
+      }
+    }
+
+    const isNowPinned = !targetMsg.isPinned;
+    const newReactions = { ...targetMsg.reactions };
+    if (isNowPinned) {
+      newReactions.__pinnedBy = [currentUserId];
+    } else {
+      delete newReactions.__pinnedBy;
+    }
+
+    // Trigger toast notification exactly ONCE
+    addToast(isNowPinned ? 'Message pinned to conversation' : 'Message unpinned', 'info');
+
+    // Sync to Supabase DB
+    if (isSupabaseConfigured) {
+      updateMessageInSupabase(messageId, {
+        isPinned: isNowPinned,
+        reactions: newReactions,
+      }).catch((err) =>
+        console.warn('Supabase pin notice:', err)
+      );
+    }
+
+    // Broadcast update across tabs and realtime channels
+    try {
+      if (isSupabaseConfigured && realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'update_message',
+          payload: {
+            id: messageId,
+            isPinned: isNowPinned,
+            pinnedBy: isNowPinned ? currentUserId : undefined,
+            reactions: newReactions,
+          },
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
+    try {
+      localBroadcastRef.current?.postMessage({
+        type: 'update_message',
+        payload: {
+          id: messageId,
+          isPinned: isNowPinned,
+          pinnedBy: isNowPinned ? currentUserId : undefined,
+          reactions: newReactions,
+        },
+      });
+    } catch (e) {}
+  }, [currentUserId, currentUser, addToast]);
 
   // Thread Reply with Anti-Flood Protection and Encryption
   const sendThreadReply = useCallback(

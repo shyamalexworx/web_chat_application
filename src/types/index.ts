@@ -103,6 +103,7 @@ export interface Message {
   replyCount?: number;
   lastReplyAt?: string;
   isPinned?: boolean;
+  pinnedBy?: string; // ID of the user who pinned this message
   parentId?: string; // If this message is a reply in a thread
   isTranslated?: boolean;
   originalContent?: string;

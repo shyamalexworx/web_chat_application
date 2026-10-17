@@ -14,6 +14,7 @@ import {
   Star,
   PanelRight,
   ArrowLeft,
+  Pin,
 } from 'lucide-react';
 import { SquigglyText } from '../ui/squiggly-text';
 import { EncryptedText } from '../ui/encrypted-text';
@@ -36,6 +37,7 @@ export const TopNavigation: React.FC = () => {
     toggleSidebarCollapsed,
     isRightPanelOpen,
     setIsRightPanelOpen,
+    setRightPanelTab,
     startGoogleMeet,
     channels,
     users,
@@ -69,6 +71,27 @@ export const TopNavigation: React.FC = () => {
     const otherUserId = activeDM.participantIds.find((id) => id !== currentUser.id) || activeDM.participantIds[0];
     return users.find((u) => u.id === otherUserId) || null;
   }, [activeDM, currentUser, users]);
+
+  // Messages pinned in the active conversation by the current user
+  const pinnedMessagesByMe = useMemo(() => {
+    return messages.filter((m) => {
+      if (activeView.type === 'channel') {
+        if (m.conversationType !== 'channel' || m.conversationId !== activeView.id) return false;
+      } else if (activeView.type === 'dm') {
+        if (m.conversationType !== 'dm' || m.conversationId !== activeView.id) return false;
+      } else {
+        return false;
+      }
+      if (!m.isPinned) return false;
+      const pBy = m.pinnedBy || m.reactions?.__pinnedBy?.[0];
+      return Boolean(
+        (currentUser?.id && pBy === currentUser.id) ||
+        (currentUser?.email && pBy === currentUser.email)
+      );
+    });
+  }, [messages, activeView, currentUser]);
+
+  const hasPinnedByMe = pinnedMessagesByMe.length > 0;
 
   // Close search dropdown on click outside
   useEffect(() => {
@@ -622,6 +645,23 @@ export const TopNavigation: React.FC = () => {
             </>
           )}
         </div>
+
+        {/* Mobile Pinned Messages Indicator (Only visible when there is a pinned message by current user) */}
+        {hasPinnedByMe && (
+          <button
+            type="button"
+            onClick={() => {
+              setRightPanelTab('pinned');
+              setIsRightPanelOpen(true);
+            }}
+            className="md:hidden flex items-center space-x-1 px-2 py-1.5 rounded-lg border border-[#4F8CFF]/40 bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 text-[#4F8CFF] text-xs font-semibold transition-all cursor-pointer shadow-sm group animate-fade-in"
+            title={`${pinnedMessagesByMe.length} message${pinnedMessagesByMe.length > 1 ? 's' : ''} pinned by you in this chat. Click to view.`}
+            aria-label="View pinned messages"
+          >
+            <Pin className="w-3.5 h-3.5 fill-[#4F8CFF] rotate-45" />
+            <span className="font-mono text-[11px] font-bold">{pinnedMessagesByMe.length}</span>
+          </button>
+        )}
 
         {/* Blue Arrow 3: Mobile Right Panel Toggle Button */}
         <button

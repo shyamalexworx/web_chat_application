@@ -696,13 +696,23 @@ export const RightInfoPanel: React.FC = () => {
                         />
                         <span className="font-semibold text-[#F5F7FA]">{author?.name}</span>
                       </div>
-                      <button
-                        onClick={() => togglePinMessage(pin.id)}
-                        className="text-[#929BAA] hover:text-[#F05D6C] text-[11px] flex items-center gap-1"
-                        title="Unpin"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                      {(() => {
+                        const pinnedBy = pin.pinnedBy || pin.reactions?.__pinnedBy?.[0];
+                        const isPinnedByMe = Boolean(
+                          (currentUser?.id && pinnedBy === currentUser.id) ||
+                          (currentUser?.email && pinnedBy === currentUser.email)
+                        );
+                        if (!isPinnedByMe) return null;
+                        return (
+                          <button
+                            onClick={() => togglePinMessage(pin.id)}
+                            className="text-[#929BAA] hover:text-[#F05D6C] text-[11px] flex items-center gap-1 cursor-pointer"
+                            title="Unpin"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        );
+                      })()}
                     </div>
 
                     <p className="text-[#F5F7FA] leading-relaxed line-clamp-3">{pin.content}</p>

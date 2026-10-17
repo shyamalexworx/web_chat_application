@@ -787,6 +787,7 @@ export async function fetchMessagesFromSupabase(
     attachments: m.attachments || [],
     reactions: m.reactions || {},
     isPinned: Boolean(m.is_pinned),
+    pinnedBy: m.reactions?.__pinnedBy?.[0] || undefined,
     parentId: m.parent_id || undefined,
     encryptedPayload: m.encrypted_payload || undefined,
     isEncrypted: Boolean(m.encrypted_payload),

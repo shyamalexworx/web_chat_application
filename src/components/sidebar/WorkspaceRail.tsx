@@ -12,7 +12,6 @@ import {
   VolumeX,
   LogOut,
   Sparkles,
-  Menu,
 } from 'lucide-react';
 import { soundFX } from '../../utils/audio';
 
@@ -51,63 +50,30 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
       <div className="w-full flex flex-col items-center flex-1 min-h-0">
         {/* Top Header Section: perfectly aligned at 56px (h-14) with ChannelSidebar and ChatHeader */}
         <div className="h-14 min-h-[56px] w-full border-b border-slate-200 dark:border-[#252B36] flex items-center justify-center flex-shrink-0 bg-slate-50 dark:bg-[#0B0D12] workspace-rail-bg">
-          {isMobile ? (
+          <div className="relative group">
             <button
-              onClick={toggleSidebarCollapsed}
-              className="w-8 h-8 rounded-lg flex items-center justify-center bg-[#181C25] hover:bg-[#252B36] text-[#4F8CFF] hover:text-white border border-[#252B36] transition-all cursor-pointer shadow-sm active:scale-95"
-              title="Close menu bar"
-              aria-label="Close menu bar"
+              onClick={toggleAIAssistant}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white transition-all duration-200 ${
+                isAIAssistantOpen
+                  ? 'bg-gradient-to-tr from-[#4F8CFF] to-[#A855F7] ring-2 ring-[#4F8CFF] shadow-accent-glow scale-105'
+                  : 'bg-gradient-to-tr from-[#1E2330] to-[#252B36] hover:from-[#4F8CFF] hover:to-[#A855F7] border border-[#252B36]'
+              }`}
+              title="Pulse AI Assistant / Copilot"
             >
-              <Menu className="w-4 h-4" />
+              <Bot className="w-4 h-4 text-white" />
+              <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#4F8CFF] rounded-full animate-pulse" />
             </button>
-          ) : (
-            <div className="relative group">
-              <button
-                onClick={toggleAIAssistant}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white transition-all duration-200 ${
-                  isAIAssistantOpen
-                    ? 'bg-gradient-to-tr from-[#4F8CFF] to-[#A855F7] ring-2 ring-[#4F8CFF] shadow-accent-glow scale-105'
-                    : 'bg-gradient-to-tr from-[#1E2330] to-[#252B36] hover:from-[#4F8CFF] hover:to-[#A855F7] border border-[#252B36]'
-                }`}
-                title="Pulse AI Assistant / Copilot"
-              >
-                <Bot className="w-4 h-4 text-white" />
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#4F8CFF] rounded-full animate-pulse" />
-              </button>
 
-              {/* Tooltip */}
-              <div className="absolute left-14 px-2.5 py-1.5 bg-[#181C25] text-xs font-medium text-[#F5F7FA] rounded-md shadow-modal border border-[#252B36] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-                {t('ai_assistant')}
-                <span className="block text-[10px] text-[#4F8CFF]">Copilot</span>
-              </div>
+            {/* Tooltip */}
+            <div className="absolute left-14 px-2.5 py-1.5 bg-[#181C25] text-xs font-medium text-[#F5F7FA] rounded-md shadow-modal border border-[#252B36] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+              {t('ai_assistant')}
+              <span className="block text-[10px] text-[#4F8CFF]">Copilot</span>
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Workspaces list */}
+        {/* Workspaces list (Yellow section stepped up) */}
         <div className="flex-1 w-full flex flex-col items-center space-y-2 overflow-y-auto overflow-x-hidden py-2.5">
-          {/* Mobile view: AI Assistant stepped down one slot */}
-          {isMobile && (
-            <div className="relative group flex items-center justify-center w-full pb-1 border-b border-[#252B36]/50">
-              <button
-                onClick={toggleAIAssistant}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white transition-all duration-200 ${
-                  isAIAssistantOpen
-                    ? 'bg-gradient-to-tr from-[#4F8CFF] to-[#A855F7] ring-2 ring-[#4F8CFF] shadow-accent-glow scale-105'
-                    : 'bg-gradient-to-tr from-[#1E2330] to-[#252B36] hover:from-[#4F8CFF] hover:to-[#A855F7] border border-[#252B36]'
-                }`}
-                title="Pulse AI Assistant / Copilot"
-              >
-                <Bot className="w-4 h-4 text-white" />
-                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#4F8CFF] rounded-full animate-pulse" />
-              </button>
-
-              <div className="absolute left-14 px-2.5 py-1.5 bg-[#181C25] text-xs font-medium text-[#F5F7FA] rounded-md shadow-modal border border-[#252B36] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-                {t('ai_assistant')}
-                <span className="block text-[10px] text-[#4F8CFF]">Copilot</span>
-              </div>
-            </div>
-          )}
 
           {workspaces.map((ws) => {
             const isActive = ws.id === activeWorkspace.id;

@@ -1569,6 +1569,24 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, [channels]);
 
+  // Auto-heal activeView so user NEVER gets stuck without an active channel/DM (e.g. on mobile or workspace switch)
+  useEffect(() => {
+    if (channels.length === 0 && dms.length === 0) return;
+
+    const hasMatchingChannel = activeView.type === 'channel' && channels.some((c) => c.id === activeView.id && c.workspaceId === activeWorkspace.id);
+    const hasMatchingDM = activeView.type === 'dm' && dms.some((d) => d.id === activeView.id);
+
+    if (!hasMatchingChannel && !hasMatchingDM) {
+      const defaultChan = channels.find((c) => c.workspaceId === activeWorkspace.id) || channels[0];
+      if (defaultChan) {
+        setActiveView({ type: 'channel', id: defaultChan.id });
+      } else if (dms.length > 0) {
+        const defaultDM = dms.find((d) => d.workspaceId === activeWorkspace.id) || dms[0];
+        setActiveView({ type: 'dm', id: defaultDM.id });
+      }
+    }
+  }, [channels, dms, activeWorkspace.id, activeView]);
+
   const toggleSidebarCollapsed = useCallback(() => {
     setIsSidebarCollapsed((prev) => !prev);
   }, []);

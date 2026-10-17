@@ -30,6 +30,7 @@ export const MessageComposer: React.FC = () => {
     dms,
     users,
     currentUser,
+    activeWorkspace,
     invites,
     acceptInvite,
     declineInvite,
@@ -58,12 +59,15 @@ export const MessageComposer: React.FC = () => {
     ? dms.find((d) => d.id === activeView.id)
     : null;
 
+  // Fallback to active workspace channel so composer NEVER vanishes during transitions or on mobile
+  const currentChannel = activeChannel || (!activeDM ? (channels.find((c) => c.workspaceId === activeWorkspace?.id) || channels[0] || null) : null);
+
   const dmPartner = activeDM && !activeDM.isGroup
     ? users.find((u) => u.id === (activeDM.participantIds.find((id) => id !== currentUser.id) || activeDM.participantIds[0]))
     : null;
 
-  const placeholderText = activeChannel
-    ? `${t('message')} #${activeChannel.name}`
+  const placeholderText = currentChannel
+    ? `${t('message')} #${currentChannel.name}`
     : activeDM
     ? `${t('message')} ${activeDM.isGroup ? activeDM.groupName : dmPartner?.name || 'chat'}`
     : t('type_message');
@@ -264,8 +268,14 @@ export const MessageComposer: React.FC = () => {
     textareaRef.current?.focus();
   };
 
-  if (!activeChannel && !activeDM) {
-    return null;
+  if (!currentChannel && !activeDM) {
+    return (
+      <div className="px-3 sm:px-4 pt-1 pb-2.5 sm:pb-[11px] pb-[calc(0.65rem+env(safe-area-inset-bottom,0px))] bg-[#0B0D12] select-none flex-shrink-0 relative z-10 w-full">
+        <div className="bg-[#12151C] border border-[#252B36] rounded-xl p-3 flex items-center justify-between text-xs text-[#929BAA]">
+          <span>Select or join a channel to start messaging</span>
+        </div>
+      </div>
+    );
   }
 
   if (activeDM && activeDM.status === 'pending') {
@@ -330,7 +340,7 @@ export const MessageComposer: React.FC = () => {
   }
 
   return (
-    <div className="px-4 pt-1 pb-[11px] bg-[#0B0D12] select-none flex-shrink-0 relative">
+    <div className="px-3 sm:px-4 pt-1 pb-2.5 sm:pb-[11px] pb-[calc(0.65rem+env(safe-area-inset-bottom,0px))] bg-[#0B0D12] select-none flex-shrink-0 relative z-10 w-full">
       {/* Typing Indicator Bar */}
       {typingUsers.length > 0 ? (
         <div className="h-5 px-1 flex items-center space-x-2 text-[11px] text-[#929BAA] animate-fade-in">
@@ -405,7 +415,7 @@ export const MessageComposer: React.FC = () => {
       ) : (
       <div className="bg-[#12151C] border border-[#252B36] focus-within:border-[#4F8CFF] rounded-xl overflow-hidden shadow-subtle transition-colors">
         {/* Formatting Toolbar (Highlighted in Image 2 - 100% Functional with active feedback) */}
-        <div className="px-3 py-1.5 bg-[#181C25] border-b border-[#252B36] flex items-center justify-between text-[#929BAA]">
+        <div className="px-3 py-1.5 bg-[#181C25] border-b border-[#252B36] flex items-center justify-between text-[#929BAA] overflow-x-auto no-scrollbar">
           <div className="flex items-center space-x-1">
             {/* Bold */}
             <button
@@ -530,7 +540,7 @@ export const MessageComposer: React.FC = () => {
             onChange={(e) => setContent(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholderText}
-            className="w-full bg-transparent text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none resize-none leading-relaxed font-sans max-h-48"
+            className="w-full bg-transparent text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none resize-none leading-relaxed font-sans max-h-48 min-h-[22px]"
           />
         </div>
 

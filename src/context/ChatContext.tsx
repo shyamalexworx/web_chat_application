@@ -2722,17 +2722,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Check locally persisted pinned IDs for this user
     if (pinnedMessageIds.has(m.id)) return true;
 
-    // Check message pinnedBy metadata
+    // Check message pinnedBy metadata (reactions.__pinnedBy array or pinnedBy string)
     const pBy = m.pinnedBy || m.reactions?.__pinnedBy?.[0];
-    const pByList = m.reactions?.__pinnedBy || [];
+    const pByList = m.reactions?.__pinnedBy || (m.pinnedBy ? [m.pinnedBy] : []);
 
-    if (currentUserId && (pBy === currentUserId || pByList.includes(currentUserId))) return true;
-    if (currentUser?.id && (pBy === currentUser.id || pByList.includes(currentUser.id))) return true;
-    if (currentUser?.email && (pBy === currentUser.email || pByList.includes(currentUser.email))) return true;
+    const myId = currentUserId || currentUser?.id;
+    const myEmail = currentUser?.email;
 
-    // Fallback for legacy messages that were pinned in DB with no recorded owner yet:
-    // Claim it for the current user so existing pinned messages immediately show up
-    if (m.isPinned && !m.pinnedBy && pByList.length === 0) return true;
+    if (myId && (pBy === myId || pByList.includes(myId))) return true;
+    if (myEmail && (pBy === myEmail || pByList.includes(myEmail))) return true;
 
     return false;
   }, [pinnedMessageIds, currentUserId, currentUser]);

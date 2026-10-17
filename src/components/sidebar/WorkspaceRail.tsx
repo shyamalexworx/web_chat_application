@@ -58,7 +58,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
                   ? 'bg-gradient-to-tr from-[#4F8CFF] to-[#A855F7] ring-2 ring-[#4F8CFF] shadow-accent-glow scale-105'
                   : 'bg-gradient-to-tr from-[#1E2330] to-[#252B36] hover:from-[#4F8CFF] hover:to-[#A855F7] border border-[#252B36]'
               }`}
-              title="Pulse AI Assistant / Copilot"
+              title="Pulse AI Assistant"
             >
               <Bot className="w-4 h-4 text-white" />
               <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-[#4F8CFF] rounded-full animate-pulse" />
@@ -67,7 +67,6 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
             {/* Tooltip */}
             <div className="absolute left-14 px-2.5 py-1.5 bg-[#181C25] text-xs font-medium text-[#F5F7FA] rounded-md shadow-modal border border-[#252B36] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
               {t('ai_assistant')}
-              <span className="block text-[10px] text-[#4F8CFF]">Copilot</span>
             </div>
           </div>
         </div>

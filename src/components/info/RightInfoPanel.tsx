@@ -110,7 +110,7 @@ export const RightInfoPanel: React.FC = () => {
     let action = 'sent a message';
     if (m.attachments && m.attachments.length > 0) {
       action = `shared ${m.attachments[0].name}`;
-    } else if (m.isPinned) {
+    } else if (isMessagePinnedByMe(m)) {
       action = 'pinned a message';
     }
     return {

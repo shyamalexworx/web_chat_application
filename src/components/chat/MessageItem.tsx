@@ -39,6 +39,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
     currentUser,
     toggleReaction,
     togglePinMessage,
+    isMessagePinnedByMe,
     editMessage,
     deleteMessage,
     setActiveThreadMessageId,
@@ -166,14 +167,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
     (currentUser?.email && message.senderId === currentUser.email)
   );
 
-  // Check if current user pinned this message (only pinner can unpin)
-  const pinnedBy = message.pinnedBy || message.reactions?.__pinnedBy?.[0];
-  const isPinnedByMe = Boolean(
-    message.isPinned && (
-      (currentUser?.id && pinnedBy === currentUser.id) ||
-      (currentUser?.email && pinnedBy === currentUser.email)
-    )
-  );
+  // Check if current user pinned this message (only pinner can unpin and only pinner sees pin indicators)
+  const isPinnedByMe = isMessagePinnedByMe(message);
 
   // Robust sender resolution: NEVER fall back to Unsplash demo or 'Unknown Member'
   const sender: User = isCurrentUser
@@ -460,31 +455,22 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
           <MessageSquare className="w-3.5 h-3.5" />
         </button>
 
-        {(!message.isPinned || isPinnedByMe) ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePinMessage(message.id);
-              setShowActionBar(false);
-            }}
-            className={`p-1.5 rounded transition-colors cursor-pointer ${
-              message.isPinned
-                ? 'text-[#4F8CFF] bg-[#4F8CFF]/15'
-                : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36]'
-            }`}
-            title={message.isPinned ? 'Unpin message' : 'Pin message'}
-          >
-            <Pin className="w-3.5 h-3.5" />
-          </button>
-        ) : (
-          <div
-            className="p-1.5 rounded text-[#4F8CFF]/50 cursor-default"
-            title="Pinned by another member (only they can unpin)"
-          >
-            <Pin className="w-3.5 h-3.5 opacity-60" />
-          </div>
-        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            togglePinMessage(message.id);
+            setShowActionBar(false);
+          }}
+          className={`p-1.5 rounded transition-colors cursor-pointer ${
+            isPinnedByMe
+              ? 'text-[#4F8CFF] bg-[#4F8CFF]/15'
+              : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36]'
+          }`}
+          title={isPinnedByMe ? 'Unpin message' : 'Pin message'}
+        >
+          <Pin className="w-3.5 h-3.5" />
+        </button>
 
         <button
           type="button"
@@ -540,11 +526,11 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
       onTouchEnd={handleTouchEnd}
       onContextMenu={handleContextMenu}
       className={`message-row group relative px-4 sm:px-6 py-1.5 transition-colors cursor-pointer select-text ${
-        message.isPinned ? 'bg-[#4F8CFF]/5 border-l-2 border-[#4F8CFF]' : 'hover:bg-[#12151C]/40'
+        isPinnedByMe ? 'bg-[#4F8CFF]/5 border-l-2 border-[#4F8CFF]' : 'hover:bg-[#12151C]/40'
       }`}
     >
       {/* Pinned Indicator Flag */}
-      {message.isPinned && !isGrouped && (
+      {isPinnedByMe && !isGrouped && (
         <div
           className={`flex items-center space-x-1.5 text-[10px] font-medium text-[#4F8CFF] mb-1.5 ${
             isCurrentUser ? 'justify-end' : 'justify-start pl-10'

@@ -32,6 +32,7 @@ export const TopNavigation: React.FC = () => {
     activeView,
     dms,
     currentUser,
+    isMessagePinnedByMe,
     toggleStarChannel,
     toggleStarDM,
     toggleSidebarCollapsed,
@@ -78,18 +79,14 @@ export const TopNavigation: React.FC = () => {
       if (activeView.type === 'channel') {
         if (m.conversationType !== 'channel' || m.conversationId !== activeView.id) return false;
       } else if (activeView.type === 'dm') {
-        if (m.conversationType !== 'dm' || m.conversationId !== activeView.id) return false;
+        if (m.conversationType !== 'dm') return false;
+        if (m.conversationId !== activeView.id && m.conversationId !== activeDM?.id) return false;
       } else {
         return false;
       }
-      if (!m.isPinned) return false;
-      const pBy = m.pinnedBy || m.reactions?.__pinnedBy?.[0];
-      return Boolean(
-        (currentUser?.id && pBy === currentUser.id) ||
-        (currentUser?.email && pBy === currentUser.email)
-      );
+      return isMessagePinnedByMe(m);
     });
-  }, [messages, activeView, currentUser]);
+  }, [messages, activeView, activeDM, isMessagePinnedByMe]);
 
   const hasPinnedByMe = pinnedMessagesByMe.length > 0;
 
@@ -315,15 +312,15 @@ export const TopNavigation: React.FC = () => {
   };
 
   return (
-    <header className="h-12 min-h-[48px] flex-shrink-0 bg-white dark:bg-[#0B0D12] border-b border-slate-200 dark:border-[#252B36] flex items-center justify-between px-2 sm:px-4 select-none z-40 relative">
-      {/* Desktop/Laptop/Tablet Left: Brand Indicator */}
+    <header className="h-12 min-h-[48px] flex-shrink-0 bg-white dark:bg-[#0B0D12] border-b border-slate-200 dark:border-[#252B36] flex items-center justify-between pl-0 pr-2 sm:pr-4 select-none z-40 relative">
+      {/* Desktop/Laptop/Tablet Left: Brand Indicator (Aligned with 48px Workspace Rail) */}
       <div className="hidden md:flex items-center flex-shrink-0">
         <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
           <div className="relative overflow-hidden rounded-lg w-8 h-8 flex-shrink-0 bg-slate-100 dark:bg-[#12151D] border border-blue-500/25 shadow-sm flex items-center justify-center">
             <img src="/logo.png" alt="PulseChat" className="w-full h-full object-contain p-1" />
           </div>
         </div>
-        <div className="pl-2 pr-3 flex items-center cursor-pointer">
+        <div className="pl-1 pr-3 flex items-center cursor-pointer">
           <EncryptedText
             text="PulseChat"
             className="text-sm font-black tracking-wider uppercase text-slate-900 dark:text-white brand-pulse-text"
@@ -333,7 +330,7 @@ export const TopNavigation: React.FC = () => {
       </div>
 
       {/* Mobile-only Left: Menu Button [☰] + Active Channel/DM Title [# channel1 ⭐️] */}
-      <div className="flex md:hidden items-center space-x-1.5 flex-1 min-w-0 pr-1">
+      <div className="flex md:hidden items-center space-x-1.5 flex-1 min-w-0 pr-1 pl-2 sm:pl-3">
         {/* Blue Arrow 1: Hamburger Menu button moved to top-left */}
         <button
           onClick={toggleSidebarCollapsed}

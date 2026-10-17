@@ -1,20 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useChat } from '../../context/ChatContext';
 import {
   X,
   UserCheck,
   Smile,
   Circle,
-  Shield,
-  ShieldCheck,
-  Lock,
-  Key,
-  Copy,
-  Check,
-  RefreshCw,
-  Cpu,
-  Fingerprint,
-  Zap,
   Settings,
   Volume2,
   VolumeX,
@@ -26,12 +16,6 @@ import {
   Sun,
   Laptop,
 } from 'lucide-react';
-import {
-  encryptMessage,
-  decryptMessage,
-  generateSafetyFingerprint,
-  type EncryptedPayload,
-} from '../../utils/crypto';
 import { soundFX } from '../../utils/audio';
 import { SUPPORTED_LANGUAGES } from '../../utils/translation';
 import { generateLetterAvatar } from '../../utils/avatar';
@@ -51,9 +35,6 @@ export const UserProfileModal: React.FC = () => {
     setIsUserProfileOpen,
     currentUser,
     updateCurrentUserProfile,
-    activeView,
-    channels,
-    dms,
     selectedLanguage,
     setSelectedLanguage,
     autoTranslateEnabled,
@@ -64,7 +45,7 @@ export const UserProfileModal: React.FC = () => {
     t,
   } = useChat();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'preferences'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'preferences'>('profile');
 
   // Profile Form State
   const [name, setName] = useState(currentUser.name);
@@ -75,59 +56,8 @@ export const UserProfileModal: React.FC = () => {
   const [avatar, setAvatar] = useState(currentUser.avatar || generateLetterAvatar(currentUser.name));
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-  // Security & Encryption State
-  const [copiedFingerprint, setCopiedFingerprint] = useState(false);
-  const [testInput, setTestInput] = useState('Workspace confidential deployment credentials');
-  const [testPayload, setTestPayload] = useState<EncryptedPayload | null>(null);
-  const [testDecrypted, setTestDecrypted] = useState<string>('');
-  const [isEncrypting, setIsEncrypting] = useState(false);
-
   // Sound State
   const [soundEnabled, setSoundEnabled] = useState(soundFX.isEnabled());
-
-  const activeChannel = activeView.type === 'channel'
-    ? channels.find((c) => c.id === activeView.id)
-    : null;
-
-  const activeDM = activeView.type === 'dm'
-    ? dms.find((d) => d.id === activeView.id)
-    : null;
-
-  const conversationName = activeChannel
-    ? `#${activeChannel.name}`
-    : activeDM
-    ? activeDM.groupName || 'Direct Message'
-    : 'Active Channel';
-
-  const fingerprint = generateSafetyFingerprint(activeView.id);
-
-  // Initial test encryption when opening security tab
-  useEffect(() => {
-    if (isUserProfileOpen && activeTab === 'security') {
-      handleTestEncrypt(testInput);
-    }
-  }, [isUserProfileOpen, activeTab, activeView.id]);
-
-  const handleTestEncrypt = async (text: string) => {
-    setIsEncrypting(true);
-    try {
-      const payload = await encryptMessage(text, activeView.id);
-      setTestPayload(payload);
-      const decrypted = await decryptMessage(payload, activeView.id);
-      setTestDecrypted(decrypted);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsEncrypting(false);
-    }
-  };
-
-  const handleCopyFingerprint = () => {
-    navigator.clipboard.writeText(fingerprint);
-    setCopiedFingerprint(true);
-    addToast('Safety fingerprint copied to clipboard', 'info');
-    setTimeout(() => setCopiedFingerprint(false), 2000);
-  };
 
   const toggleSound = () => {
     const next = !soundEnabled;
@@ -171,7 +101,7 @@ export const UserProfileModal: React.FC = () => {
             <div>
               <h2 className="text-sm font-bold text-slate-900 dark:text-[#F5F7FA]">Profile & Settings</h2>
               <p className="text-[11px] text-slate-500 dark:text-[#929BAA]">
-                Manage your identity, end-to-end encryption armor, and preferences.
+                Manage your identity and preferences.
               </p>
             </div>
           </div>
@@ -201,19 +131,6 @@ export const UserProfileModal: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setActiveTab('security')}
-            className={`py-3 px-3 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer rounded-t-lg ${
-              activeTab === 'security'
-                ? 'border-[#32C48D] text-[#32C48D] bg-white/70 dark:bg-white/5 font-semibold'
-                : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-[#929BAA] dark:hover:text-[#F5F7FA]'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5 text-[#32C48D]" />
-            <span>Security & Encryption</span>
-          </button>
-
-          <button
-            type="button"
             onClick={() => setActiveTab('preferences')}
             className={`py-3 px-3 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer rounded-t-lg ${
               activeTab === 'preferences'
@@ -227,7 +144,7 @@ export const UserProfileModal: React.FC = () => {
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto space-y-5 text-xs">
+        <div className="p-5 sm:p-6 overflow-y-auto no-scrollbar space-y-5 text-xs">
           {/* TAB 1: PROFILE & PRESENCE */}
           {activeTab === 'profile' && (
             <form onSubmit={handleSubmitProfile} className="space-y-4">
@@ -398,159 +315,7 @@ export const UserProfileModal: React.FC = () => {
             </form>
           )}
 
-          {/* TAB 2: SECURITY & END-TO-END ENCRYPTION */}
-          {activeTab === 'security' && (
-            <div className="space-y-4 animate-fade-in">
-              {/* Status Header Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                <div className="p-3 bg-slate-50 dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-1">
-                  <div className="flex items-center space-x-1.5 text-[#32C48D]">
-                    <Lock className="w-3.5 h-3.5" />
-                    <span className="font-semibold text-[10px] uppercase tracking-wider">Cipher Standard</span>
-                  </div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA]">AES-256-GCM</div>
-                  <div className="text-[10px] text-slate-500 dark:text-[#929BAA]">128-bit Auth Tag</div>
-                </div>
-
-                <div className="p-3 bg-slate-50 dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-1">
-                  <div className="flex items-center space-x-1.5 text-[#4F8CFF]">
-                    <Key className="w-3.5 h-3.5" />
-                    <span className="font-semibold text-[10px] uppercase tracking-wider">Key Derivation</span>
-                  </div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA]">PBKDF2-SHA256</div>
-                  <div className="text-[10px] text-slate-500 dark:text-[#929BAA]">100k Iterations</div>
-                </div>
-
-                <div className="p-3 bg-slate-50 dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-1">
-                  <div className="flex items-center space-x-1.5 text-[#A855F7]">
-                    <Shield className="w-3.5 h-3.5" />
-                    <span className="font-semibold text-[10px] uppercase tracking-wider">Anti-Hacking Armor</span>
-                  </div>
-                  <div className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA]">Armed & Active</div>
-                  <div className="text-[10px] text-slate-500 dark:text-[#929BAA]">Anti-XSS & CSP</div>
-                </div>
-              </div>
-
-              {/* Safety Fingerprint Verification */}
-              <div className="p-4 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Fingerprint className="w-4 h-4 text-[#4F8CFF]" />
-                    <span className="font-bold text-slate-800 dark:text-[#F5F7FA]">Conversation Safety Fingerprint</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleCopyFingerprint}
-                    className="flex items-center space-x-1 text-[11px] px-2 py-1 rounded bg-white dark:bg-[#181C25] hover:bg-slate-100 dark:hover:bg-[#252B36] text-[#4F8CFF] border border-slate-200 dark:border-[#252B36] transition-colors cursor-pointer"
-                  >
-                    {copiedFingerprint ? (
-                      <>
-                        <Check className="w-3 h-3 text-[#32C48D]" />
-                        <span className="text-[#32C48D]">Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3" />
-                        <span>Copy Code</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                <p className="text-slate-500 dark:text-[#929BAA] text-[11px] leading-relaxed">
-                  Verify this safety number with colleagues in <strong className="text-slate-800 dark:text-[#F5F7FA]">{conversationName}</strong> to cryptographically verify zero eavesdropping or interception.
-                </p>
-
-                <div className="p-2.5 bg-slate-100 dark:bg-[#0B0D12] rounded-lg border border-slate-200 dark:border-[#252B36] font-mono text-center tracking-widest text-xs text-[#32C48D] select-all">
-                  {fingerprint}
-                </div>
-              </div>
-
-              {/* Live Interactive Cryptography Sandbox */}
-              <div className="p-4 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Cpu className="w-4 h-4 text-[#32C48D]" />
-                    <span className="font-bold text-slate-800 dark:text-[#F5F7FA]">Live Cryptography Test Bench</span>
-                  </div>
-                  <span className="text-[10px] text-slate-500 dark:text-[#929BAA] font-mono">Web Crypto API</span>
-                </div>
-
-                <p className="text-slate-500 dark:text-[#929BAA] text-[11px]">
-                  Type any test phrase below to see real-time AES-256-GCM encryption and verified local decryption:
-                </p>
-
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={testInput}
-                    onChange={(e) => {
-                      setTestInput(e.target.value);
-                      handleTestEncrypt(e.target.value);
-                    }}
-                    placeholder="Type test text..."
-                    className="flex-1 bg-white dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-[#F5F7FA] outline-none"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleTestEncrypt(testInput)}
-                    className="px-3 py-2 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white rounded-lg flex items-center space-x-1.5 font-medium transition-colors cursor-pointer"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isEncrypting ? 'animate-spin' : ''}`} />
-                    <span>Encrypt</span>
-                  </button>
-                </div>
-
-                {testPayload && (
-                  <div className="space-y-2 pt-1 font-mono text-[11px]">
-                    <div className="p-2.5 bg-slate-100 dark:bg-[#0B0D12] rounded-lg border border-slate-200 dark:border-[#252B36] space-y-1">
-                      <div className="text-[10px] text-[#4F8CFF] font-semibold flex items-center justify-between">
-                        <span>AES-256-GCM CIPHERTEXT (Base64):</span>
-                        <span className="text-slate-500 dark:text-[#929BAA]">IV: {testPayload.iv.slice(0, 8)}...</span>
-                      </div>
-                      <div className="text-slate-500 dark:text-[#929BAA] break-all select-all font-mono text-[10px] max-h-16 overflow-y-auto">
-                        {testPayload.ciphertext || '(Empty)'}
-                      </div>
-                    </div>
-
-                    <div className="p-2 bg-slate-100 dark:bg-[#0B0D12] rounded-lg border border-slate-200 dark:border-[#252B36] flex items-center justify-between">
-                      <span className="text-[10px] text-[#32C48D] flex items-center gap-1 font-semibold">
-                        <Check className="w-3.5 h-3.5" /> DECRYPTED PLAINTEXT:
-                      </span>
-                      <span className="text-slate-800 dark:text-[#F5F7FA] font-sans truncate max-w-xs">{testDecrypted}</span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Active System Hardening Matrix */}
-              <div className="space-y-1.5">
-                <div className="text-[11px] font-semibold text-slate-500 dark:text-[#929BAA] uppercase tracking-wider flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-[#F5A623]" /> Active System Hardening Matrix
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                  <div className="p-2 bg-slate-50 dark:bg-[#181C25] rounded-lg border border-slate-200 dark:border-[#252B36] flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-[#32C48D]" />
-                    <span className="text-slate-800 dark:text-[#F5F7FA]">Anti-XSS Input Sanitization Engine</span>
-                  </div>
-                  <div className="p-2 bg-slate-50 dark:bg-[#181C25] rounded-lg border border-slate-200 dark:border-[#252B36] flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-[#32C48D]" />
-                    <span className="text-slate-800 dark:text-[#F5F7FA]">Unique 96-bit Cryptographic IV per message</span>
-                  </div>
-                  <div className="p-2 bg-slate-50 dark:bg-[#181C25] rounded-lg border border-slate-200 dark:border-[#252B36] flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-[#32C48D]" />
-                    <span className="text-slate-800 dark:text-[#F5F7FA]">Anti-Flooding Rate Limiter Armor</span>
-                  </div>
-                  <div className="p-2 bg-slate-50 dark:bg-[#181C25] rounded-lg border border-slate-200 dark:border-[#252B36] flex items-center space-x-2">
-                    <span className="w-2 h-2 rounded-full bg-[#32C48D]" />
-                    <span className="text-slate-800 dark:text-[#F5F7FA]">Content-Security-Policy Strict Headers</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: PREFERENCES & AUDIO */}
+          {/* TAB 2: PREFERENCES & AUDIO */}
           {activeTab === 'preferences' && (
             <div className="space-y-4 animate-fade-in">
               {/* Interface Theme Selection (Dark, Light, System) */}
@@ -673,14 +438,6 @@ export const UserProfileModal: React.FC = () => {
               </div>
             </div>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 sm:px-6 py-3 border-t border-slate-200 dark:border-[#252B36] bg-slate-50 dark:bg-[#12151C]/90 flex items-center justify-between">
-          <div className="text-[11px] text-slate-500 dark:text-[#929BAA] flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#32C48D] animate-pulse" />
-            <span>Profile &amp; Encryption settings active</span>
-          </div>
         </div>
       </div>
     </div>

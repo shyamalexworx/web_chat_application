@@ -40,6 +40,7 @@ export const RightInfoPanel: React.FC = () => {
     currentUser,
     messages,
     togglePinMessage,
+    isMessagePinnedByMe,
     setIsInviteChannelMembersOpen,
     updateChannelDetails,
     deleteChannel,
@@ -85,7 +86,7 @@ export const RightInfoPanel: React.FC = () => {
       m.title.toLowerCase().includes(memberSearch.toLowerCase())
   );
 
-  // Gather pinned messages
+  // Gather pinned messages (strictly private per-user pins)
   const conversationMessages = messages.filter((m) => {
     if (m.hiddenForUserIds?.includes(currentUser.id)) return false;
     if (activeView.type === 'channel') {
@@ -95,7 +96,7 @@ export const RightInfoPanel: React.FC = () => {
     }
   });
 
-  const pinnedMessages = conversationMessages.filter((m) => m.isPinned);
+  const pinnedMessages = conversationMessages.filter((m) => isMessagePinnedByMe(m));
 
   // Gather shared files
   const sharedFiles = conversationMessages
@@ -696,23 +697,13 @@ export const RightInfoPanel: React.FC = () => {
                         />
                         <span className="font-semibold text-[#F5F7FA]">{author?.name}</span>
                       </div>
-                      {(() => {
-                        const pinnedBy = pin.pinnedBy || pin.reactions?.__pinnedBy?.[0];
-                        const isPinnedByMe = Boolean(
-                          (currentUser?.id && pinnedBy === currentUser.id) ||
-                          (currentUser?.email && pinnedBy === currentUser.email)
-                        );
-                        if (!isPinnedByMe) return null;
-                        return (
-                          <button
-                            onClick={() => togglePinMessage(pin.id)}
-                            className="text-[#929BAA] hover:text-[#F05D6C] text-[11px] flex items-center gap-1 cursor-pointer"
-                            title="Unpin"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        );
-                      })()}
+                      <button
+                        onClick={() => togglePinMessage(pin.id)}
+                        className="text-[#929BAA] hover:text-[#F05D6C] text-[11px] flex items-center gap-1 cursor-pointer"
+                        title="Unpin"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
 
                     <p className="text-[#F5F7FA] leading-relaxed line-clamp-3">{pin.content}</p>

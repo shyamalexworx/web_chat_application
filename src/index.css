@@ -406,3 +406,25 @@ html.light ::-webkit-scrollbar-thumb:hover,
   animation: spinSlow 8s linear infinite;
 }
 
+/* Workspace Rail Right Separation Line (Visible in both dark & light themes) */
+aside[aria-label="Workspaces"],
+.workspace-rail {
+  border-right: 1px solid #252B36 !important;
+}
+
+html.light aside[aria-label="Workspaces"],
+html.light .workspace-rail,
+[data-theme="light"] aside[aria-label="Workspaces"],
+[data-theme="light"] .workspace-rail {
+  border-right: 1px solid #CBD5E1 !important;
+}
+
+/* Scrollbar Hiding Utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+

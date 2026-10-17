@@ -46,7 +46,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
   };
 
   return (
-    <div className="w-12 h-full bg-slate-50 dark:bg-[#0B0D12] workspace-rail-bg flex flex-col items-center justify-between select-none flex-shrink-0">
+    <div className="w-full h-full bg-slate-50 dark:bg-[#0B0D12] workspace-rail-bg flex flex-col items-center justify-between select-none flex-shrink-0">
       <div className="w-full flex flex-col items-center flex-1 min-h-0">
         {/* Top Header Section: perfectly aligned at 56px (h-14) with ChannelSidebar and ChatHeader */}
         <div className="h-14 min-h-[56px] w-full border-b border-slate-200 dark:border-[#252B36] flex items-center justify-center flex-shrink-0 bg-slate-50 dark:bg-[#0B0D12] workspace-rail-bg">
@@ -274,7 +274,7 @@ export const WorkspaceRail: React.FC = () => {
   return (
     <aside 
       aria-label="Workspaces"
-      className="hidden md:flex w-12 h-full bg-[#0B0D12] workspace-rail border-r border-[#252B36] sidebar-chat-divider flex-col items-center select-none flex-shrink-0 z-30"
+      className="hidden md:flex w-12 h-full bg-slate-50 dark:bg-[#0B0D12] workspace-rail border-r border-slate-200 dark:border-[#252B36] flex-col items-center select-none flex-shrink-0 z-30"
     >
       <WorkspaceRailInner />
     </aside>

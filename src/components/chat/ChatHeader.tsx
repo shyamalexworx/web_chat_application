@@ -23,6 +23,7 @@ export const ChatHeader: React.FC = () => {
     users,
     messages,
     currentUser,
+    isMessagePinnedByMe,
     toggleStarChannel,
     toggleStarDM,
     updateChannelDetails,
@@ -52,24 +53,20 @@ export const ChatHeader: React.FC = () => {
 
   const dmPartner = getDMParticipant();
 
-  // Find messages pinned in this conversation by the current user
+  // Find messages pinned in this conversation by the current user (in channels and personal messages)
   const pinnedMessagesByMe = useMemo(() => {
     return messages.filter((m) => {
       if (activeView.type === 'channel') {
         if (m.conversationType !== 'channel' || m.conversationId !== activeView.id) return false;
       } else if (activeView.type === 'dm') {
-        if (m.conversationType !== 'dm' || m.conversationId !== activeView.id) return false;
+        if (m.conversationType !== 'dm') return false;
+        if (m.conversationId !== activeView.id && m.conversationId !== activeDM?.id) return false;
       } else {
         return false;
       }
-      if (!m.isPinned) return false;
-      const pBy = m.pinnedBy || m.reactions?.__pinnedBy?.[0];
-      return Boolean(
-        (currentUser?.id && pBy === currentUser.id) ||
-        (currentUser?.email && pBy === currentUser.email)
-      );
+      return isMessagePinnedByMe(m);
     });
-  }, [messages, activeView, currentUser]);
+  }, [messages, activeView, activeDM, isMessagePinnedByMe]);
 
   const hasPinnedByMe = pinnedMessagesByMe.length > 0;
 

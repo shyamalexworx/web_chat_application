@@ -137,6 +137,7 @@ interface ChatContextType {
   deleteMessage: (messageId: string, mode?: 'me' | 'everyone') => void;
   toggleReaction: (messageId: string, emoji: string) => void;
   togglePinMessage: (messageId: string) => void;
+  isMessagePinnedByMe: (message: Message) => boolean;
   
   // Threads
   activeThreadMessage: Message | null;
@@ -285,6 +286,25 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [activeThreadMessageId, setActiveThreadMessageId] = useState<string | null>(null);
   const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
+
+  // User-specific pinned message IDs (Private to each user)
+  const [pinnedMessageIds, setPinnedMessageIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(`pulsechat_pins_${currentUserId || 'default'}`);
+      return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+    } catch {
+      return new Set<string>();
+    }
+  });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`pulsechat_pins_${currentUserId || 'default'}`);
+      setPinnedMessageIds(saved ? new Set<string>(JSON.parse(saved)) : new Set<string>());
+    } catch {
+      setPinnedMessageIds(new Set<string>());
+    }
+  }, [currentUserId]);
 
   // Live Realtime Channel & State Sync Refs (Eliminates stale closure bugs)
   const realtimeChannelRef = useRef<RealtimeChannel | null>(null);
@@ -2696,82 +2716,88 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   }, [currentUserId]);
 
-  // Toggle Pin with Creator-Only Unpin Permissions and Single Notification
+  // User-specific pin checker: ONLY returns true if current user pinned this message
+  const isMessagePinnedByMe = useCallback((m: Message): boolean => {
+    if (!m) return false;
+    // Check locally persisted pinned IDs for this user
+    if (pinnedMessageIds.has(m.id)) return true;
+
+    // Check message pinnedBy metadata
+    const pBy = m.pinnedBy || m.reactions?.__pinnedBy?.[0];
+    const pByList = m.reactions?.__pinnedBy || [];
+
+    if (currentUserId && (pBy === currentUserId || pByList.includes(currentUserId))) return true;
+    if (currentUser?.id && (pBy === currentUser.id || pByList.includes(currentUser.id))) return true;
+    if (currentUser?.email && (pBy === currentUser.email || pByList.includes(currentUser.email))) return true;
+
+    // Fallback for legacy messages that were pinned in DB with no recorded owner yet:
+    // Claim it for the current user so existing pinned messages immediately show up
+    if (m.isPinned && !m.pinnedBy && pByList.length === 0) return true;
+
+    return false;
+  }, [pinnedMessageIds, currentUserId, currentUser]);
+
+  // Toggle Pin (Personal / Private per-user pinning with single notification)
   const togglePinMessage = useCallback((messageId: string) => {
     let targetMsg: Message | undefined;
 
     setMessages((prev) => {
       targetMsg = prev.find((m) => m.id === messageId);
-      if (!targetMsg) return prev;
-
-      // Permission check: if message is currently pinned, only the pinner can unpin it
-      if (targetMsg.isPinned) {
-        const pBy = targetMsg.pinnedBy || targetMsg.reactions?.__pinnedBy?.[0];
-        const isPinnedByMe = Boolean(
-          (currentUserId && pBy === currentUserId) ||
-          (currentUser?.email && pBy === currentUser.email)
-        );
-        if (!isPinnedByMe && pBy) {
-          return prev;
-        }
-      }
-
-      const isNowPinned = !targetMsg.isPinned;
-      const newReactions = { ...targetMsg.reactions };
-      if (isNowPinned) {
-        newReactions.__pinnedBy = [currentUserId];
-      } else {
-        delete newReactions.__pinnedBy;
-      }
-
-      return prev.map((m) => {
-        if (m.id !== messageId) return m;
-        return {
-          ...m,
-          isPinned: isNowPinned,
-          pinnedBy: isNowPinned ? currentUserId : undefined,
-          reactions: newReactions,
-        };
-      });
+      return prev;
     });
 
     if (!targetMsg) return;
 
-    // Check if unpin was disallowed for user feedback
-    if (targetMsg.isPinned) {
-      const pBy = targetMsg.pinnedBy || targetMsg.reactions?.__pinnedBy?.[0];
-      const isPinnedByMe = Boolean(
-        (currentUserId && pBy === currentUserId) ||
-        (currentUser?.email && pBy === currentUser.email)
-      );
-      if (!isPinnedByMe && pBy) {
-        addToast('Only the person who pinned this message can unpin it', 'warning');
-        return;
-      }
+    const isCurrentlyPinned = isMessagePinnedByMe(targetMsg);
+    const isNowPinned = !isCurrentlyPinned;
+
+    // Update local user pin set and cache immediately
+    setPinnedMessageIds((prev) => {
+      const next = new Set(prev);
+      if (isNowPinned) next.add(messageId);
+      else next.delete(messageId);
+      try {
+        localStorage.setItem(`pulsechat_pins_${currentUserId || 'default'}`, JSON.stringify(Array.from(next)));
+      } catch (e) {}
+      return next;
+    });
+
+    const currentPinners: string[] = targetMsg.reactions?.__pinnedBy || (targetMsg.pinnedBy ? [targetMsg.pinnedBy] : []);
+    let newPinners: string[];
+    if (isNowPinned) {
+      newPinners = Array.from(new Set([...currentPinners, currentUserId]));
+    } else {
+      newPinners = currentPinners.filter((id) => id !== currentUserId && id !== currentUser?.email && id !== currentUser?.id);
     }
 
-    const isNowPinned = !targetMsg.isPinned;
     const newReactions = { ...targetMsg.reactions };
-    if (isNowPinned) {
-      newReactions.__pinnedBy = [currentUserId];
+    if (newPinners.length > 0) {
+      newReactions.__pinnedBy = newPinners;
     } else {
       delete newReactions.__pinnedBy;
     }
 
-    // Trigger toast notification exactly ONCE
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== messageId) return m;
+        return {
+          ...m,
+          isPinned: newPinners.length > 0,
+          pinnedBy: newPinners[0] || undefined,
+          reactions: newReactions,
+        };
+      })
+    );
+
     addToast(isNowPinned ? 'Message pinned to conversation' : 'Message unpinned', 'info');
 
-    // Sync to Supabase DB
     if (isSupabaseConfigured) {
       updateMessageInSupabase(messageId, {
-        isPinned: isNowPinned,
+        isPinned: newPinners.length > 0,
         reactions: newReactions,
-      }).catch((err) =>
-        console.warn('Supabase pin notice:', err)
-      );
+      }).catch((err) => console.warn('Supabase pin notice:', err));
     }
 
-    // Broadcast update across tabs and realtime channels
     try {
       if (isSupabaseConfigured && realtimeChannelRef.current) {
         realtimeChannelRef.current.send({
@@ -2779,8 +2805,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           event: 'update_message',
           payload: {
             id: messageId,
-            isPinned: isNowPinned,
-            pinnedBy: isNowPinned ? currentUserId : undefined,
+            isPinned: newPinners.length > 0,
+            pinnedBy: newPinners[0] || undefined,
             reactions: newReactions,
           },
         }).catch(() => {});
@@ -2792,13 +2818,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         type: 'update_message',
         payload: {
           id: messageId,
-          isPinned: isNowPinned,
-          pinnedBy: isNowPinned ? currentUserId : undefined,
+          isPinned: newPinners.length > 0,
+          pinnedBy: newPinners[0] || undefined,
           reactions: newReactions,
         },
       });
     } catch (e) {}
-  }, [currentUserId, currentUser, addToast]);
+  }, [currentUserId, currentUser, isMessagePinnedByMe, addToast]);
 
   // Thread Reply with Anti-Flood Protection and Encryption
   const sendThreadReply = useCallback(
@@ -3164,6 +3190,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteMessage,
         toggleReaction,
         togglePinMessage,
+        isMessagePinnedByMe,
 
         activeThreadMessage,
         setActiveThreadMessageId,

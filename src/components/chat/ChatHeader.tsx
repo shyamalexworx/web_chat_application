@@ -57,7 +57,7 @@ export const ChatHeader: React.FC = () => {
   };
 
   return (
-    <header className="h-14 min-h-[56px] flex-shrink-0 bg-[#0F1117] border-b border-[#252B36] px-3 sm:px-4 flex items-center justify-between select-none z-10">
+    <header className="hidden md:flex h-14 min-h-[56px] flex-shrink-0 bg-[#0F1117] border-b border-[#252B36] px-3 sm:px-4 items-center justify-between select-none z-10">
       {/* Mobile Sidebar Toggle Button */}
       <button
         onClick={toggleSidebarCollapsed}

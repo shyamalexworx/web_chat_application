@@ -177,8 +177,8 @@ export const RightInfoPanel: React.FC = () => {
       aria-label="Channel and conversation information"
       className="max-md:fixed max-md:inset-0 max-md:top-12 max-md:w-full max-md:z-40 md:relative md:w-80 lg:w-96 bg-[#0F1117] border-l border-[#252B36] flex flex-col h-full flex-shrink-0 select-none z-20 animate-fade-in shadow-modal"
     >
-      {/* Header with Title and Close Button */}
-      <div className="h-14 border-b border-[#252B36] px-4 flex items-center justify-between">
+      {/* Header with Title and Close Button (Desktop/Tablet only; hidden in mobile view) */}
+      <div className="hidden md:flex h-14 border-b border-[#252B36] px-4 items-center justify-between">
         <div className="flex items-center space-x-2">
           <Info className="w-4 h-4 text-[#4F8CFF]" />
           <h2 className="text-xs font-bold text-[#F5F7FA]">

@@ -37,6 +37,7 @@ export const ChannelSidebar: React.FC = () => {
     setIsBrowseChannelsOpen,
     setIsCreateWorkspaceOpen,
     isSidebarCollapsed,
+    setIsSidebarCollapsed,
     startGoogleMeet,
     setIsGlobalSearchOpen,
     setIsWorkspaceSettingsOpen,
@@ -92,30 +93,33 @@ export const ChannelSidebar: React.FC = () => {
     // User requested: menu bar collapses ONLY by clicking the menu bar icon
   };
 
+  const handleCloseSidebar = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    setIsSidebarCollapsed(true);
+  };
+
   return (
     <>
-      {/* Mobile overlay backdrop: absorbs all touches so yellow section is completely non-reactive */}
-      {!isSidebarCollapsed && (
-        <div
-          onClick={(e) => {
-            // Absorb touches: yellow section (chat interface) is completely non-reactive
-            e.stopPropagation();
-          }}
-          className="md:hidden fixed inset-0 top-12 z-30 bg-black/60 backdrop-blur-xs pointer-events-auto transition-opacity cursor-default"
-          aria-hidden="true"
-        />
-      )}
+      {/* Mobile overlay backdrop: touching closes/collapses the menu bar smoothly */}
+      <div
+        onClick={handleCloseSidebar}
+        onTouchEnd={handleCloseSidebar}
+        className={`md:hidden fixed inset-0 top-12 z-30 bg-black/60 backdrop-blur-xs transition-opacity duration-300 ease-out ${
+          isSidebarCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto cursor-pointer'
+        }`}
+        aria-label="Close navigation menu"
+      />
 
       <nav 
         aria-label="Workspace channels and messages"
-        className={`bg-[#0F1117] border-r border-[#252B36] sidebar-chat-divider flex flex-row select-none flex-shrink-0 transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-left max-md:fixed max-md:left-0 max-md:top-12 max-md:bottom-0 max-md:h-[calc(100dvh-48px)] md:h-full max-md:w-80 max-md:z-40 max-md:shadow-2xl ${
+        className={`bg-[#0F1117] border-r border-[#252B36] sidebar-chat-divider flex flex-row select-none flex-shrink-0 max-md:fixed max-md:left-0 max-md:top-12 max-md:bottom-0 max-md:h-[calc(100dvh-48px)] max-md:w-80 max-md:z-40 max-md:shadow-2xl max-md:transition-transform max-md:duration-300 max-md:ease-[cubic-bezier(0.16,1,0.3,1)] md:h-full md:transition-all md:duration-300 md:ease-[cubic-bezier(0.16,1,0.3,1)] md:origin-left ${
           isSidebarCollapsed
-            ? 'w-0 opacity-0 -translate-x-full md:-translate-x-12 pointer-events-none overflow-hidden border-none'
-            : 'w-64 max-md:w-80 opacity-100 translate-x-0'
+            ? 'max-md:-translate-x-full max-md:pointer-events-none md:w-0 md:opacity-0 md:-translate-x-12 md:pointer-events-none md:overflow-hidden md:border-none'
+            : 'max-md:translate-x-0 max-md:pointer-events-auto md:w-64 md:opacity-100 md:translate-x-0'
         }`}
       >
-        {/* MOBILE-ONLY WORKSPACE RAIL (Red marked section placed inside the menu bar) */}
-        <div className="w-12 h-full bg-slate-50 dark:bg-[#0B0D12] border-r border-slate-200 dark:border-[#252B36] flex-shrink-0 flex flex-col md:hidden">
+        {/* MOBILE-ONLY WORKSPACE RAIL */}
+        <div className="w-12 h-full bg-slate-50 dark:bg-[#0B0D12] flex-shrink-0 flex flex-col md:hidden">
           <WorkspaceRailInner isMobile={true} />
         </div>
 

@@ -47,7 +47,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
 
   return (
     <div className="w-full h-full bg-slate-50 dark:bg-[#0B0D12] workspace-rail-bg flex flex-col items-center justify-between select-none flex-shrink-0">
-      <div className="w-full flex flex-col items-center flex-1 min-h-0">
+      <div className={`w-full flex flex-col items-center flex-1 min-h-0 ${isMobile ? 'border-r border-slate-200 dark:border-[#252B36]' : ''}`}>
         {/* Top Header Section: perfectly aligned at 56px (h-14) with ChannelSidebar and ChatHeader */}
         <div className="h-14 min-h-[56px] w-full border-b border-slate-200 dark:border-[#252B36] flex items-center justify-center flex-shrink-0 bg-slate-50 dark:bg-[#0B0D12] workspace-rail-bg">
           <div className="relative group">

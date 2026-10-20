@@ -312,7 +312,7 @@ export const TopNavigation: React.FC = () => {
   };
 
   return (
-    <header className="h-12 min-h-[48px] flex-shrink-0 bg-white dark:bg-[#0B0D12] border-b border-slate-200 dark:border-[#252B36] flex items-center justify-between pl-0 pr-2 sm:pr-4 select-none z-40 relative">
+    <header className="h-12 min-h-[48px] flex-shrink-0 bg-white dark:bg-[#0B0D12] border-b border-slate-200 dark:border-[#252B36] flex items-center justify-between pl-0 pr-2 sm:pr-4 select-none z-40 max-md:z-50 relative">
       {/* Desktop/Laptop/Tablet Left: Brand Indicator (Aligned with 48px Workspace Rail) */}
       <div className="hidden md:flex items-center flex-shrink-0">
         <div className="w-12 h-12 flex items-center justify-center flex-shrink-0">
@@ -535,10 +535,10 @@ export const TopNavigation: React.FC = () => {
           {notifMenuOpen && (
             <>
               <div 
-                className="fixed inset-0 z-40 bg-transparent cursor-pointer" 
+                className="fixed inset-0 z-40 max-md:z-[55] bg-black/40 backdrop-blur-xs md:bg-transparent cursor-pointer" 
                 onClick={() => setNotifMenuOpen(false)} 
               />
-              <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-2xl shadow-xl z-50 overflow-hidden animate-slide-down">
+              <div className="max-md:fixed max-md:top-14 max-md:right-2 max-md:w-[calc(100vw-1rem)] max-md:max-w-sm max-md:z-[60] md:absolute md:right-0 md:mt-2 md:w-96 bg-white dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-2xl shadow-2xl z-50 overflow-hidden animate-slide-down">
                 {/* Header */}
                 <div className="px-4 py-3 border-b border-slate-200 dark:border-[#252B36] flex items-center justify-between bg-slate-50 dark:bg-[#12151C]/60">
                   <div className="flex items-center space-x-2">

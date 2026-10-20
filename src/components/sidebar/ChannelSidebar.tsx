@@ -498,11 +498,11 @@ export const ChannelSidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile-only Account Section across the bottom (marked in green by user) */}
-      <div className="md:hidden h-14 min-h-[56px] border-t border-slate-200 dark:border-[#252B36] px-3 flex items-center justify-between bg-slate-50 dark:bg-[#0B0D12] flex-shrink-0">
+      {/* Mobile-only Account Section across the bottom */}
+      <div className="md:hidden h-14 min-h-[56px] border-t border-slate-200 dark:border-[#252B36] pl-1 pr-3 flex items-center justify-between bg-slate-50 dark:bg-[#0B0D12] flex-shrink-0">
         <button
           onClick={() => setIsUserProfileOpen(true)}
-          className="flex items-center space-x-2.5 overflow-hidden flex-1 p-1 rounded-lg hover:bg-slate-200/70 dark:hover:bg-[#181C25] transition-colors text-left group cursor-pointer"
+          className="flex items-center overflow-hidden flex-1 py-1 pl-0 pr-1 rounded-lg hover:bg-slate-200/70 dark:hover:bg-[#181C25] transition-colors text-left group cursor-pointer"
           title="Open Profile & Settings"
         >
           <div className="truncate flex-1 min-w-0">

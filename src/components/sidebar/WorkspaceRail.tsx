@@ -163,7 +163,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
     </div>
 
       {/* USER PROFILE SECTION MOVED TO BOTTOM LEFT RAIL (Aligned with Chat Composer bottom toolbar) */}
-      <div className="h-[56px] min-h-[56px] border-t border-slate-200 dark:border-[#252B36] w-full flex items-center justify-center relative flex-shrink-0 bg-slate-50 dark:bg-[#0B0D12]">
+      <div className={`h-[56px] min-h-[56px] border-t border-slate-200 dark:border-[#252B36] w-full flex items-center ${isMobile ? 'justify-end pr-1' : 'justify-center'} relative flex-shrink-0 bg-slate-50 dark:bg-[#0B0D12]`}>
         <button
           onClick={() => setUserMenuOpen(!userMenuOpen)}
           className="w-8 h-8 rounded-lg overflow-hidden border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF] transition-all relative cursor-pointer"

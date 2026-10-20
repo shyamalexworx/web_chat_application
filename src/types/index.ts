@@ -151,9 +151,19 @@ export interface HuddleState {
 
 export interface AIMessage {
   id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
   timestamp: string;
+  feedback?: 'like' | 'dislike' | null;
+  error?: boolean;
+}
+
+export interface AIConversation {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: AIMessage[];
 }
 
 export interface SupportedLanguage {

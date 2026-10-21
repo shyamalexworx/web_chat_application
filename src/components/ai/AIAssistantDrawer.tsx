@@ -55,6 +55,7 @@ export const AIAssistantDrawer: React.FC = () => {
     createOrOpenDM,
     messages,
     activeConversationMessages,
+    workspaces,
     activeWorkspace,
     createWorkspace,
     setActiveWorkspaceId,
@@ -150,6 +151,7 @@ export const AIAssistantDrawer: React.FC = () => {
     isPrivate?: boolean;
     channelName?: string;
     userName?: string;
+    workspaceName?: string;
     content?: string;
   }): string => {
     try {
@@ -228,7 +230,23 @@ export const AIAssistantDrawer: React.FC = () => {
         }
       }
 
-      // 5. Navigate / Switch to a Channel or DM
+      // 5. Navigate / Switch to a Workspace, Channel, or DM
+      if (actionJson.action === 'switch_workspace' || actionJson.action === 'change_workspace' || (actionJson.action === 'navigate' && actionJson.workspaceName)) {
+        const rawWs = (actionJson.workspaceName || actionJson.name || '').replace(/workspace$/i, '').trim().toLowerCase();
+        const targetWs = workspaces.find((w) =>
+          w.name.toLowerCase() === rawWs ||
+          w.name.toLowerCase().includes(rawWs) ||
+          rawWs.includes(w.name.toLowerCase())
+        );
+        if (targetWs) {
+          setActiveWorkspaceId(targetWs.id);
+          addToast(`Switched to workspace "${targetWs.name}"`, 'success');
+          return `✅ Switched to workspace **${targetWs.name}**.`;
+        }
+        const available = workspaces.map((w) => `"${w.name}"`).join(', ');
+        return `⚠️ Workspace "${actionJson.workspaceName || actionJson.name}" not found. Available workspaces: ${available}`;
+      }
+
       if (actionJson.action === 'navigate') {
         if (actionJson.channelName) {
           const chName = actionJson.channelName.replace(/^#/, '').toLowerCase().trim();
@@ -342,6 +360,7 @@ Your SOLE purpose is to serve this workspace ("${activeWorkspace?.name || 'Pulse
 CURRENT WORKSPACE CONTEXT:
 - Application: PulseChat
 - Active Workspace: ${activeWorkspace?.name || 'Workspace'}
+- Available Workspaces: ${workspaces.map((w) => `"${w.name}"`).join(', ')}
 - Logged-in User: ${currentUser?.name || 'User'}
 - Channels Available: ${channelNamesList || '#general'}
 - Workspace Members: ${memberNamesList}
@@ -353,11 +372,12 @@ ${extraChannelContext}
 
 CAPABILITIES & REAL-TIME ACTIONS:
 You have native tools available to perform real workspace actions:
+- switch_workspace: Switch or change active workspace to an existing workspace (e.g. { "action": "switch_workspace", "workspaceName": "rabil" })
 - create_channel: Create a new channel and navigate to it
 - create_workspace: Create a new workspace and switch to it
 - send_message: Send a message to a channel or current conversation
 - send_dm: Send a direct message to a team member
-- navigate: Switch to a channel or direct message
+- navigate: Switch to a workspace, channel or direct message
 
 IMPORTANT OPERATING RULES:
 1. NEVER claim that you cannot create workspaces, channels, or send messages. You have native tools to execute them directly.
@@ -423,6 +443,31 @@ IMPORTANT OPERATING RULES:
     const updatedMessages = [...aiMessages, userMsg];
     updateCurrentConversationMessages(() => updatedMessages);
     setInput('');
+
+    // Instant proactive execution for workspace change commands
+    const wsSwitchRegex = /(?:change|switch|go|move)\s+(?:to\s+)?(?:the\s+)?(?:workspace\s+)?["']?([^"'\n\.\?]+?)["']?(?:\s+workspace)?$/i;
+    const switchMatch = trimmed.match(wsSwitchRegex);
+    if (switchMatch && switchMatch[1]) {
+      const candidate = switchMatch[1].replace(/workspace$/i, '').trim().toLowerCase();
+      const matchedWs = workspaces.find((w) =>
+        w.name.toLowerCase() === candidate ||
+        w.name.toLowerCase().includes(candidate) ||
+        candidate.includes(w.name.toLowerCase())
+      );
+      if (matchedWs) {
+        setActiveWorkspaceId(matchedWs.id);
+        addToast(`Switched to workspace "${matchedWs.name}"`, 'success');
+        const assistantMsg: AIMessage = {
+          id: 'ai-resp-' + Date.now(),
+          role: 'assistant',
+          content: `✅ Switched to workspace **${matchedWs.name}**.\n\nAll channels, teammates, and discussions for **${matchedWs.name}** are now active in your workspace. What would you like to explore next?`,
+          timestamp: new Date().toISOString(),
+        };
+        updateCurrentConversationMessages(() => [...updatedMessages, assistantMsg]);
+        return;
+      }
+    }
+
     setIsThinking(true);
 
     const controller = new AbortController();
@@ -618,17 +663,17 @@ IMPORTANT OPERATING RULES:
   return (
     <aside
       aria-label="AI Assistant"
-      className="max-md:fixed max-md:top-12 max-md:bottom-0 max-md:inset-x-0 max-md:w-full max-md:h-[calc(100dvh-48px)] max-md:z-50 md:relative md:w-80 lg:w-96 bg-[#0F1117] border-l border-[#252B36] flex flex-col h-full flex-shrink-0 z-30 animate-fade-in shadow-modal"
+      className="max-md:fixed max-md:top-12 max-md:bottom-0 max-md:inset-x-0 max-md:w-full max-md:h-[calc(100dvh-48px)] max-md:z-50 md:relative md:w-80 lg:w-96 bg-white dark:bg-[#0F1117] border-l border-slate-200 dark:border-[#252B36] flex flex-col h-full flex-shrink-0 z-30 animate-fade-in shadow-modal"
     >
       {/* Header */}
-      <div className="h-14 border-b border-[#252B36] px-3.5 flex items-center justify-between bg-[#12151C]/90 flex-shrink-0">
-        <div className="flex items-center space-x-2.5 overflow-hidden">
+      <div className="h-11 min-h-[44px] border-b border-slate-200 dark:border-[#252B36] px-3 flex items-center justify-between bg-white dark:bg-[#12151C]/90 flex-shrink-0">
+        <div className="flex items-center space-x-2 overflow-hidden">
           {/* Website's standard AI Bot icon */}
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#4F8CFF] to-[#A855F7] flex items-center justify-center text-white shadow-accent-glow flex-shrink-0">
-            <Bot className="w-4 h-4" />
+          <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#4F8CFF] to-[#A855F7] flex items-center justify-center text-white shadow-accent-glow flex-shrink-0">
+            <Bot className="w-3.5 h-3.5" />
           </div>
           <div className="min-w-0">
-            <div className="text-sm font-bold text-[#F5F7FA]">
+            <div className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA]">
               Pulse AI
             </div>
           </div>
@@ -641,7 +686,7 @@ IMPORTANT OPERATING RULES:
             className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
               showHistory
                 ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]'
-                : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25]'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] dark:hover:bg-[#181C25]'
             }`}
             title="Conversation history"
           >
@@ -649,21 +694,21 @@ IMPORTANT OPERATING RULES:
           </button>
           <button
             onClick={handleStartNewChat}
-            className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] dark:hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
             title="Start new conversation"
           >
             <Plus className="w-4 h-4" />
           </button>
           <button
             onClick={handleResetCurrentChat}
-            className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] dark:hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
             title="Reset current conversation"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
           <button
             onClick={() => setIsAIAssistantOpen(false)}
-            className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
+            className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] dark:hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
             title="Close AI Assistant"
           >
             <X className="w-4 h-4" />
@@ -673,9 +718,9 @@ IMPORTANT OPERATING RULES:
 
       {/* Conversation History Drawer Overlay */}
       {showHistory && (
-        <div className="border-b border-[#252B36] bg-[#12151C] p-3 text-xs space-y-2.5 animate-fade-in shadow-xl flex-shrink-0">
+        <div className="border-b border-slate-200 dark:border-[#252B36] bg-white dark:bg-[#12151C] p-3 text-xs space-y-2.5 animate-fade-in shadow-xl flex-shrink-0">
           <div className="flex items-center justify-between">
-            <span className="font-bold text-[#F5F7FA] text-xs">Conversations</span>
+            <span className="font-bold text-slate-800 dark:text-[#F5F7FA] text-xs">Conversations</span>
             <button
               onClick={handleStartNewChat}
               className="px-2 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white rounded text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
@@ -692,8 +737,8 @@ IMPORTANT OPERATING RULES:
                   key={conv.id}
                   className={`group px-2.5 py-2 rounded-lg flex items-center justify-between transition-colors ${
                     isActive
-                      ? 'bg-[#181C25] border border-[#4F8CFF]/40 text-[#F5F7FA]'
-                      : 'hover:bg-[#181C25]/60 text-[#929BAA] hover:text-[#F5F7FA]'
+                      ? 'bg-slate-100 dark:bg-[#181C25] border border-[#4F8CFF]/40 text-slate-900 dark:text-[#F5F7FA]'
+                      : 'hover:bg-slate-100 dark:hover:bg-[#181C25]/60 text-slate-600 dark:text-[#929BAA] hover:text-slate-900 dark:hover:text-[#F5F7FA]'
                   }`}
                 >
                   <button
@@ -706,7 +751,7 @@ IMPORTANT OPERATING RULES:
                     <div className="font-medium text-xs truncate">
                       {conv.title || 'Untitled Chat'}
                     </div>
-                    <div className="text-[10px] text-[#929BAA]/70 font-mono">
+                    <div className="text-[10px] text-slate-400 dark:text-[#929BAA]/70 font-mono">
                       {conv.messages.length} messages •{' '}
                       {new Date(conv.updatedAt).toLocaleDateString()}
                     </div>
@@ -716,13 +761,13 @@ IMPORTANT OPERATING RULES:
                     <div className="flex items-center space-x-1">
                       <button
                         onClick={() => handleDeleteConversation(conv.id)}
-                        className="px-1.5 py-0.5 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded text-[10px] font-bold cursor-pointer"
+                        className="px-1.5 py-0.5 bg-red-500/20 text-red-500 hover:bg-red-500/30 rounded text-[10px] font-bold cursor-pointer"
                       >
                         Delete
                       </button>
                       <button
                         onClick={() => setDeleteConfirmId(null)}
-                        className="px-1.5 py-0.5 text-[#929BAA] hover:text-white text-[10px] cursor-pointer"
+                        className="px-1.5 py-0.5 text-slate-500 hover:text-slate-800 dark:text-[#929BAA] dark:hover:text-white text-[10px] cursor-pointer"
                       >
                         Cancel
                       </button>
@@ -730,7 +775,7 @@ IMPORTANT OPERATING RULES:
                   ) : (
                     <button
                       onClick={() => setDeleteConfirmId(conv.id)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-[#929BAA] hover:text-red-400 rounded transition-opacity cursor-pointer"
+                      className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 dark:text-[#929BAA] dark:hover:text-red-400 rounded transition-opacity cursor-pointer"
                       title="Delete conversation"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -744,41 +789,41 @@ IMPORTANT OPERATING RULES:
       )}
 
       {/* Suggested Quick Prompt Chips tailored for workspace */}
-      <div className="px-3 py-2 border-b border-[#252B36] bg-[#0B0D12]/70 flex items-center space-x-2 overflow-x-auto text-xs no-scrollbar flex-shrink-0">
+      <div className="px-2.5 py-1.5 border-b border-slate-200 dark:border-[#252B36] bg-slate-50 dark:bg-[#0B0D12]/70 flex items-center space-x-1.5 overflow-x-auto text-[11px] no-scrollbar flex-shrink-0">
         <button
           onClick={() => handleSendPrompt('Hello! How can you help me in this workspace?')}
-          className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer"
+          className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-[#181C25] dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF]/50 text-slate-700 dark:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
         >
           👋 Say hello
         </button>
         <button
           onClick={() => handleSendPrompt('Summarize the recent conversation messages in this channel')}
-          className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer"
+          className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-[#181C25] dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF]/50 text-slate-700 dark:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
         >
           📋 Summarize channel
         </button>
         <button
           onClick={() => handleSendPrompt('Create a new channel called announcements')}
-          className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer"
+          className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-[#181C25] dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF]/50 text-slate-700 dark:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
         >
           ⚡ Create channel
         </button>
         <button
           onClick={() => handleSendPrompt('Create a new workspace named Project Launch')}
-          className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer"
+          className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-[#181C25] dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF]/50 text-slate-700 dark:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
         >
           🏢 New workspace
         </button>
         <button
           onClick={() => handleSendPrompt('Help me draft a friendly check-in message for my team')}
-          className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] hover:border-[#4F8CFF]/50 text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer"
+          className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-[#181C25] dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF]/50 text-slate-700 dark:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
         >
           ✍️ Draft message
         </button>
       </div>
 
       {/* Messages Feed */}
-      <div ref={containerRef} className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-[#0B0D12]/30">
+      <div ref={containerRef} className="flex-1 overflow-y-auto p-2.5 space-y-2 bg-[#F8FAFC] dark:bg-[#0B0D12]">
         {aiMessages.map((msg, index) => {
           const isUser = msg.role === 'user';
           return (
@@ -787,12 +832,12 @@ IMPORTANT OPERATING RULES:
               className={`flex flex-col ${isUser ? 'items-end' : 'items-start'}`}
             >
               <div
-                className={`max-w-[94%] sm:max-w-[88%] rounded-2xl p-3.5 text-sm sm:text-xs leading-relaxed shadow-sm transition-all ${
+                className={`max-w-[94%] sm:max-w-[88%] rounded-xl px-3 py-2 text-xs leading-snug shadow-sm transition-all ${
                   isUser
                     ? 'bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] text-white rounded-br-xs'
                     : msg.error
-                    ? 'bg-red-500/10 border border-red-500/30 text-[#F5F7FA] rounded-bl-xs'
-                    : 'bg-[#181C25] border border-[#252B36] text-[#F5F7FA] rounded-bl-xs'
+                    ? 'bg-red-500/10 border border-red-500/30 text-red-700 dark:text-[#F5F7FA] rounded-bl-xs'
+                    : 'bg-white dark:bg-[#181C25] border border-slate-200/90 dark:border-[#252B36] text-slate-800 dark:text-[#F5F7FA] rounded-bl-xs shadow-2xs'
                 }`}
               >
                 {/* Content rendering */}
@@ -806,11 +851,11 @@ IMPORTANT OPERATING RULES:
 
                 {/* Assistant Action Strip */}
                 {!isUser && msg.id !== 'ai-welcome' && (
-                  <div className="mt-3 pt-2.5 border-t border-[#252B36] flex items-center justify-between text-xs gap-2">
+                  <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-[#252B36] flex items-center justify-between text-xs gap-2">
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => handleInsertIntoChat(msg.content)}
-                        className="text-[#4F8CFF] hover:underline flex items-center gap-1 font-semibold cursor-pointer text-[11px]"
+                        className="text-[#2563EB] dark:text-[#4F8CFF] hover:underline flex items-center gap-1 font-semibold cursor-pointer text-[11px]"
                       >
                         <CornerDownLeft className="w-3.5 h-3.5" /> Post to Channel
                       </button>
@@ -818,7 +863,7 @@ IMPORTANT OPERATING RULES:
                       {msg.error && (
                         <button
                           onClick={handleRetryLast}
-                          className="px-2 py-0.5 bg-red-500/20 text-red-300 hover:bg-red-500/30 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                          className="px-2 py-0.5 bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:bg-red-500/20 dark:text-red-300 rounded text-[11px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
                         >
                           <RefreshCw className="w-3 h-3" /> Retry
                         </button>
@@ -829,8 +874,8 @@ IMPORTANT OPERATING RULES:
                       {/* Thumbs up / down feedback */}
                       <button
                         onClick={() => handleFeedback(msg.id, 'like')}
-                        className={`p-1 rounded hover:bg-[#12151C] transition-colors cursor-pointer ${
-                          msg.feedback === 'like' ? 'text-[#32C48D]' : 'text-[#929BAA] hover:text-[#F5F7FA]'
+                        className={`p-1 rounded hover:bg-slate-100 dark:hover:bg-[#12151C] transition-colors cursor-pointer ${
+                          msg.feedback === 'like' ? 'text-[#32C48D]' : 'text-slate-400 dark:text-[#929BAA] hover:text-slate-700 dark:hover:text-[#F5F7FA]'
                         }`}
                         title="Good response"
                       >
@@ -838,8 +883,8 @@ IMPORTANT OPERATING RULES:
                       </button>
                       <button
                         onClick={() => handleFeedback(msg.id, 'dislike')}
-                        className={`p-1 rounded hover:bg-[#12151C] transition-colors cursor-pointer ${
-                          msg.feedback === 'dislike' ? 'text-red-400' : 'text-[#929BAA] hover:text-[#F5F7FA]'
+                        className={`p-1 rounded hover:bg-slate-100 dark:hover:bg-[#12151C] transition-colors cursor-pointer ${
+                          msg.feedback === 'dislike' ? 'text-red-500' : 'text-slate-400 dark:text-[#929BAA] hover:text-slate-700 dark:hover:text-[#F5F7FA]'
                         }`}
                         title="Poor response"
                       >
@@ -849,7 +894,7 @@ IMPORTANT OPERATING RULES:
                       {/* Regenerate */}
                       <button
                         onClick={() => handleRegenerate(index)}
-                        className="p-1 text-[#929BAA] hover:text-[#F5F7FA] rounded hover:bg-[#12151C] transition-colors cursor-pointer"
+                        className="p-1 text-slate-400 hover:text-slate-700 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] rounded hover:bg-slate-100 dark:hover:bg-[#12151C] transition-colors cursor-pointer"
                         title="Regenerate response"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
@@ -858,7 +903,7 @@ IMPORTANT OPERATING RULES:
                       {/* Copy */}
                       <button
                         onClick={() => handleCopy(msg.id, msg.content)}
-                        className="text-[#929BAA] hover:text-[#F5F7FA] p-1 rounded hover:bg-[#12151C] transition-colors cursor-pointer"
+                        className="text-slate-400 hover:text-slate-700 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] p-1 rounded hover:bg-slate-100 dark:hover:bg-[#12151C] transition-colors cursor-pointer"
                         title="Copy message"
                       >
                         {copiedId === msg.id ? (
@@ -872,7 +917,7 @@ IMPORTANT OPERATING RULES:
                 )}
               </div>
 
-              <span className="text-[10px] text-[#929BAA] px-1 mt-1 font-mono">
+              <span className="text-[10px] text-slate-400 dark:text-[#929BAA] px-1 mt-1 font-mono">
                 {new Date(msg.timestamp).toLocaleTimeString('en-US', {
                   hour: 'numeric',
                   minute: '2-digit',
@@ -884,18 +929,18 @@ IMPORTANT OPERATING RULES:
         })}
 
         {isThinking && (
-          <div className="flex items-center justify-between p-3.5 bg-[#181C25] border border-[#252B36] rounded-2xl rounded-bl-xs max-w-[80%]">
+          <div className="flex items-center justify-between px-3 py-2 bg-white dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-xl rounded-bl-xs max-w-[80%] shadow-2xs">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-[#4F8CFF] animate-bounce [animation-delay:-0.3s]" />
               <span className="w-2 h-2 rounded-full bg-[#4F8CFF] animate-bounce [animation-delay:-0.15s]" />
               <span className="w-2 h-2 rounded-full bg-[#4F8CFF] animate-bounce" />
-              <span className="text-xs text-[#929BAA] font-mono ml-1.5">
+              <span className="text-xs text-slate-500 dark:text-[#929BAA] font-mono ml-1.5">
                 Thinking...
               </span>
             </div>
             <button
               onClick={handleStopGeneration}
-              className="text-[#929BAA] hover:text-red-400 p-1 rounded hover:bg-[#12151C] transition-colors cursor-pointer"
+              className="text-slate-400 hover:text-red-500 dark:text-[#929BAA] dark:hover:text-red-400 p-1 rounded hover:bg-slate-100 dark:hover:bg-[#12151C] transition-colors cursor-pointer"
               title="Stop generating"
             >
               <StopCircle className="w-4 h-4" />
@@ -903,17 +948,17 @@ IMPORTANT OPERATING RULES:
           </div>
         )}
 
-        <div className="h-2" />
+        <div className="h-1" />
       </div>
 
       {/* Input Composer - Symmetrical vertical alignment & even placeholder spacing */}
-      <div className="p-3 pb-5 sm:p-4 border-t border-[#252B36] bg-[#0F1117] flex-shrink-0 sticky bottom-0 z-10">
+      <div className="p-2 sm:p-2.5 border-t border-slate-200 dark:border-[#252B36] bg-white dark:bg-[#0F1117] flex-shrink-0 sticky bottom-0 z-10">
         <form
           onSubmit={(e) => {
             e.preventDefault();
             handleSendPrompt(input);
           }}
-          className="bg-[#181C25] border border-[#252B36] focus-within:border-[#4F8CFF] rounded-xl px-3 py-2 flex items-center space-x-2 transition-colors min-h-[44px]"
+          className="bg-slate-100 hover:bg-slate-200/50 focus-within:bg-white dark:bg-[#181C25] dark:hover:bg-[#181C25] dark:focus-within:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus-within:border-[#4F8CFF] rounded-lg px-2.5 py-1.5 flex items-center space-x-2 transition-colors min-h-[38px] shadow-2xs"
         >
           <textarea
             ref={textareaRef}
@@ -928,30 +973,30 @@ IMPORTANT OPERATING RULES:
             }}
             onKeyDown={handleKeyDown}
             placeholder="Ask AI anything..."
-            className="flex-1 bg-transparent text-sm sm:text-xs text-white placeholder-[#929BAA] outline-none resize-none p-0 m-0 leading-normal block"
+            className="flex-1 bg-transparent text-sm sm:text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#929BAA] outline-none resize-none p-0 m-0 leading-normal block"
             style={{ minHeight: '18px', maxHeight: '100px' }}
           />
           {isThinking ? (
             <button
               type="button"
               onClick={handleStopGeneration}
-              className="p-1.5 rounded-lg text-xs bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-all cursor-pointer flex-shrink-0"
+              className="p-1 rounded-md text-xs bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:bg-red-500/20 dark:text-red-300 transition-all cursor-pointer flex-shrink-0"
               title="Stop generation"
             >
-              <StopCircle className="w-4 h-4" />
+              <StopCircle className="w-3.5 h-3.5" />
             </button>
           ) : (
             <button
               type="submit"
               disabled={!input.trim()}
-              className={`p-1.5 rounded-lg text-xs transition-all cursor-pointer flex-shrink-0 ${
+              className={`p-1 rounded-md text-xs transition-all cursor-pointer flex-shrink-0 ${
                 input.trim()
                   ? 'bg-gradient-to-r from-[#4F8CFF] to-[#A855F7] text-white hover:opacity-90 shadow-accent-glow'
-                  : 'bg-[#12151C] text-[#929BAA]/30 cursor-not-allowed'
+                  : 'bg-slate-200 text-slate-400 dark:bg-[#12151C] dark:text-[#929BAA]/30 cursor-not-allowed'
               }`}
               title="Send message"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-3.5 h-3.5" />
             </button>
           )}
         </form>

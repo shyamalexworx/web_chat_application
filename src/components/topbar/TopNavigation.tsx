@@ -43,7 +43,9 @@ export const TopNavigation: React.FC = () => {
     channels,
     users,
     messages,
+    workspaces,
     activeWorkspace,
+    setActiveWorkspaceId,
     acceptInvite,
     declineInvite,
     addToast,
@@ -69,7 +71,8 @@ export const TopNavigation: React.FC = () => {
 
   const dmPartner = useMemo(() => {
     if (!activeDM || activeDM.isGroup) return null;
-    const otherUserId = activeDM.participantIds.find((id) => id !== currentUser.id) || activeDM.participantIds[0];
+    const parts = Array.isArray(activeDM.participantIds) ? activeDM.participantIds : [];
+    const otherUserId = parts.find((id) => id !== currentUser.id) || parts[0];
     return users.find((u) => u.id === otherUserId) || null;
   }, [activeDM, currentUser, users]);
 
@@ -131,24 +134,30 @@ export const TopNavigation: React.FC = () => {
     if (!searchInput.trim()) return { channels: [], users: [], messages: [], files: [] };
     const q = searchInput.toLowerCase();
 
-    const matchedChannels = channels
-      .filter((c) => c.workspaceId === activeWorkspace.id)
-      .filter((c) => c.name.toLowerCase().includes(q) || c.topic.toLowerCase().includes(q));
+    const matchedChannels = (channels || [])
+      .filter((c) => c && c.workspaceId === (activeWorkspace?.id || ''))
+      .filter(
+        (c) =>
+          (c.name || '').toLowerCase().includes(q) ||
+          (c.topic || '').toLowerCase().includes(q) ||
+          (c.description || '').toLowerCase().includes(q)
+      );
 
-    const matchedUsers = users.filter(
+    const matchedUsers = (users || []).filter(
       (u) =>
-        u.name.toLowerCase().includes(q) ||
-        u.username.toLowerCase().includes(q) ||
-        u.title.toLowerCase().includes(q)
+        u &&
+        ((u.name || '').toLowerCase().includes(q) ||
+          (u.username || '').toLowerCase().includes(q) ||
+          (u.title || '').toLowerCase().includes(q))
     );
 
-    const matchedMessages = messages.filter((m) =>
-      m.content.toLowerCase().includes(q)
+    const matchedMessages = (messages || []).filter(
+      (m) => m && (m.content || '').toLowerCase().includes(q)
     );
 
-    const matchedFiles = messages
-      .flatMap((m) => (m.attachments ? m.attachments : []))
-      .filter((att) => att.name.toLowerCase().includes(q));
+    const matchedFiles = (messages || [])
+      .flatMap((m) => (m && Array.isArray(m.attachments) ? m.attachments : []))
+      .filter((att) => att && (att.name || '').toLowerCase().includes(q));
 
     return {
       channels: matchedChannels,
@@ -163,6 +172,70 @@ export const TopNavigation: React.FC = () => {
     searchResults.users.length +
     searchResults.messages.length +
     searchResults.files.length;
+
+  const getMessageBreadcrumb = (m: (typeof messages)[0]) => {
+    const author = (users || []).find((u) => u.id === m.senderId);
+    const authorName = author?.name || author?.username || 'Member';
+
+    let channelOrDMName = '';
+    let wsName = '';
+
+    if (m.conversationType === 'channel') {
+      const ch = (channels || []).find((c) => c.id === m.conversationId);
+      channelOrDMName = ch ? ch.name : 'channel';
+      const ws = ch ? (workspaces || []).find((w) => w.id === ch.workspaceId) : null;
+      wsName = ws?.name || activeWorkspace?.name || 'Workspace';
+    } else {
+      const dm = (dms || []).find((d) => d.id === m.conversationId);
+      if (dm?.isGroup) {
+        channelOrDMName = dm.groupName || 'Group Chat';
+      } else if (dm) {
+        const partnerId = dm.participantIds.find((id) => id !== currentUser.id) || dm.participantIds[0];
+        const partner = (users || []).find((u) => u.id === partnerId);
+        channelOrDMName = partner?.name || 'Direct Message';
+      } else {
+        channelOrDMName = 'Direct Message';
+      }
+      const ws = dm?.workspaceId ? (workspaces || []).find((w) => w.id === dm.workspaceId) : null;
+      wsName = ws?.name || activeWorkspace?.name || 'Workspace';
+    }
+
+    return `${wsName}->${channelOrDMName}->${authorName}`;
+  };
+
+  const handleJumpToMessage = (m: (typeof messages)[0]) => {
+    if (m.conversationType === 'channel') {
+      const ch = (channels || []).find((c) => c.id === m.conversationId);
+      if (ch && ch.workspaceId && ch.workspaceId !== activeWorkspace.id) {
+        setActiveWorkspaceId(ch.workspaceId);
+      }
+    } else if (m.conversationType === 'dm') {
+      const dm = (dms || []).find((d) => d.id === m.conversationId);
+      if (dm && dm.workspaceId && dm.workspaceId !== activeWorkspace.id) {
+        setActiveWorkspaceId(dm.workspaceId);
+      }
+    }
+
+    setActiveView({ type: m.conversationType, id: m.conversationId });
+
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = document.getElementById(`msg-${m.id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-[#4F8CFF]', 'bg-[#4F8CFF]/20', 'rounded-xl', 'transition-all', 'duration-300');
+        setTimeout(() => {
+          el.classList.remove('ring-2', 'ring-[#4F8CFF]', 'bg-[#4F8CFF]/20', 'rounded-xl');
+        }, 2500);
+      } else if (attempts < 10) {
+        attempts++;
+        setTimeout(tryScroll, 120);
+      }
+    };
+    setTimeout(tryScroll, 100);
+
+    addToast('Jumped to message in conversation', 'info');
+  };
 
   const renderFilterTabs = () => (
     <div className="px-3 py-2 border-b border-slate-200 dark:border-[#252B36] bg-slate-50 dark:bg-[#12151C]/70 flex items-center space-x-1.5 text-xs overflow-x-auto flex-shrink-0">
@@ -241,7 +314,7 @@ export const TopNavigation: React.FC = () => {
                       className="px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-[#12151C] cursor-pointer flex items-center justify-between"
                     >
                       <div className="flex items-center space-x-2 truncate">
-                        <img src={u.avatar} alt="" className="w-5 h-5 rounded-md object-cover" />
+                        <img src={resolveUserAvatar(u.avatar, u.name)} alt="" className="w-5 h-5 rounded-md object-cover" />
                         <span className="font-semibold text-slate-900 dark:text-[#F5F7FA]">{u.name}</span>
                         <span className="text-[11px] text-[#929BAA]">@{u.username} &bull; {u.title}</span>
                       </div>
@@ -257,20 +330,28 @@ export const TopNavigation: React.FC = () => {
                   <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider px-2 py-1">
                     Messages
                   </div>
-                  {searchResults.messages.map((m) => (
-                    <div
-                      key={m.id}
-                      onClick={() => {
-                        setActiveView({ type: m.conversationType, id: m.conversationId });
-                        onItemClick();
-                        addToast('Jumped to message', 'info');
-                      }}
-                      className="px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-[#12151C] cursor-pointer space-y-0.5"
-                    >
-                      <div className="text-[11px] text-[#4F8CFF] font-medium">In #{m.conversationId}</div>
-                      <div className="text-xs text-slate-900 dark:text-[#F5F7FA] line-clamp-1">{m.content}</div>
-                    </div>
-                  ))}
+                  {searchResults.messages.map((m) => {
+                    const author = (users || []).find((u) => u.id === m.senderId);
+                    const breadcrumb = getMessageBreadcrumb(m);
+                    return (
+                      <div
+                        key={m.id}
+                        onClick={() => {
+                          handleJumpToMessage(m);
+                          onItemClick();
+                        }}
+                        className="px-2.5 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-[#12151C] cursor-pointer space-y-1 transition-colors"
+                      >
+                        <div className="flex items-center space-x-1.5 text-[11px] font-semibold text-[#4F8CFF] truncate">
+                          {author?.avatar ? (
+                            <img src={resolveUserAvatar(author?.avatar, author?.name)} alt="" className="w-3.5 h-3.5 rounded-full object-cover flex-shrink-0" />
+                          ) : null}
+                          <span className="truncate">{breadcrumb}</span>
+                        </div>
+                        <div className="text-xs text-slate-900 dark:text-[#F5F7FA] line-clamp-2 leading-relaxed">{m.content}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </>
@@ -289,7 +370,10 @@ export const TopNavigation: React.FC = () => {
           <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider px-2 py-1">
             Channels
           </div>
-          {channels.filter((c) => c.workspaceId === activeWorkspace.id).slice(0, 4).map((ch) => (
+          {(channels || [])
+            .filter((c) => c && c.workspaceId === (activeWorkspace?.id || ''))
+            .slice(0, 4)
+            .map((ch) => (
             <div
               key={ch.id}
               onClick={() => {
@@ -515,7 +599,13 @@ export const TopNavigation: React.FC = () => {
         {/* Real-time Notification Icon in Top Right Corner */}
         <div className="relative">
           <button
-            onClick={() => setNotifMenuOpen(!notifMenuOpen)}
+            onClick={() => {
+              const next = !notifMenuOpen;
+              setNotifMenuOpen(next);
+              if (next && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission().catch(() => {});
+              }
+            }}
             className={`p-1.5 rounded-lg border transition-colors relative flex items-center justify-center cursor-pointer ${
               notifMenuOpen
                 ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF]'
@@ -575,6 +665,17 @@ export const TopNavigation: React.FC = () => {
                         onClick={() => {
                           removeNotification(n.id);
                           if (n.targetType && n.targetId) {
+                            if (n.targetType === 'channel') {
+                              const ch = channels.find((c) => c.id === n.targetId);
+                              if (ch && ch.workspaceId && ch.workspaceId !== activeWorkspace.id) {
+                                setActiveWorkspaceId(ch.workspaceId);
+                              }
+                            } else if (n.targetType === 'dm') {
+                              const dm = dms.find((d) => d.id === n.targetId);
+                              if (dm && dm.workspaceId && dm.workspaceId !== activeWorkspace.id) {
+                                setActiveWorkspaceId(dm.workspaceId);
+                              }
+                            }
                             setActiveView({ type: n.targetType, id: n.targetId });
                           }
                           setNotifMenuOpen(false);

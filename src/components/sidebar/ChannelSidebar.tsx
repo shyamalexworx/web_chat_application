@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useChat } from '../../context/ChatContext';
 import {
   Hash,
@@ -8,13 +8,13 @@ import {
   Plus,
   Star,
   Users,
-  Search,
   Video,
   Mail,
   Check,
   X,
   Menu,
   Settings,
+  Trash2,
 } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
 import { WorkspaceRailInner } from './WorkspaceRail';
@@ -42,50 +42,75 @@ export const ChannelSidebar: React.FC = () => {
     setIsGlobalSearchOpen,
     setIsWorkspaceSettingsOpen,
     setIsUserProfileOpen,
+    deleteChannel,
+    deleteDM,
     t,
   } = useChat();
+
+  const [channelToDelete, setChannelToDelete] = useState<any | null>(null);
+  const [dmToDelete, setDMToDelete] = useState<any | null>(null);
 
   const [channelsCollapsed, setChannelsCollapsed] = useState(false);
   const [dmsCollapsed, setDmsCollapsed] = useState(false);
   const [starredCollapsed, setStarredCollapsed] = useState(false);
 
   // Filter channels for the active workspace: public channels OR private channels user is a member of
-  const workspaceChannels = channels.filter((c) => {
-    if (c.workspaceId !== activeWorkspace.id) return false;
-    if (c.isPrivate) return c.memberIds.includes(currentUser.id);
-    return true;
-  });
-  const starredChannels = workspaceChannels.filter((c) => c.isStarred);
-  const regularChannels = workspaceChannels.filter((c) => !c.isStarred);
+  const workspaceChannels = useMemo(() => {
+    return (channels || []).filter((c) => {
+      if (!c || c.workspaceId !== (activeWorkspace?.id || '')) return false;
+      if (c.isPrivate) return Array.isArray(c.memberIds) && c.memberIds.includes(currentUser?.id);
+      return true;
+    });
+  }, [channels, activeWorkspace?.id, currentUser?.id]);
+
+  const starredChannels = useMemo(() => {
+    return workspaceChannels.filter((c) => c && c.isStarred);
+  }, [workspaceChannels]);
+
+  const regularChannels = useMemo(() => {
+    return workspaceChannels.filter((c) => c && !c.isStarred);
+  }, [workspaceChannels]);
 
   // Filter DMs & Groups: only show direct messages and group conversations the current user is a participant of
-  const workspaceDMs = dms.filter((d) => {
-    if (d.workspaceId !== activeWorkspace.id) return false;
-    return d.participantIds.includes(currentUser.id);
-  });
-  const starredDMs = workspaceDMs.filter((d) => d.isStarred);
-  const regularDMs = workspaceDMs.filter((d) => !d.isStarred);
+  const workspaceDMs = useMemo(() => {
+    return (dms || []).filter((d) => {
+      if (!d || d.workspaceId !== (activeWorkspace?.id || '')) return false;
+      return Array.isArray(d.participantIds) && d.participantIds.includes(currentUser?.id);
+    });
+  }, [dms, activeWorkspace?.id, currentUser?.id]);
 
-  const pendingReceivedInvites = invites.filter(
+  const starredDMs = useMemo(() => {
+    return workspaceDMs.filter((d) => d && d.isStarred);
+  }, [workspaceDMs]);
+
+  const regularDMs = useMemo(() => {
+    return workspaceDMs.filter((d) => d && !d.isStarred);
+  }, [workspaceDMs]);
+
+  const pendingReceivedInvites = (invites || []).filter(
     (inv) =>
-      (inv.receiverId === currentUser.id ||
-        (currentUser.email && inv.receiverId.toLowerCase() === currentUser.email.toLowerCase())) &&
+      inv &&
+      (inv.receiverId === currentUser?.id ||
+        (currentUser?.email && inv.receiverId?.toLowerCase() === currentUser.email.toLowerCase())) &&
       inv.status === 'pending'
   );
 
-  const getDMName = (dm: typeof workspaceDMs[0]) => {
+  const getDMName = (dm: any) => {
+    if (!dm) return 'Direct Message';
     if (dm.isGroup) {
       return dm.groupName || 'Group Chat';
     }
-    const otherUserId = dm.participantIds.find((id) => id !== currentUser.id) || dm.participantIds[0];
-    const otherUser = users.find((u) => u.id === otherUserId);
+    const parts = Array.isArray(dm.participantIds) ? dm.participantIds : [];
+    const otherUserId = parts.find((id: string) => id !== currentUser?.id) || parts[0];
+    const otherUser = (users || []).find((u) => u && u.id === otherUserId);
     return otherUser ? otherUser.name : 'Direct Message';
   };
 
-  const getDMParticipant = (dm: typeof workspaceDMs[0]) => {
-    if (dm.isGroup) return null;
-    const otherUserId = dm.participantIds.find((id) => id !== currentUser.id) || dm.participantIds[0];
-    return users.find((u) => u.id === otherUserId) || null;
+  const getDMParticipant = (dm: any) => {
+    if (!dm || dm.isGroup) return null;
+    const parts = Array.isArray(dm.participantIds) ? dm.participantIds : [];
+    const otherUserId = parts.find((id: string) => id !== currentUser?.id) || parts[0];
+    return (users || []).find((u) => u && u.id === otherUserId) || null;
   };
 
   const handleSelectView = (view: { type: 'channel' | 'dm'; id: string }) => {
@@ -126,31 +151,31 @@ export const ChannelSidebar: React.FC = () => {
         {/* CHANNELS & DMS MAIN SIDEBAR */}
         <div className="flex-1 flex flex-col h-full min-w-0 bg-white dark:bg-[#0F1117]">
           {/* Workspace Header: Interactive & Functional */}
-          <div className="h-14 min-h-[56px] flex-shrink-0 border-b border-slate-200 dark:border-[#252B36] px-2.5 sm:px-3 flex items-center justify-between bg-white dark:bg-[#0F1117]">
+          <div className="h-11 min-h-[44px] flex-shrink-0 border-b border-slate-200 dark:border-[#252B36] px-2.5 sm:px-3 flex items-center justify-between bg-white dark:bg-[#0F1117]">
             <button
               onClick={() => setIsWorkspaceSettingsOpen(true)}
-              className="flex items-center space-x-2.5 overflow-hidden flex-1 p-1 rounded-lg hover:bg-slate-200/70 dark:hover:bg-[#181C25] transition-colors text-left group"
+              className="flex items-center space-x-2 overflow-hidden flex-1 p-0.5 rounded-lg hover:bg-slate-200/70 dark:hover:bg-[#181C25] transition-colors text-left group"
               title="Open Workspace Settings & Switcher"
             >
               {activeWorkspace.avatar ? (
                 <img
                   src={activeWorkspace.avatar}
                   alt=""
-                  className="w-7 h-7 rounded-lg object-cover flex-shrink-0 shadow-sm border border-slate-200 dark:border-[#252B36]"
+                  className="w-6 h-6 rounded-md object-cover flex-shrink-0 shadow-sm border border-slate-200 dark:border-[#252B36]"
                 />
               ) : (
                 <div 
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0 shadow-sm"
+                  className="w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-bold text-white flex-shrink-0 shadow-sm"
                   style={{ backgroundColor: activeWorkspace.iconBg || '#4F8CFF' }}
                 >
                   {activeWorkspace.icon}
                 </div>
               )}
               <div className="truncate flex-1 min-w-0">
-                <span className="text-sm font-bold text-slate-800 dark:text-[#F5F7FA] tracking-tight truncate block leading-tight group-hover:text-[#4F8CFF] transition-colors">
+                <span className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA] tracking-tight truncate block leading-none group-hover:text-[#4F8CFF] transition-colors">
                   {activeWorkspace.name}
                 </span>
-                <p className="text-[11px] font-medium text-slate-500 dark:text-[#929BAA] truncate">
+                <p className="text-[10px] font-medium text-slate-500 dark:text-[#929BAA] truncate leading-tight mt-0.5">
                   {activeWorkspace.membersCount} {t('members')}
                 </p>
               </div>
@@ -232,7 +257,7 @@ export const ChannelSidebar: React.FC = () => {
 
         {/* STARRED SECTION */}
         {(starredChannels.length > 0 || starredDMs.length > 0) && (
-          <div>
+          <div className="transition-opacity duration-150 ease-out">
             <div
               onClick={() => setStarredCollapsed(!starredCollapsed)}
               className="flex items-center justify-between px-2 py-1 text-xs font-semibold text-[#929BAA] hover:text-[#F5F7FA] cursor-pointer group"
@@ -254,16 +279,16 @@ export const ChannelSidebar: React.FC = () => {
                 {starredChannels.map((ch) => {
                   const isActive = activeView.type === 'channel' && activeView.id === ch.id;
                   return (
-                    <button
+                    <div
                       key={ch.id}
                       onClick={() => handleSelectView({ type: 'channel', id: ch.id })}
-                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors group ${
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors group cursor-pointer ${
                         isActive
                           ? 'bg-[#4F8CFF] text-white font-medium'
                           : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25]'
                       }`}
                     >
-                      <div className="flex items-center space-x-2 truncate">
+                      <div className="flex items-center space-x-2 truncate min-w-0">
                         {ch.avatar ? (
                           <img src={ch.avatar} alt="" className="w-3.5 h-3.5 rounded object-cover flex-shrink-0" />
                         ) : ch.isPrivate ? (
@@ -273,12 +298,14 @@ export const ChannelSidebar: React.FC = () => {
                         )}
                         <span className="truncate">{ch.name}</span>
                       </div>
-                      {ch.unreadCount > 0 && (
-                        <span className="bg-[#4F8CFF] text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
-                          {ch.unreadCount}
-                        </span>
-                      )}
-                    </button>
+                      <div className="flex items-center space-x-1 flex-shrink-0 ml-1">
+                        {ch.unreadCount > 0 && (
+                          <span className="bg-[#4F8CFF] text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                            {ch.unreadCount}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   );
                 })}
 
@@ -286,16 +313,16 @@ export const ChannelSidebar: React.FC = () => {
                   const isActive = activeView.type === 'dm' && activeView.id === dm.id;
                   const partner = getDMParticipant(dm);
                   return (
-                    <button
+                    <div
                       key={dm.id}
                       onClick={() => handleSelectView({ type: 'dm', id: dm.id })}
-                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors group ${
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors group cursor-pointer ${
                         isActive
                           ? 'bg-[#4F8CFF] text-white font-medium'
                           : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25]'
                       }`}
                     >
-                      <div className="flex items-center space-x-2 truncate">
+                      <div className="flex items-center space-x-2 truncate min-w-0">
                         {dm.isGroup ? (
                           <Users className="w-3.5 h-3.5 flex-shrink-0" />
                         ) : (
@@ -319,7 +346,14 @@ export const ChannelSidebar: React.FC = () => {
                           </span>
                         )}
                       </div>
-                    </button>
+                      {dm.unreadCount > 0 && (
+                        <div className="flex items-center space-x-1 flex-shrink-0 ml-1">
+                          <span className="bg-[#4F8CFF] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                            {dm.unreadCount}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -345,13 +379,6 @@ export const ChannelSidebar: React.FC = () => {
             </div>
             <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
-                onClick={() => setIsBrowseChannelsOpen(true)}
-                className="p-1 hover:bg-[#181C25] rounded text-[#929BAA] hover:text-[#F5F7FA]"
-                title="Browse Channels"
-              >
-                <Search className="w-3.5 h-3.5" />
-              </button>
-              <button
                 onClick={() => setIsCreateChannelOpen(true)}
                 className="p-1 hover:bg-[#181C25] rounded text-[#929BAA] hover:text-[#F5F7FA]"
                 title="Create Channel"
@@ -366,16 +393,16 @@ export const ChannelSidebar: React.FC = () => {
               {regularChannels.map((ch) => {
                 const isActive = activeView.type === 'channel' && activeView.id === ch.id;
                 return (
-                  <button
+                  <div
                     key={ch.id}
                     onClick={() => handleSelectView({ type: 'channel', id: ch.id })}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors group ${
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors group cursor-pointer ${
                       isActive
                         ? 'bg-[#4F8CFF] text-white font-medium shadow-sm'
                         : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25]'
                     }`}
                   >
-                    <div className="flex items-center space-x-2 truncate">
+                    <div className="flex items-center space-x-2 truncate min-w-0">
                       {ch.avatar ? (
                         <img src={ch.avatar} alt="" className="w-3.5 h-3.5 rounded object-cover flex-shrink-0" />
                       ) : ch.isPrivate ? (
@@ -386,12 +413,14 @@ export const ChannelSidebar: React.FC = () => {
                       <span className="truncate">{ch.name}</span>
                     </div>
 
-                    {ch.unreadCount > 0 && (
-                      <span className="bg-[#4F8CFF] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                        {ch.unreadCount}
-                      </span>
-                    )}
-                  </button>
+                    <div className="flex items-center space-x-1 flex-shrink-0 ml-1">
+                      {ch.unreadCount > 0 && (
+                        <span className="bg-[#4F8CFF] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                          {ch.unreadCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
 
@@ -439,16 +468,16 @@ export const ChannelSidebar: React.FC = () => {
                 const isActive = activeView.type === 'dm' && activeView.id === dm.id;
                 const partner = getDMParticipant(dm);
                 return (
-                  <button
+                  <div
                     key={dm.id}
                     onClick={() => handleSelectView({ type: 'dm', id: dm.id })}
-                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors group ${
+                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs transition-colors group cursor-pointer ${
                       isActive
                         ? 'bg-[#4F8CFF] text-white font-medium shadow-sm'
                         : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25]'
                     }`}
                   >
-                    <div className="flex items-center space-x-2.5 truncate">
+                    <div className="flex items-center space-x-2.5 truncate min-w-0">
                       {dm.isGroup ? (
                         <div className={`w-4 h-4 rounded ${isActive ? 'bg-white/20 border-white/30' : 'bg-[#181C25] border-[#252B36]'} border flex items-center justify-center flex-shrink-0`}>
                           <Users className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-[#929BAA]'}`} />
@@ -476,11 +505,13 @@ export const ChannelSidebar: React.FC = () => {
                     </div>
 
                     {dm.unreadCount > 0 && (
-                      <span className="bg-[#4F8CFF] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                        {dm.unreadCount}
-                      </span>
+                      <div className="flex items-center space-x-1 flex-shrink-0 ml-1">
+                        <span className="bg-[#4F8CFF] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                          {dm.unreadCount}
+                        </span>
+                      </div>
                     )}
-                  </button>
+                  </div>
                 );
               })}
 
@@ -528,6 +559,98 @@ export const ChannelSidebar: React.FC = () => {
       </div>
       </div>
     </nav>
+
+    {/* Delete Channel Confirmation Modal */}
+    {channelToDelete && (
+      <div
+        onClick={() => setChannelToDelete(null)}
+        className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in select-none cursor-pointer"
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-sm bg-[#181C25] border border-[#252B36] rounded-2xl shadow-modal p-5 space-y-4 cursor-default text-left"
+        >
+          <div className="flex items-start space-x-3">
+            <div className="p-2.5 bg-[#F05D6C]/10 border border-[#F05D6C]/30 text-[#F05D6C] rounded-xl flex-shrink-0">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-bold text-[#F5F7FA]">Delete #{channelToDelete.name}?</h3>
+              <p className="text-xs text-[#929BAA] mt-1 leading-relaxed">
+                Permanently delete <span className="font-semibold text-white">#{channelToDelete.name}</span> and all its message history. This cannot be undone.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end space-x-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setChannelToDelete(null)}
+              className="px-3 py-1.5 bg-[#12151C] hover:bg-[#252B36] text-[#929BAA] hover:text-[#F5F7FA] text-xs font-medium rounded-lg transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                const id = channelToDelete.id;
+                setChannelToDelete(null);
+                await deleteChannel(id);
+              }}
+              className="px-3.5 py-1.5 bg-[#F05D6C] hover:bg-[#D94554] text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+            >
+              Delete Channel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Delete DM Confirmation Modal */}
+    {dmToDelete && (
+      <div
+        onClick={() => setDMToDelete(null)}
+        className="fixed inset-0 bg-black/75 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fade-in select-none cursor-pointer"
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-sm bg-[#181C25] border border-[#252B36] rounded-2xl shadow-modal p-5 space-y-4 cursor-default text-left"
+        >
+          <div className="flex items-start space-x-3">
+            <div className="p-2.5 bg-[#F05D6C]/10 border border-[#F05D6C]/30 text-[#F05D6C] rounded-xl flex-shrink-0">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-bold text-[#F5F7FA]">Delete Conversation?</h3>
+              <p className="text-xs text-[#929BAA] mt-1 leading-relaxed">
+                Permanently delete your conversation with <span className="font-semibold text-white">{getDMName(dmToDelete)}</span> and all its message history.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end space-x-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setDMToDelete(null)}
+              className="px-3 py-1.5 bg-[#12151C] hover:bg-[#252B36] text-[#929BAA] hover:text-[#F5F7FA] text-xs font-medium rounded-lg transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                const id = dmToDelete.id;
+                setDMToDelete(null);
+                await deleteDM(id);
+              }}
+              className="px-3.5 py-1.5 bg-[#F05D6C] hover:bg-[#D94554] text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
+            >
+              Delete Conversation
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </>
   );
 };

@@ -48,8 +48,8 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
   return (
     <div className="w-full h-full bg-slate-50 dark:bg-[#0B0D12] workspace-rail-bg flex flex-col items-center justify-between select-none flex-shrink-0">
       <div className={`w-full flex flex-col items-center flex-1 min-h-0 ${isMobile ? 'border-r border-slate-200 dark:border-[#252B36]' : ''}`}>
-        {/* Top Header Section: perfectly aligned at 56px (h-14) with ChannelSidebar and ChatHeader */}
-        <div className="h-14 min-h-[56px] w-full border-b border-slate-200 dark:border-[#252B36] flex items-center justify-center flex-shrink-0 bg-slate-50 dark:bg-[#0B0D12] workspace-rail-bg">
+        {/* Top Header Section: perfectly aligned at 44px (h-11) with ChannelSidebar and ChatHeader */}
+        <div className="h-11 min-h-[44px] w-full border-b border-slate-200 dark:border-[#252B36] flex items-center justify-center flex-shrink-0 bg-slate-50 dark:bg-[#0B0D12] workspace-rail-bg">
           <div className="relative group">
             <button
               onClick={toggleAIAssistant}
@@ -105,7 +105,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
                   className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs transition-all duration-200 relative cursor-pointer ${
                     isActive
                       ? 'ring-2 ring-[#4F8CFF] text-white shadow-lg scale-105'
-                      : 'text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25]'
+                      : 'text-white hover:scale-105 hover:brightness-110 hover:shadow-md hover:ring-2 hover:ring-[#4F8CFF]/50 active:scale-95'
                   }`}
                   style={{
                     backgroundColor: ws.iconBg || '#181C25',
@@ -163,7 +163,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
     </div>
 
       {/* USER PROFILE SECTION MOVED TO BOTTOM LEFT RAIL (Aligned with Chat Composer bottom toolbar) */}
-      <div className={`h-[56px] min-h-[56px] border-t border-slate-200 dark:border-[#252B36] w-full flex items-center ${isMobile ? 'justify-end pr-1' : 'justify-center'} relative flex-shrink-0 bg-slate-50 dark:bg-[#0B0D12]`}>
+      <div className={`h-11 min-h-[44px] border-t border-slate-200 dark:border-[#252B36] w-full flex items-center ${isMobile ? 'justify-end pr-1' : 'justify-center'} relative flex-shrink-0 bg-slate-50 dark:bg-[#0B0D12]`}>
         <button
           onClick={() => setUserMenuOpen(!userMenuOpen)}
           className="w-8 h-8 rounded-lg overflow-hidden border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF] transition-all relative cursor-pointer"
@@ -206,18 +206,32 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
                 updateCurrentUserProfile({ isOnline: !currentUser.isOnline });
                 setUserMenuOpen(false);
               }}
-              className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-600 dark:text-[#929BAA] hover:text-slate-900 dark:hover:text-[#F5F7FA] hover:bg-slate-100 dark:hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-2 text-xs rounded-xl hover:bg-slate-100 dark:hover:bg-[#1E2330] transition-colors cursor-pointer group"
             >
-              <div className="flex items-center space-x-2">
-                <Circle
-                  className={`w-3 h-3 fill-current ${
-                    currentUser.isOnline ? 'text-[#32C48D]' : 'text-[#636D7E]'
-                  }`}
-                />
-                <span>
+              <div className="flex items-center space-x-2.5">
+                <div className="relative flex items-center justify-center">
+                  <Circle
+                    className={`w-3.5 h-3.5 fill-current ${
+                      currentUser.isOnline ? 'text-[#10B981]' : 'text-slate-400 dark:text-[#636D7E]'
+                    }`}
+                  />
+                  {currentUser.isOnline && (
+                    <span className="absolute w-2 h-2 rounded-full bg-[#10B981] animate-ping opacity-75" />
+                  )}
+                </div>
+                <span className="font-semibold text-slate-800 dark:text-[#F5F7FA]">
                   {currentUser.isOnline ? t('online') : t('offline')}
                 </span>
               </div>
+              <span
+                className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                  currentUser.isOnline
+                    ? 'text-[#10B981] bg-[#10B981]/15 border-[#10B981]/30'
+                    : 'text-slate-400 bg-slate-100 dark:bg-[#12151C] border-slate-200 dark:border-[#252B36]'
+                }`}
+              >
+                {currentUser.isOnline ? 'Active' : 'Away'}
+              </span>
             </button>
 
             {/* Profile & Settings */}
@@ -226,26 +240,34 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
                 setIsUserProfileOpen(true);
                 setUserMenuOpen(false);
               }}
-              className="w-full flex items-center space-x-2 px-3 py-2 text-xs text-slate-600 dark:text-[#929BAA] hover:text-slate-900 dark:hover:text-[#F5F7FA] hover:bg-slate-100 dark:hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
+              className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs rounded-xl hover:bg-slate-100 dark:hover:bg-[#1E2330] transition-colors cursor-pointer group"
             >
-              <Settings className="w-3.5 h-3.5 text-[#4F8CFF]" />
-              <span className="font-medium text-slate-800 dark:text-[#F5F7FA]">Profile & Settings</span>
+              <Settings className="w-4 h-4 text-[#4F8CFF]" />
+              <span className="font-semibold text-slate-800 dark:text-[#F5F7FA]">Profile & Settings</span>
             </button>
 
             {/* Toggle Sound */}
             <button
               onClick={toggleSound}
-              className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-600 dark:text-[#929BAA] hover:text-slate-900 dark:hover:text-[#F5F7FA] hover:bg-slate-100 dark:hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-3 py-2 text-xs rounded-xl hover:bg-slate-100 dark:hover:bg-[#1E2330] transition-colors cursor-pointer group"
             >
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-2.5">
                 {soundEnabled ? (
-                  <Volume2 className="w-3.5 h-3.5 text-[#32C48D]" />
+                  <Volume2 className="w-4 h-4 text-[#10B981]" />
                 ) : (
-                  <VolumeX className="w-3.5 h-3.5 text-[#F05D6C]" />
+                  <VolumeX className="w-4 h-4 text-[#F05D6C]" />
                 )}
-                <span>{t('sound_chimes')}</span>
+                <span className="font-semibold text-slate-800 dark:text-[#F5F7FA]">{t('sound_chimes')}</span>
               </div>
-              <span className="text-[10px]">{soundEnabled ? 'ON' : 'OFF'}</span>
+              <span
+                className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                  soundEnabled
+                    ? 'text-[#4F8CFF] bg-[#4F8CFF]/15 border-[#4F8CFF]/30'
+                    : 'text-[#F05D6C] bg-[#F05D6C]/15 border-[#F05D6C]/30'
+                }`}
+              >
+                {soundEnabled ? 'ON' : 'MUTED'}
+              </span>
             </button>
 
             {/* Logout */}

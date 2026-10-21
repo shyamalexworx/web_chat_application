@@ -51,7 +51,7 @@ export const ThreadDrawer: React.FC = () => {
   return (
     <div className="max-md:fixed max-md:inset-0 max-md:top-12 max-md:w-full max-md:z-40 md:relative md:w-80 lg:w-96 bg-[#0F1117] border-l border-[#252B36] flex flex-col h-full flex-shrink-0 select-none z-20 animate-fade-in shadow-modal">
       {/* Thread Header */}
-      <div className="h-14 border-b border-[#252B36] px-4 flex items-center justify-between">
+      <div className="h-11 min-h-[44px] border-b border-[#252B36] px-3.5 flex items-center justify-between">
         <div className="flex items-center space-x-2">
           <MessageSquare className="w-4 h-4 text-[#4F8CFF]" />
           <div>

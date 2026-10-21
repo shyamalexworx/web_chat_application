@@ -152,7 +152,28 @@ export const WORKSPACE_TOOLS = [
             type: 'string',
             description: 'The user name to open direct messages with',
           },
+          workspaceName: {
+            type: 'string',
+            description: 'The workspace name to switch to, e.g. "rabil"',
+          },
         },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'switch_workspace',
+      description: 'Switch or change active workspace to an existing workspace (e.g. "rabil", "DHANUSH")',
+      parameters: {
+        type: 'object',
+        properties: {
+          workspaceName: {
+            type: 'string',
+            description: 'The name of the workspace to switch to, e.g. "rabil"',
+          },
+        },
+        required: ['workspaceName'],
       },
     },
   },
@@ -163,7 +184,7 @@ const STORAGE_KEY_GROQ_MODEL = 'pulsechat_groq_selected_model';
 
 /**
  * Get active Groq API Key
- * Checks .env (VITE_GROQ_API_KEY) first, then browser localStorage
+ * Checks .env / Vercel Environment Variables (VITE_GROQ_API_KEY) first, then browser localStorage
  */
 export const getGroqApiKey = (): string => {
   const envKey = (import.meta.env.VITE_GROQ_API_KEY || '').trim();
@@ -171,10 +192,12 @@ export const getGroqApiKey = (): string => {
     return envKey;
   }
   try {
-    return (localStorage.getItem(STORAGE_KEY_GROQ_API) || '').trim();
+    const stored = (localStorage.getItem(STORAGE_KEY_GROQ_API) || '').trim();
+    if (stored) return stored;
   } catch {
-    return '';
+    // Ignore
   }
+  return '';
 };
 
 /**

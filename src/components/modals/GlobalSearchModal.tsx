@@ -1,3 +1,4 @@
+import { resolveUserAvatar } from '../../utils/avatar';
 import React, { useState, useMemo } from 'react';
 import { useChat } from '../../context/ChatContext';
 import {
@@ -19,7 +20,11 @@ export const GlobalSearchModal: React.FC = () => {
     messages,
     channels,
     users,
+    dms,
+    workspaces,
+    currentUser,
     activeWorkspace,
+    setActiveWorkspaceId,
     setActiveView,
     addToast,
   } = useChat();
@@ -74,9 +79,68 @@ export const GlobalSearchModal: React.FC = () => {
     setIsGlobalSearchOpen(false);
   };
 
+  const getMessageBreadcrumb = (m: (typeof messages)[0]) => {
+    const author = (users || []).find((u) => u.id === m.senderId);
+    const authorName = author?.name || author?.username || 'Member';
+
+    let channelOrDMName = '';
+    let wsName = '';
+
+    if (m.conversationType === 'channel') {
+      const ch = (channels || []).find((c) => c.id === m.conversationId);
+      channelOrDMName = ch ? ch.name : 'channel';
+      const ws = ch ? (workspaces || []).find((w) => w.id === ch.workspaceId) : null;
+      wsName = ws?.name || activeWorkspace?.name || 'Workspace';
+    } else {
+      const dm = (dms || []).find((d) => d.id === m.conversationId);
+      if (dm?.isGroup) {
+        channelOrDMName = dm.groupName || 'Group Chat';
+      } else if (dm) {
+        const partnerId = dm.participantIds.find((id) => id !== currentUser.id) || dm.participantIds[0];
+        const partner = (users || []).find((u) => u.id === partnerId);
+        channelOrDMName = partner?.name || 'Direct Message';
+      } else {
+        channelOrDMName = 'Direct Message';
+      }
+      const ws = dm?.workspaceId ? (workspaces || []).find((w) => w.id === dm.workspaceId) : null;
+      wsName = ws?.name || activeWorkspace?.name || 'Workspace';
+    }
+
+    return `${wsName}->${channelOrDMName}->${authorName}`;
+  };
+
   const handleSelectMessage = (m: (typeof messages)[0]) => {
+    if (m.conversationType === 'channel') {
+      const ch = (channels || []).find((c) => c.id === m.conversationId);
+      if (ch && ch.workspaceId && ch.workspaceId !== activeWorkspace.id) {
+        setActiveWorkspaceId(ch.workspaceId);
+      }
+    } else if (m.conversationType === 'dm') {
+      const dm = (dms || []).find((d) => d.id === m.conversationId);
+      if (dm && dm.workspaceId && dm.workspaceId !== activeWorkspace.id) {
+        setActiveWorkspaceId(dm.workspaceId);
+      }
+    }
+
     setActiveView({ type: m.conversationType, id: m.conversationId });
     setIsGlobalSearchOpen(false);
+
+    let attempts = 0;
+    const tryScroll = () => {
+      const el = document.getElementById(`msg-${m.id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        el.classList.add('ring-2', 'ring-[#4F8CFF]', 'bg-[#4F8CFF]/20', 'rounded-xl', 'transition-all', 'duration-300');
+        setTimeout(() => {
+          el.classList.remove('ring-2', 'ring-[#4F8CFF]', 'bg-[#4F8CFF]/20', 'rounded-xl');
+        }, 2500);
+      } else if (attempts < 10) {
+        attempts++;
+        setTimeout(tryScroll, 120);
+      }
+    };
+    setTimeout(tryScroll, 100);
+
     addToast('Jumped to message in conversation', 'info');
   };
 
@@ -201,7 +265,7 @@ export const GlobalSearchModal: React.FC = () => {
                       >
                         <div className="flex items-center space-x-3">
                           <img
-                            src={u.avatar}
+                            src={resolveUserAvatar(u.avatar, u.name)}
                             alt=""
                             className="w-7 h-7 rounded-lg object-cover"
                           />
@@ -230,6 +294,7 @@ export const GlobalSearchModal: React.FC = () => {
                   <div className="space-y-2">
                     {results.messages.map((m) => {
                       const author = users.find((u) => u.id === m.senderId);
+                      const breadcrumb = getMessageBreadcrumb(m);
                       return (
                         <div
                           key={m.id}
@@ -237,17 +302,17 @@ export const GlobalSearchModal: React.FC = () => {
                           className="p-3 bg-[#12151C]/60 hover:bg-[#12151C] border border-[#252B36] rounded-xl cursor-pointer transition-colors group"
                         >
                           <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center space-x-2">
-                              <img
-                                src={author?.avatar}
-                                alt=""
-                                className="w-4 h-4 rounded-full object-cover"
-                              />
-                              <span className="text-xs font-semibold text-[#F5F7FA]">
-                                {author?.name}
-                              </span>
+                            <div className="flex items-center space-x-2 text-[11px] font-semibold text-[#4F8CFF] truncate">
+                              {author?.avatar ? (
+                                <img
+                                  src={resolveUserAvatar(author?.avatar, author?.name)}
+                                  alt=""
+                                  className="w-4 h-4 rounded-full object-cover flex-shrink-0"
+                                />
+                              ) : null}
+                              <span className="truncate">{breadcrumb}</span>
                             </div>
-                            <span className="text-[10px] text-[#929BAA] font-mono">
+                            <span className="text-[10px] text-[#929BAA] font-mono flex-shrink-0 ml-2">
                               {new Date(m.timestamp).toLocaleDateString()}
                             </span>
                           </div>

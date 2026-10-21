@@ -68,9 +68,9 @@ export const NewDirectMessageModal: React.FC = () => {
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#252B36] flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-bold text-[#F5F7FA]">Direct Messages & Invites</h2>
+            <h2 className="text-sm font-bold text-[#F5F7FA]">Start Direct Message</h2>
             <p className="text-[11px] text-[#929BAA]">
-              Send a chat invite to a coworker or select multiple people for a group chat.
+              Chat directly with a coworker or start messaging immediately by email.
             </p>
           </div>
 
@@ -157,7 +157,7 @@ export const NewDirectMessageModal: React.FC = () => {
                   onClick={handleStart}
                   className="absolute right-1.5 top-1 px-2.5 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-[11px] font-semibold rounded-lg transition-colors cursor-pointer"
                 >
-                  Invite
+                  Start Chat
                 </button>
               )}
             </div>
@@ -221,16 +221,16 @@ export const NewDirectMessageModal: React.FC = () => {
         <div className="p-4 border-t border-[#252B36] flex items-center justify-between">
           <div className="text-xs text-[#929BAA]">
             {customEmail.trim()
-              ? `Invite via email: ${customEmail.trim()}`
+              ? `Chat with: ${customEmail.trim()}`
               : selectedUserIds.length === 0
-              ? 'Select 1 or more participants or enter email'
+              ? 'Select coworker or enter email'
               : `${selectedUserIds.length} participant${selectedUserIds.length > 1 ? 's' : ''} selected`}
           </div>
 
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setIsNewDMOpen(false)}
-              className="px-4 py-2 bg-[#12151C] hover:bg-[#252B36] text-xs font-medium text-[#929BAA] hover:text-[#F5F7FA] rounded-xl border border-[#252B36] transition-colors"
+              className="px-4 py-2 bg-[#12151C] hover:bg-[#252B36] text-xs font-medium text-[#929BAA] hover:text-[#F5F7FA] rounded-xl border border-[#252B36] transition-colors cursor-pointer"
             >
               Cancel
             </button>
@@ -243,7 +243,7 @@ export const NewDirectMessageModal: React.FC = () => {
                   : 'bg-[#12151C] text-[#929BAA]/50 cursor-not-allowed'
               }`}
             >
-              <span>{selectedUserIds.length > 1 ? 'Start Group Discussion' : 'Send Chat Invite'}</span>
+              <span>{selectedUserIds.length > 1 ? 'Start Group Discussion' : 'Start Chat'}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

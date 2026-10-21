@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useChat } from '../../context/ChatContext';
 import {
   X,
@@ -19,6 +19,8 @@ import {
 import { soundFX } from '../../utils/audio';
 import { SUPPORTED_LANGUAGES } from '../../utils/translation';
 import { generateLetterAvatar } from '../../utils/avatar';
+import { compressImageFile } from '../../utils/imageCompressor';
+import { uploadChatMedia, isSupabaseConfigured } from '../../lib/supabase';
 
 const STATUS_PRESETS = [
   { emoji: '💬', text: 'In a meeting' },
@@ -56,6 +58,19 @@ export const UserProfileModal: React.FC = () => {
   const [avatar, setAvatar] = useState(currentUser.avatar || generateLetterAvatar(currentUser.name));
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  // Sync state whenever modal is opened or currentUser updates
+  useEffect(() => {
+    if (isUserProfileOpen) {
+      setName(currentUser.name || '');
+      setTitle(currentUser.title || '');
+      setStatusEmoji(currentUser.statusEmoji || '💻');
+      setStatusText(currentUser.statusText || '');
+      setIsOnline(currentUser.isOnline);
+      setAvatar(currentUser.avatar || generateLetterAvatar(currentUser.name));
+      setSoundEnabled(soundFX.isEnabled());
+    }
+  }, [isUserProfileOpen, currentUser]);
+
   // Sound State
   const [soundEnabled, setSoundEnabled] = useState(soundFX.isEnabled());
 
@@ -90,17 +105,17 @@ export const UserProfileModal: React.FC = () => {
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-white dark:bg-[#0F1117] border border-slate-200 dark:border-[#252B36] rounded-2xl shadow-2xl overflow-hidden flex flex-col cursor-default max-h-[92vh]"
+        className="w-full max-w-[480px] bg-white dark:bg-[#0F1117] border border-slate-200 dark:border-[#252B36] rounded-2xl shadow-2xl overflow-hidden flex flex-col cursor-default max-h-[90vh]"
       >
         {/* Header */}
-        <div className="px-5 sm:px-6 py-4 border-b border-slate-200 dark:border-[#252B36] flex items-center justify-between bg-slate-50 dark:bg-[#12151C]/90">
-          <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-[#4F8CFF]/15 border border-[#4F8CFF]/30 flex items-center justify-center text-[#4F8CFF]">
-              <Settings className="w-5 h-5" />
+        <div className="px-4 py-2.5 border-b border-slate-200 dark:border-[#252B36] flex items-center justify-between bg-slate-50 dark:bg-[#12151C]/90">
+          <div className="flex items-center space-x-2.5">
+            <div className="w-7 h-7 rounded-lg bg-[#4F8CFF]/15 border border-[#4F8CFF]/30 flex items-center justify-center text-[#4F8CFF]">
+              <Settings className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-[#F5F7FA]">Profile & Settings</h2>
-              <p className="text-[11px] text-slate-500 dark:text-[#929BAA]">
+              <h2 className="text-xs font-bold text-slate-900 dark:text-[#F5F7FA]">Profile & Settings</h2>
+              <p className="text-[10px] text-slate-500 dark:text-[#929BAA]">
                 Manage your identity and preferences.
               </p>
             </div>
@@ -108,18 +123,18 @@ export const UserProfileModal: React.FC = () => {
 
           <button
             onClick={() => setIsUserProfileOpen(false)}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] hover:bg-slate-100 dark:hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
+            className="p-1 text-slate-400 hover:text-slate-600 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] hover:bg-slate-100 dark:hover:bg-[#181C25] rounded-md transition-colors cursor-pointer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
 
         {/* Tab Navigator */}
-        <div className="px-5 sm:px-6 border-b border-slate-200 dark:border-[#252B36] flex items-center space-x-2 bg-slate-100/80 dark:bg-[#12151C]/50 text-xs overflow-x-auto no-scrollbar">
+        <div className="px-4 border-b border-slate-200 dark:border-[#252B36] flex items-center space-x-1.5 bg-slate-100/80 dark:bg-[#12151C]/50 text-xs overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setActiveTab('profile')}
-            className={`py-3 px-3 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer rounded-t-lg ${
+            className={`py-2 px-2.5 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer rounded-t-lg text-xs ${
               activeTab === 'profile'
                 ? 'border-[#4F8CFF] text-[#4F8CFF] bg-white/70 dark:bg-white/5 font-semibold'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-[#929BAA] dark:hover:text-[#F5F7FA]'
@@ -132,7 +147,7 @@ export const UserProfileModal: React.FC = () => {
           <button
             type="button"
             onClick={() => setActiveTab('preferences')}
-            className={`py-3 px-3 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer rounded-t-lg ${
+            className={`py-2 px-2.5 border-b-2 font-medium flex items-center space-x-1.5 transition-colors whitespace-nowrap cursor-pointer rounded-t-lg text-xs ${
               activeTab === 'preferences'
                 ? 'border-[#4F8CFF] text-[#4F8CFF] bg-white/70 dark:bg-white/5 font-semibold'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-[#929BAA] dark:hover:text-[#F5F7FA]'
@@ -144,24 +159,24 @@ export const UserProfileModal: React.FC = () => {
         </div>
 
         {/* Modal Body */}
-        <div className="p-5 sm:p-6 overflow-y-auto no-scrollbar space-y-5 text-xs">
+        <div className="p-3.5 overflow-y-auto no-scrollbar space-y-3 text-xs">
           {/* TAB 1: PROFILE & PRESENCE */}
           {activeTab === 'profile' && (
-            <form onSubmit={handleSubmitProfile} className="space-y-4">
+            <form onSubmit={handleSubmitProfile} className="space-y-3">
               {/* Avatar Selection */}
               <div>
-                <label className="block text-xs font-semibold text-slate-800 dark:text-[#F5F7FA] mb-2">
+                <label className="block text-[11px] font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1.5">
                   Profile Photo
                 </label>
-                <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-3">
                   <div className="relative">
                     <img
                       src={avatar}
                       alt=""
-                      className="w-14 h-14 rounded-2xl object-cover border-2 border-[#4F8CFF] shadow-subtle bg-slate-100 dark:bg-[#181C25]"
+                      className="w-12 h-12 rounded-xl object-cover border-2 border-[#4F8CFF] shadow-subtle bg-slate-100 dark:bg-[#181C25]"
                     />
                     <span
-                      className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#181C25] ${
+                      className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-[#181C25] ${
                         isOnline ? 'bg-[#32C48D]' : 'bg-[#636D7E]'
                       }`}
                     />
@@ -173,26 +188,38 @@ export const UserProfileModal: React.FC = () => {
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
                         if (!file.type.startsWith('image/')) {
                           addToast('Please select a valid image file', 'warning');
                           return;
                         }
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          const dataUrl = ev.target?.result as string;
-                          setAvatar(dataUrl);
+                        try {
+                          const compressedDataUrl = await compressImageFile(file, 256, 256, 0.82);
+                          setAvatar(compressedDataUrl);
+
+                          // Asynchronously try uploading to Supabase Storage if configured
+                          try {
+                            if (isSupabaseConfigured) {
+                              const uploaded = await uploadChatMedia(file, file.name, 'images');
+                              if (uploaded?.url) {
+                                setAvatar(uploaded.url);
+                              }
+                            }
+                          } catch (err) {
+                            console.warn('Could not upload avatar to cloud storage, using compressed local URL', err);
+                          }
                           addToast('Custom photo chosen', 'success');
-                        };
-                        reader.readAsDataURL(file);
+                        } catch (err) {
+                          addToast('Failed to process photo', 'error');
+                        }
                       }}
                     />
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-3 py-1.5 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                      className="px-2.5 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5" />
                       <span>Choose Custom Photo</span>
@@ -202,55 +229,55 @@ export const UserProfileModal: React.FC = () => {
               </div>
 
               {/* Full Name & Job Title */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1.5">
+                  <label className="block text-[11px] font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1">
                     Display Name
                   </label>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-[#F5F7FA] outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-[#F5F7FA] outline-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1.5">
+                  <label className="block text-[11px] font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1">
                     Title / Role
                   </label>
                   <input
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-[#F5F7FA] outline-none"
+                    className="w-full bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-[#F5F7FA] outline-none"
                   />
                 </div>
               </div>
 
               {/* Custom Status */}
               <div>
-                <label className="block text-xs font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1.5">
+                <label className="block text-[11px] font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1">
                   Custom Status & Emoji
                 </label>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1.5">
                   <input
                     type="text"
                     value={statusEmoji}
                     onChange={(e) => setStatusEmoji(e.target.value)}
-                    className="w-12 text-center bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-xl py-2 text-base outline-none"
+                    className="w-10 text-center bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg py-1.5 text-sm outline-none"
                   />
                   <input
                     type="text"
                     value={statusText}
                     onChange={(e) => setStatusText(e.target.value)}
                     placeholder="What are you working on right now?"
-                    className="flex-1 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-[#F5F7FA] placeholder-slate-400 dark:placeholder-[#929BAA] outline-none"
+                    className="flex-1 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-[#F5F7FA] placeholder-slate-400 dark:placeholder-[#929BAA] outline-none"
                   />
                 </div>
 
                 {/* Quick status presets */}
-                <div className="flex flex-wrap gap-1.5 mt-2">
+                <div className="flex flex-wrap gap-1 mt-1.5">
                   {STATUS_PRESETS.map((preset) => (
                     <button
                       key={preset.text}
@@ -259,7 +286,7 @@ export const UserProfileModal: React.FC = () => {
                         setStatusEmoji(preset.emoji);
                         setStatusText(preset.text);
                       }}
-                      className="px-2 py-1 bg-slate-100 dark:bg-[#12151C] hover:bg-slate-200 dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] rounded-md text-[11px] text-slate-600 hover:text-slate-900 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] flex items-center space-x-1 transition-colors cursor-pointer"
+                      className="px-1.5 py-0.5 bg-slate-100 dark:bg-[#12151C] hover:bg-slate-200 dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] rounded-md text-[10.5px] text-slate-600 hover:text-slate-900 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] flex items-center space-x-1 transition-colors cursor-pointer"
                     >
                       <span>{preset.emoji}</span>
                       <span>{preset.text}</span>
@@ -269,10 +296,10 @@ export const UserProfileModal: React.FC = () => {
               </div>
 
               {/* Online Presence Toggle */}
-              <div className="p-3 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl flex items-center justify-between">
-                <div className="flex items-center space-x-2.5">
+              <div className="p-2.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-lg flex items-center justify-between">
+                <div className="flex items-center space-x-2">
                   <Circle
-                    className={`w-3.5 h-3.5 fill-current ${
+                    className={`w-3 h-3 fill-current ${
                       isOnline ? 'text-[#32C48D]' : 'text-[#636D7E]'
                     }`}
                   />
@@ -280,9 +307,9 @@ export const UserProfileModal: React.FC = () => {
                     <div className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">
                       {isOnline ? 'Active Online Presence' : 'Away / Offline Mode'}
                     </div>
-                    <div className="text-[11px] text-slate-500 dark:text-[#929BAA]">
+                    <div className="text-[10px] text-slate-500 dark:text-[#929BAA]">
                       {isOnline
-                        ? 'Teammates can see that you are active and available.'
+                        ? 'Teammates can see that you are active.'
                         : 'Show as offline to colleagues.'}
                     </div>
                   </div>
@@ -291,23 +318,23 @@ export const UserProfileModal: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsOnline(!isOnline)}
-                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
+                  className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
                     isOnline ? 'bg-[#32C48D]' : 'bg-slate-300 dark:bg-[#252B36]'
                   }`}
                 >
                   <div
                     className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      isOnline ? 'translate-x-5' : 'translate-x-0'
+                      isOnline ? 'translate-x-4' : 'translate-x-0'
                     }`}
                   />
                 </button>
               </div>
 
               {/* Save Profile Button */}
-              <div className="pt-3 flex justify-end">
+              <div className="pt-1.5 flex justify-end">
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white font-semibold rounded-xl transition-all shadow-accent-glow cursor-pointer"
+                  className="px-3.5 py-1.5 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white font-semibold rounded-lg text-xs transition-all shadow-accent-glow cursor-pointer"
                 >
                   Save Profile Changes
                 </button>
@@ -317,30 +344,27 @@ export const UserProfileModal: React.FC = () => {
 
           {/* TAB 2: PREFERENCES & AUDIO */}
           {activeTab === 'preferences' && (
-            <div className="space-y-4 animate-fade-in">
-              {/* Interface Theme Selection (Dark, Light, System) */}
-              <div className="p-3.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-2.5">
-                <div className="flex items-center space-x-2">
-                  <Sun className="w-4 h-4 text-[#4F8CFF]" />
+            <div className="space-y-3 animate-fade-in">
+              {/* Interface Theme Selection */}
+              <div className="p-2.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-lg space-y-2">
+                <div className="flex items-center space-x-1.5">
+                  <Sun className="w-3.5 h-3.5 text-[#4F8CFF]" />
                   <span className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">Interface Theme</span>
                 </div>
-                <p className="text-[11px] text-slate-500 dark:text-[#929BAA]">
-                  Select your preferred workspace visual theme.
-                </p>
-                <div className="grid grid-cols-3 gap-2.5">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       setTheme('dark');
                       addToast('Dark theme activated', 'info');
                     }}
-                    className={`p-3 rounded-xl border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1.5 cursor-pointer ${
+                    className={`p-2 rounded-lg border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer ${
                       theme === 'dark'
-                        ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-2 ring-[#4F8CFF]/30'
+                        ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-1 ring-[#4F8CFF]/30'
                         : 'bg-white dark:bg-[#181C25] text-slate-600 dark:text-[#929BAA] border-slate-200 dark:border-[#252B36] hover:bg-slate-100 dark:hover:bg-[#252B36] hover:text-slate-900 dark:hover:text-[#F5F7FA]'
                     }`}
                   >
-                    <Moon className="w-4 h-4" />
+                    <Moon className="w-3.5 h-3.5" />
                     <span>Dark</span>
                   </button>
                   <button
@@ -349,13 +373,13 @@ export const UserProfileModal: React.FC = () => {
                       setTheme('light');
                       addToast('Light theme activated', 'info');
                     }}
-                    className={`p-3 rounded-xl border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1.5 cursor-pointer ${
+                    className={`p-2 rounded-lg border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer ${
                       theme === 'light'
-                        ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-2 ring-[#4F8CFF]/30'
+                        ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-1 ring-[#4F8CFF]/30'
                         : 'bg-white dark:bg-[#181C25] text-slate-600 dark:text-[#929BAA] border-slate-200 dark:border-[#252B36] hover:bg-slate-100 dark:hover:bg-[#252B36] hover:text-slate-900 dark:hover:text-[#F5F7FA]'
                     }`}
                   >
-                    <Sun className="w-4 h-4" />
+                    <Sun className="w-3.5 h-3.5" />
                     <span>Light</span>
                   </button>
                   <button
@@ -364,28 +388,28 @@ export const UserProfileModal: React.FC = () => {
                       setTheme('system');
                       addToast('System theme sync activated', 'info');
                     }}
-                    className={`p-3 rounded-xl border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1.5 cursor-pointer ${
+                    className={`p-2 rounded-lg border text-xs font-semibold transition-all flex flex-col items-center justify-center space-y-1 cursor-pointer ${
                       theme === 'system'
-                        ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-2 ring-[#4F8CFF]/30'
+                        ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF] shadow-sm ring-1 ring-[#4F8CFF]/30'
                         : 'bg-white dark:bg-[#181C25] text-slate-600 dark:text-[#929BAA] border-slate-200 dark:border-[#252B36] hover:bg-slate-100 dark:hover:bg-[#252B36] hover:text-slate-900 dark:hover:text-[#F5F7FA]'
                     }`}
                   >
-                    <Laptop className="w-4 h-4" />
+                    <Laptop className="w-3.5 h-3.5" />
                     <span>System</span>
                   </button>
                 </div>
               </div>
 
               {/* Sound Notifications Toggle */}
-              <div className="p-3.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl flex items-center justify-between gap-3">
-                <div className="flex items-center space-x-3 min-w-0 flex-1">
-                  <div className="p-2 bg-white dark:bg-[#181C25] rounded-lg border border-slate-200 dark:border-[#252B36] text-[#4F8CFF] flex-shrink-0">
-                    {soundEnabled ? <Volume2 className="w-4 h-4 text-[#32C48D]" /> : <VolumeX className="w-4 h-4 text-[#F05D6C]" />}
+              <div className="p-2.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-lg flex items-center justify-between gap-2.5">
+                <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+                  <div className="p-1.5 bg-white dark:bg-[#181C25] rounded-md border border-slate-200 dark:border-[#252B36] text-[#4F8CFF] flex-shrink-0">
+                    {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#32C48D]" /> : <VolumeX className="w-3.5 h-3.5 text-[#F05D6C]" />}
                   </div>
                   <div className="min-w-0">
                     <div className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">Sound Chimes & Audio FX</div>
-                    <div className="text-[11px] text-slate-500 dark:text-[#929BAA] leading-normal">
-                      Subtle procedural workplace tones for sent messages and incoming notifications.
+                    <div className="text-[10px] text-slate-500 dark:text-[#929BAA] leading-normal">
+                      Subtle procedural workplace tones for sent messages and notifications.
                     </div>
                   </div>
                 </div>
@@ -395,27 +419,26 @@ export const UserProfileModal: React.FC = () => {
                   role="switch"
                   aria-checked={soundEnabled}
                   onClick={toggleSound}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#4F8CFF] ${
+                  className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                     soundEnabled ? 'bg-[#32C48D]' : 'bg-slate-300 dark:bg-[#252B36]'
                   }`}
-                  title={soundEnabled ? 'Disable sound FX' : 'Enable sound FX'}
                 >
                   <span
                     aria-hidden="true"
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
-                      soundEnabled ? 'translate-x-5' : 'translate-x-0'
+                    className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
+                      soundEnabled ? 'translate-x-4' : 'translate-x-0'
                     }`}
                   />
                 </button>
               </div>
 
               {/* Language Selection */}
-              <div className="p-3.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-xl space-y-2.5">
-                <div className="flex items-center space-x-2">
-                  <Languages className="w-4 h-4 text-[#4F8CFF]" />
+              <div className="p-2.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-lg space-y-2">
+                <div className="flex items-center space-x-1.5">
+                  <Languages className="w-3.5 h-3.5 text-[#4F8CFF]" />
                   <span className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">Screen Language</span>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {SUPPORTED_LANGUAGES.map((lang) => (
                     <button
                       key={lang.code}
@@ -424,13 +447,13 @@ export const UserProfileModal: React.FC = () => {
                         setSelectedLanguage(lang.code);
                         addToast(`Language set to ${lang.name}`, 'info');
                       }}
-                      className={`p-2 rounded-lg border text-left text-xs transition-colors flex items-center space-x-2 cursor-pointer ${
+                      className={`p-1.5 rounded-md border text-left text-[11px] transition-colors flex items-center space-x-1.5 cursor-pointer ${
                         selectedLanguage === lang.code
                           ? 'bg-[#4F8CFF]/20 text-[#4F8CFF] border-[#4F8CFF]'
                           : 'bg-white dark:bg-[#181C25] text-slate-600 dark:text-[#929BAA] border-slate-200 dark:border-[#252B36] hover:bg-slate-100 dark:hover:bg-[#252B36] hover:text-slate-900 dark:hover:text-[#F5F7FA]'
                       }`}
                     >
-                      <span className="text-base">{lang.flag}</span>
+                      <span className="text-sm">{lang.flag}</span>
                       <span className="truncate">{lang.name}</span>
                     </button>
                   ))}

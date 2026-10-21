@@ -10,6 +10,7 @@ import {
   Copy,
   Check,
   CheckCheck,
+  Clock,
   FileText,
   FileCode,
   Download,
@@ -215,115 +216,274 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
-  // Render markdown styles inside bubble
-  const renderMessageContent = (text: string, isSelf: boolean) => {
-    if (text.includes('```')) {
-      const parts = text.split(/(```[\s\S]*?```)/g);
-      return parts.map((part, index) => {
-        if (part.startsWith('```') && part.endsWith('```')) {
-          const lines = part.slice(3, -3).trim().split('\n');
-          let lang = 'code';
-          let codeContent = part.slice(3, -3).trim();
-          if (lines[0] && !lines[0].includes(' ') && lines[0].length < 15) {
-            lang = lines[0];
-            codeContent = lines.slice(1).join('\n');
-          }
+  // Real-time Delivery Status Ticks (distinguishable high-contrast styling)
+  const renderDeliveryTick = () => {
+    const status = message.deliveryStatus || 'delivered';
 
-          return (
-            <div
-              key={index}
-              className={`my-2 rounded-xl overflow-hidden text-xs font-mono shadow-sm border ${
-                isSelf ? 'bg-[#0E1526] border-[#3B82F6]/40' : 'bg-[#12151C] border-[#252B36]'
-              }`}
-            >
-              <div
-                className={`px-3 py-1.5 flex items-center justify-between border-b ${
-                  isSelf ? 'bg-[#18233D] border-[#3B82F6]/30 text-[#93C5FD]' : 'bg-[#181C25] border-[#252B36] text-[#929BAA]'
-                }`}
-              >
-                <span className="text-[11px] font-semibold uppercase tracking-wider">
-                  {lang}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard.writeText(codeContent);
-                    setCopiedCodeIndex(index);
-                    addToast('Code copied', 'info');
-                    setTimeout(() => setCopiedCodeIndex(null), 2000);
-                  }}
-                  className="flex items-center space-x-1 text-[11px] hover:text-white transition-colors cursor-pointer"
-                >
-                  {copiedCodeIndex === index ? (
-                    <>
-                      <Check className="w-3 h-3 text-[#32C48D]" />
-                      <span className="text-[#32C48D]">Copied</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3" />
-                      <span>Copy</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <pre className="p-3 overflow-x-auto text-[#F5F7FA] leading-relaxed selection:bg-[#4F8CFF]/50">
-                <code>{codeContent}</code>
-              </pre>
-            </div>
-          );
-        } else {
-          return <span key={index}>{renderInlineStyles(part, isSelf)}</span>;
-        }
-      });
+    if (status === 'sending') {
+      return (
+        <span title="Sending..." className="inline-flex items-center text-white/70">
+          <Clock className="w-3.5 h-3.5 animate-pulse" />
+        </span>
+      );
     }
 
-    return renderInlineStyles(text, isSelf);
+    if (status === 'sent') {
+      return (
+        <span title="Sent to server" className="inline-flex items-center">
+          <Check className="w-3.5 h-3.5 text-white/80 drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)]" strokeWidth={2.5} />
+        </span>
+      );
+    }
+
+    if (status === 'delivered') {
+      return (
+        <span title="Delivered to device" className="inline-flex items-center">
+          <CheckCheck className="w-4 h-4 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)]" strokeWidth={2.5} />
+        </span>
+      );
+    }
+
+    // 'read' / viewed: WhatsApp Signature Electric Sky Cyan (#53BDEB)
+    return (
+      <span title="Read / Viewed" className="inline-flex items-center">
+        <CheckCheck className="w-4 h-4 text-[#53BDEB] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" strokeWidth={2.5} />
+      </span>
+    );
   };
 
-  const renderInlineStyles = (content: string, isSelf: boolean) => {
+  // Render markdown styles inside bubble
+  const renderMessageContent = (
+    text: string,
+    isSelf: boolean,
+    trailingSpacer?: React.ReactNode
+  ) => {
+    if (text.includes('```')) {
+      const parts = text.split(/(```[\s\S]*?```)/g);
+      return (
+        <>
+          {parts.map((part, index) => {
+            const isLastPart = index === parts.length - 1;
+            if (part.startsWith('```') && part.endsWith('```')) {
+              const lines = part.slice(3, -3).trim().split('\n');
+              let lang = 'code';
+              let codeContent = part.slice(3, -3).trim();
+              if (lines[0] && !lines[0].includes(' ') && lines[0].length < 15) {
+                lang = lines[0];
+                codeContent = lines.slice(1).join('\n');
+              }
+
+              return (
+                <React.Fragment key={index}>
+                  <div
+                    className={`my-1.5 rounded-lg overflow-hidden text-xs font-mono shadow-sm border ${
+                      isSelf ? 'bg-[#0E1526] border-[#3B82F6]/40' : 'bg-[#12151C] border-[#252B36]'
+                    }`}
+                  >
+                    <div
+                      className={`px-2.5 py-1 flex items-center justify-between border-b ${
+                        isSelf
+                          ? 'bg-[#18233D] border-[#3B82F6]/30 text-[#93C5FD]'
+                          : 'bg-[#181C25] border-[#252B36] text-[#929BAA]'
+                      }`}
+                    >
+                      <span className="text-[11px] font-semibold uppercase tracking-wider">
+                        {lang}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(codeContent);
+                          setCopiedCodeIndex(index);
+                          addToast('Code copied', 'info');
+                          setTimeout(() => setCopiedCodeIndex(null), 2000);
+                        }}
+                        className="flex items-center space-x-1 text-[11px] hover:text-white transition-colors cursor-pointer"
+                      >
+                        {copiedCodeIndex === index ? (
+                          <>
+                            <Check className="w-3 h-3 text-[#32C48D]" />
+                            <span className="text-[#32C48D]">Copied</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3 h-3" />
+                            <span>Copy</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <pre className="p-2.5 overflow-x-auto text-[#F5F7FA] leading-relaxed selection:bg-[#4F8CFF]/50">
+                      <code>{codeContent}</code>
+                    </pre>
+                  </div>
+                  {isLastPart && trailingSpacer}
+                </React.Fragment>
+              );
+            } else {
+              return (
+                <React.Fragment key={index}>
+                  {renderInlineStyles(part, isSelf, isLastPart ? trailingSpacer : undefined)}
+                </React.Fragment>
+              );
+            }
+          })}
+        </>
+      );
+    }
+
+    return renderInlineStyles(text, isSelf, trailingSpacer);
+  };
+
+  const renderInlineStyles = (
+    content: string,
+    isSelf: boolean,
+    trailingSpacer?: React.ReactNode
+  ) => {
     const lines = content.split('\n');
-    return lines.map((line, lIdx) => {
-      const words = line.split(/(\s+)/);
-      const formattedWords = words.map((w, wIdx) => {
-        if (w.startsWith('@')) {
+
+    // Single-line message: pure inline
+    if (lines.length === 1 && !lines[0].trim().startsWith('>')) {
+      const line = lines[0];
+      const tokens = line.split(/(\*\*[\s\S]*?\*\*|`[^`]+`|@\w+)/g);
+      const formattedTokens = tokens.map((token, tIdx) => {
+        if (!token) return null;
+        if (token.startsWith('@')) {
           return (
             <span
-              key={wIdx}
-              className={`font-medium px-1.5 py-0.5 rounded text-xs ${
+              key={tIdx}
+              className={`font-medium px-1 py-0.2 rounded text-[13px] ${
                 isSelf ? 'bg-white/20 text-white' : 'bg-[#4F8CFF]/20 text-[#4F8CFF]'
               }`}
             >
-              {w}
+              {token}
             </span>
           );
         }
-        if (w.startsWith('`') && w.endsWith('`') && w.length > 2) {
+        if (token.startsWith('`') && token.endsWith('`') && token.length > 2) {
           return (
             <code
-              key={wIdx}
+              key={tIdx}
               className={`font-mono px-1 py-0.5 rounded text-xs border ${
                 isSelf
                   ? 'bg-[#1E3A8A]/50 border-white/20 text-white'
                   : 'bg-[#12151C] border-[#252B36] text-[#F5F7FA]'
               }`}
             >
-              {w.slice(1, -1)}
+              {token.slice(1, -1)}
             </code>
           );
         }
-        if (w.startsWith('**') && w.endsWith('**') && w.length > 4) {
-          return <strong key={wIdx} className="font-bold text-white">{w.slice(2, -2)}</strong>;
+        if (token.startsWith('**') && token.endsWith('**') && token.length >= 4) {
+          return (
+            <strong
+              key={tIdx}
+              className={`font-semibold ${
+                isSelf ? 'text-white' : 'text-slate-900 dark:text-[#F5F7FA]'
+              }`}
+            >
+              {token.slice(2, -2)}
+            </strong>
+          );
         }
-        return w;
+        return token;
       });
 
       return (
-        <span key={lIdx} className="block min-h-[1.2rem]">
-          {formattedWords}
+        <span>
+          {formattedTokens}
+          {trailingSpacer}
         </span>
       );
-    });
+    }
+
+    // Multi-line message: flow naturally using <br /> just like WhatsApp
+    return (
+      <>
+        {lines.map((line, lIdx) => {
+          const isLastLine = lIdx === lines.length - 1;
+
+          if (!line.trim()) {
+            return (
+              <React.Fragment key={lIdx}>
+                <span className="block h-1.5" />
+                {isLastLine && trailingSpacer}
+              </React.Fragment>
+            );
+          }
+
+          const trimmed = line.trim();
+          const isQuote = trimmed.startsWith('>');
+          const rawText = isQuote ? trimmed.replace(/^>\s?/, '') : line;
+
+          const tokens = rawText.split(/(\*\*[\s\S]*?\*\*|`[^`]+`|@\w+)/g);
+          const formattedTokens = tokens.map((token, tIdx) => {
+            if (!token) return null;
+            if (token.startsWith('@')) {
+              return (
+                <span
+                  key={tIdx}
+                  className={`font-medium px-1 py-0.2 rounded text-[13px] ${
+                    isSelf ? 'bg-white/20 text-white' : 'bg-[#4F8CFF]/20 text-[#4F8CFF]'
+                  }`}
+                >
+                  {token}
+                </span>
+              );
+            }
+            if (token.startsWith('`') && token.endsWith('`') && token.length > 2) {
+              return (
+                <code
+                  key={tIdx}
+                  className={`font-mono px-1 py-0.5 rounded text-xs border ${
+                    isSelf
+                      ? 'bg-[#1E3A8A]/50 border-white/20 text-white'
+                      : 'bg-[#12151C] border-[#252B36] text-[#F5F7FA]'
+                  }`}
+                >
+                  {token.slice(1, -1)}
+                </code>
+              );
+            }
+            if (token.startsWith('**') && token.endsWith('**') && token.length >= 4) {
+              return (
+                <strong
+                  key={tIdx}
+                  className={`font-semibold ${
+                    isSelf ? 'text-white' : 'text-slate-900 dark:text-[#F5F7FA]'
+                  }`}
+                >
+                  {token.slice(2, -2)}
+                </strong>
+              );
+            }
+            return token;
+          });
+
+          if (isQuote) {
+            return (
+              <div
+                key={lIdx}
+                className={`rounded-md border-l-[3.5px] ${
+                  isSelf ? 'border-white/80 bg-black/15' : 'border-[#4F8CFF] bg-[#4F8CFF]/10'
+                } px-2 py-0.5 my-1 text-xs italic`}
+              >
+                {formattedTokens}
+                {isLastLine && trailingSpacer}
+              </div>
+            );
+          }
+
+          return (
+            <React.Fragment key={lIdx}>
+              {lIdx > 0 && <br />}
+              <span>{formattedTokens}</span>
+              {isLastLine && trailingSpacer}
+            </React.Fragment>
+          );
+        })}
+      </>
+    );
   };
 
   // Action Bar component (dismisses on reaction/action, opens on click/long-press)
@@ -520,12 +680,15 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
   return (
     <div
       ref={messageRef}
+      id={`msg-${message.id}`}
       onClick={handleMessageClick}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onContextMenu={handleContextMenu}
-      className={`message-row group relative px-4 sm:px-6 py-1.5 transition-colors cursor-pointer select-text ${
+      className={`message-row group relative px-3 sm:px-5 ${
+        isGrouped ? 'py-0.5' : 'pt-1.5 pb-0.5'
+      } transition-colors cursor-pointer select-text ${
         isPinnedByMe ? 'bg-[#4F8CFF]/5 border-l-2 border-[#4F8CFF]' : 'hover:bg-[#12151C]/40'
       }`}
     >
@@ -550,23 +713,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
       {isCurrentUser ? (
         <div className="w-full flex justify-end">
           <div className="flex flex-col items-end max-w-[85%] sm:max-w-[75%] md:max-w-[65%]">
-            {/* Header info for sent message */}
-            {!isGrouped && (
-              <div className="flex items-center space-x-2 mb-1 justify-end">
-                <span className="text-xs font-semibold text-slate-700 dark:text-[#F5F7FA]">
-                  {currentUser.name}
-                </span>
-              </div>
-            )}
-
-            {/* Bubble Container: Modern rich blue gradient bubble */}
-            <div className="relative rounded-2xl rounded-tr-xs bg-gradient-to-r from-[#2563EB] to-[#1D4ED8] text-white p-3.5 shadow-md border border-[#3B82F6]/30 select-text">
+            {/* Bubble Container: Modern WhatsApp-style bubble */}
+            <div className="w-fit max-w-full relative rounded-lg rounded-tr-xs bg-[#2563EB] dark:bg-[#1D4ED8] text-white px-2.5 pt-1.5 pb-1.5 shadow-sm border border-[#3B82F6]/30 select-text">
               {isEditing ? (
                 <div className="space-y-2 min-w-[240px]">
                   <textarea
                     value={editDraft}
                     onChange={(e) => setEditDraft(e.target.value)}
-                    className="w-full bg-[#181C25] border border-white/30 rounded-lg p-2.5 text-xs text-white outline-none resize-none"
+                    className="w-full bg-[#181C25] border border-white/30 rounded-lg p-2 text-[13px] text-white outline-none resize-none"
                     rows={3}
                     autoFocus
                   />
@@ -589,124 +743,182 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                 </div>
               ) : (
                 <>
-                  {displayedContent && (
-                    <div className="text-xs text-white leading-relaxed break-words">
-                      {renderMessageContent(displayedContent, true)}
-                    </div>
-                  )}
+                  {displayedContent && (() => {
+                    const isShortSingleLine =
+                      displayedContent.length <= 40 &&
+                      !displayedContent.includes('\n') &&
+                      !displayedContent.startsWith('>') &&
+                      !displayedContent.includes('```');
+
+                    if (isShortSingleLine) {
+                      return (
+                        <div className="flex items-end justify-between gap-3.5 min-w-[70px]">
+                          <span className="text-[13.5px] text-white leading-[19px] break-words">
+                            {renderMessageContent(displayedContent, true)}
+                          </span>
+                          {(!message.attachments || message.attachments.length === 0) && (
+                            <span className="inline-flex items-center space-x-1 text-[11px] text-white/75 font-mono select-none shrink-0 pb-0.5 leading-none">
+                              {message.editedAt && <span className="italic mr-0.5 text-[10px]">Edited</span>}
+                              {message.isTranslated && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowOriginal(!showOriginal);
+                                  }}
+                                  className="text-[10px] text-white underline cursor-pointer mr-0.5"
+                                >
+                                  {showOriginal ? t('showing_original') : t('translated')}
+                                </button>
+                              )}
+                              <span>{formatTimestamp(message.timestamp)}</span>
+                              {renderDeliveryTick()}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="text-[13.5px] text-white leading-[19px] break-words">
+                        {renderMessageContent(displayedContent, true)}
+                        {(!message.attachments || message.attachments.length === 0) && (
+                          <span className="inline-flex items-center space-x-1 float-right ml-3.5 mt-1 -mb-0.5 text-[11px] text-white/75 font-mono select-none leading-none">
+                            {message.editedAt && <span className="italic mr-0.5 text-[10px]">Edited</span>}
+                            {message.isTranslated && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowOriginal(!showOriginal);
+                                }}
+                                className="text-[10px] text-white underline cursor-pointer mr-0.5"
+                              >
+                                {showOriginal ? t('showing_original') : t('translated')}
+                              </button>
+                            )}
+                            <span>{formatTimestamp(message.timestamp)}</span>
+                            {renderDeliveryTick()}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Attachments rendering */}
                   {message.attachments && message.attachments.length > 0 && (
-                    <div className="mt-2.5 flex flex-wrap gap-2.5 justify-end">
-                      {message.attachments.map((att) => {
-                        if (att.type === 'image') {
-                          return (
-                            <div
-                              key={att.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setLightboxImage(att.previewUrl || att.url);
-                              }}
-                              className="group/img relative rounded-xl border border-white/20 overflow-hidden max-w-sm cursor-zoom-in shadow-sm"
-                            >
-                              <img
-                                src={att.previewUrl || att.url}
-                                alt={att.name}
-                                className="max-h-60 rounded-xl object-cover hover:opacity-95 transition-opacity"
-                              />
-                              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex items-center justify-between text-[11px] text-white">
-                                <span className="truncate">{att.name}</span>
-                                <span className="text-white/70 text-[10px]">{att.size}</span>
+                    <>
+                      <div className="mt-2 flex flex-wrap gap-2 justify-end">
+                        {message.attachments.map((att) => {
+                          if (att.type === 'image') {
+                            return (
+                              <div
+                                key={att.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLightboxImage(att.previewUrl || att.url);
+                                }}
+                                className="group/img relative rounded-xl border border-white/20 overflow-hidden max-w-sm cursor-zoom-in shadow-sm"
+                              >
+                                <img
+                                  src={att.previewUrl || att.url}
+                                  alt={att.name}
+                                  className="max-h-60 rounded-xl object-cover hover:opacity-95 transition-opacity"
+                                />
+                                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex items-center justify-between text-[11px] text-white">
+                                  <span className="truncate">{att.name}</span>
+                                  <span className="text-white/70 text-[10px]">{att.size}</span>
+                                </div>
                               </div>
-                            </div>
-                          );
-                        }
+                            );
+                          }
 
-                        if (att.type === 'video') {
+                          if (att.type === 'video') {
+                            return (
+                              <div
+                                key={att.id}
+                                onClick={(e) => e.stopPropagation()}
+                                className="group/vid relative rounded-xl border border-white/20 overflow-hidden max-w-md bg-black shadow-sm"
+                              >
+                                <video
+                                  src={att.url}
+                                  controls
+                                  className="max-h-72 w-full rounded-xl object-contain bg-black"
+                                />
+                                <div className="bg-[#0F172A] px-3 py-1.5 flex items-center justify-between text-[11px] text-white border-t border-white/10">
+                                  <span className="truncate">{att.name}</span>
+                                  <span className="text-white/70 text-[10px]">{att.size}</span>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (att.type === 'audio') {
+                            return (
+                              <div key={att.id} onClick={(e) => e.stopPropagation()}>
+                                <VoiceMessagePlayer
+                                  url={att.url}
+                                  name={att.name}
+                                  duration={att.duration}
+                                  senderAvatar={senderAvatar}
+                                />
+                              </div>
+                            );
+                          }
+
                           return (
                             <div
                               key={att.id}
                               onClick={(e) => e.stopPropagation()}
-                              className="group/vid relative rounded-xl border border-white/20 overflow-hidden max-w-md bg-black shadow-sm"
+                              className="flex items-center space-x-3 px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs max-w-xs transition-colors"
                             >
-                              <video
-                                src={att.url}
-                                controls
-                                className="max-h-72 w-full rounded-xl object-contain bg-black"
-                              />
-                              <div className="bg-[#0F172A] px-3 py-1.5 flex items-center justify-between text-[11px] text-white border-t border-white/10">
-                                <span className="truncate">{att.name}</span>
-                                <span className="text-white/70 text-[10px]">{att.size}</span>
+                              <div className="p-2 bg-white/20 rounded-lg text-white">
+                                {att.type === 'code' ? (
+                                  <FileCode className="w-4 h-4" />
+                                ) : (
+                                  <FileText className="w-4 h-4" />
+                                )}
                               </div>
+                              <div className="flex-1 truncate text-left">
+                                <div className="font-medium text-white truncate">{att.name}</div>
+                                <div className="text-[10px] text-white/70">{att.size}</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addToast(`Downloaded ${att.name}`, 'success');
+                                }}
+                                className="p-1 text-white/80 hover:text-white rounded hover:bg-white/20 transition-colors cursor-pointer"
+                                title="Download file"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           );
-                        }
+                        })}
+                      </div>
 
-                        if (att.type === 'audio') {
-                          return (
-                            <div key={att.id} onClick={(e) => e.stopPropagation()}>
-                              <VoiceMessagePlayer
-                                url={att.url}
-                                name={att.name}
-                                duration={att.duration}
-                                senderAvatar={senderAvatar}
-                              />
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div
-                            key={att.id}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex items-center space-x-3 px-3 py-2 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl text-xs max-w-xs transition-colors"
+                      {/* Bubble Footer: Timestamp & delivery check */}
+                      <div className="mt-1 flex items-center justify-end space-x-1.5 text-[10px] text-white/70 font-mono">
+                        {message.editedAt && <span className="italic">(edited)</span>}
+                        {message.isTranslated && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowOriginal(!showOriginal);
+                            }}
+                            className="text-[10px] text-white underline cursor-pointer"
                           >
-                            <div className="p-2 bg-white/20 rounded-lg text-white">
-                              {att.type === 'code' ? (
-                                <FileCode className="w-4 h-4" />
-                              ) : (
-                                <FileText className="w-4 h-4" />
-                              )}
-                            </div>
-                            <div className="flex-1 truncate text-left">
-                              <div className="font-medium text-white truncate">{att.name}</div>
-                              <div className="text-[10px] text-white/70">{att.size}</div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                addToast(`Downloaded ${att.name}`, 'success');
-                              }}
-                              className="p-1 text-white/80 hover:text-white rounded hover:bg-white/20 transition-colors cursor-pointer"
-                              title="Download file"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
+                            {showOriginal ? t('showing_original') : t('translated')}
+                          </button>
+                        )}
+                        <span>{formatTimestamp(message.timestamp)}</span>
+                        {renderDeliveryTick()}
+                      </div>
+                    </>
                   )}
-
-                  {/* Bubble Footer: Timestamp & delivery check */}
-                  <div className="mt-1 flex items-center justify-end space-x-1.5 text-[10px] text-white/70 font-mono">
-                    {message.editedAt && <span className="italic">(edited)</span>}
-                    {message.isTranslated && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowOriginal(!showOriginal);
-                        }}
-                        className="text-[10px] text-white underline cursor-pointer"
-                      >
-                        {showOriginal ? t('showing_original') : t('translated')}
-                      </button>
-                    )}
-                    <span>{formatTimestamp(message.timestamp)}</span>
-                    <CheckCheck className="w-3.5 h-3.5 text-white/90 inline-block" />
-                  </div>
                 </>
               )}
             </div>
@@ -800,7 +1012,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
           {/* Bubble Container: Clean dark card bubble */}
           <div className="flex flex-col items-start max-w-[85%] sm:max-w-[75%] md:max-w-[65%]">
             {!isGrouped && (
-              <div className="flex items-center space-x-2 mb-1">
+              <div className="flex items-center space-x-2 mb-0.5">
                 <span
                   onClick={(e) => {
                     e.stopPropagation();
@@ -824,13 +1036,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
               </div>
             )}
 
-            <div className="relative rounded-2xl rounded-tl-xs bg-[#181C25] border border-[#252B36] text-[#F5F7FA] p-3.5 shadow-md select-text">
+            {/* Bubble Container: Modern WhatsApp-style received card */}
+            <div className="w-fit max-w-full relative rounded-lg rounded-tl-xs bg-[#181C25] border border-[#252B36] text-[#F5F7FA] px-2.5 pt-1.5 pb-1.5 shadow-sm select-text">
               {isEditing ? (
                 <div className="space-y-2 min-w-[240px]">
                   <textarea
                     value={editDraft}
                     onChange={(e) => setEditDraft(e.target.value)}
-                    className="w-full bg-[#12151C] border border-[#4F8CFF] rounded-lg p-2.5 text-xs text-[#F5F7FA] outline-none resize-none"
+                    className="w-full bg-[#12151C] border border-[#4F8CFF] rounded-lg p-2 text-[13px] text-[#F5F7FA] outline-none resize-none"
                     rows={3}
                     autoFocus
                   />
@@ -853,123 +1066,176 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                 </div>
               ) : (
                 <>
-                  {displayedContent && (
-                    <div className="text-xs text-[#F5F7FA] leading-relaxed break-words">
-                      {renderMessageContent(displayedContent, false)}
-                    </div>
-                  )}
+                  {displayedContent && (() => {
+                    const isShortSingleLine =
+                      displayedContent.length <= 40 &&
+                      !displayedContent.includes('\n') &&
+                      !displayedContent.includes('```');
+
+                    if (isShortSingleLine) {
+                      return (
+                        <div className="flex items-end justify-between gap-3.5 min-w-[65px] text-[13.5px] text-[#F5F7FA] leading-[19px]">
+                          <span>{renderMessageContent(displayedContent, false)}</span>
+                          {(!message.attachments || message.attachments.length === 0) && (
+                            <span className="inline-flex items-center space-x-1 text-[11px] text-[#929BAA] font-mono select-none shrink-0 pb-0.5 leading-none">
+                              {message.editedAt && <span className="italic mr-0.5 text-[10px]">Edited</span>}
+                              {message.isTranslated && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowOriginal(!showOriginal);
+                                  }}
+                                  className="text-[10px] text-[#4F8CFF] hover:underline cursor-pointer mr-0.5"
+                                >
+                                  {showOriginal ? t('showing_original') : t('translated')}
+                                </button>
+                              )}
+                              <span>{formatTimestamp(message.timestamp)}</span>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="text-[13.5px] text-[#F5F7FA] leading-[19px] break-words">
+                        {renderMessageContent(displayedContent, false)}
+                        {(!message.attachments || message.attachments.length === 0) && (
+                          <span className="inline-flex items-center space-x-1 float-right ml-3.5 mt-1 -mb-0.5 text-[11px] text-[#929BAA] font-mono select-none leading-none">
+                            {message.editedAt && <span className="italic mr-0.5 text-[10px]">Edited</span>}
+                            {message.isTranslated && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowOriginal(!showOriginal);
+                                }}
+                                className="text-[10px] text-[#4F8CFF] hover:underline cursor-pointer mr-0.5"
+                              >
+                                {showOriginal ? t('showing_original') : t('translated')}
+                              </button>
+                            )}
+                            <span>{formatTimestamp(message.timestamp)}</span>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Attachments rendering */}
                   {message.attachments && message.attachments.length > 0 && (
-                    <div className="mt-2.5 flex flex-wrap gap-2.5">
-                      {message.attachments.map((att) => {
-                        if (att.type === 'image') {
-                          return (
-                            <div
-                              key={att.id}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setLightboxImage(att.previewUrl || att.url);
-                              }}
-                              className="group/img relative rounded-xl border border-[#252B36] overflow-hidden max-w-sm cursor-zoom-in"
-                            >
-                              <img
-                                src={att.previewUrl || att.url}
-                                alt={att.name}
-                                className="max-h-60 rounded-xl object-cover hover:opacity-95 transition-opacity"
-                              />
-                              <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex items-center justify-between text-[11px] text-white">
-                                <span className="truncate">{att.name}</span>
-                                <span className="text-[#929BAA] text-[10px]">{att.size}</span>
+                    <>
+                      <div className="mt-2.5 flex flex-wrap gap-2.5">
+                        {message.attachments.map((att) => {
+                          if (att.type === 'image') {
+                            return (
+                              <div
+                                key={att.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLightboxImage(att.previewUrl || att.url);
+                                }}
+                                className="group/img relative rounded-xl border border-[#252B36] overflow-hidden max-w-sm cursor-zoom-in"
+                              >
+                                <img
+                                  src={att.previewUrl || att.url}
+                                  alt={att.name}
+                                  className="max-h-60 rounded-xl object-cover hover:opacity-95 transition-opacity"
+                                />
+                                <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent p-2 flex items-center justify-between text-[11px] text-white">
+                                  <span className="truncate">{att.name}</span>
+                                  <span className="text-[#929BAA] text-[10px]">{att.size}</span>
+                                </div>
                               </div>
-                            </div>
-                          );
-                        }
+                            );
+                          }
 
-                        if (att.type === 'video') {
+                          if (att.type === 'video') {
+                            return (
+                              <div
+                                key={att.id}
+                                onClick={(e) => e.stopPropagation()}
+                                className="group/vid relative rounded-xl border border-[#252B36] overflow-hidden max-w-md bg-black/60"
+                              >
+                                <video
+                                  src={att.url}
+                                  controls
+                                  className="max-h-72 w-full rounded-xl object-contain bg-black"
+                                />
+                                <div className="bg-[#12151C] px-3 py-1.5 flex items-center justify-between text-[11px] text-white border-t border-[#252B36]">
+                                  <span className="truncate">{att.name}</span>
+                                  <span className="text-[#929BAA] text-[10px]">{att.size}</span>
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          if (att.type === 'audio') {
+                            return (
+                              <div key={att.id} onClick={(e) => e.stopPropagation()}>
+                                <VoiceMessagePlayer
+                                  url={att.url}
+                                  name={att.name}
+                                  duration={att.duration}
+                                  senderAvatar={senderAvatar}
+                                />
+                              </div>
+                            );
+                          }
+
                           return (
                             <div
                               key={att.id}
                               onClick={(e) => e.stopPropagation()}
-                              className="group/vid relative rounded-xl border border-[#252B36] overflow-hidden max-w-md bg-black/60"
+                              className="flex items-center space-x-3 px-3 py-2 bg-[#12151C] hover:bg-[#1E2330] border border-[#252B36] rounded-xl text-xs max-w-xs transition-colors"
                             >
-                              <video
-                                src={att.url}
-                                controls
-                                className="max-h-72 w-full rounded-xl object-contain bg-black"
-                              />
-                              <div className="bg-[#12151C] px-3 py-1.5 flex items-center justify-between text-[11px] text-white border-t border-[#252B36]">
-                                <span className="truncate">{att.name}</span>
-                                <span className="text-[#929BAA] text-[10px]">{att.size}</span>
+                              <div className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] text-[#4F8CFF]">
+                                {att.type === 'code' ? (
+                                  <FileCode className="w-4 h-4" />
+                                ) : (
+                                  <FileText className="w-4 h-4" />
+                                )}
                               </div>
+                              <div className="flex-1 truncate">
+                                <div className="font-medium text-[#F5F7FA] truncate">{att.name}</div>
+                                <div className="text-[10px] text-[#929BAA]">{att.size}</div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  addToast(`Downloaded ${att.name}`, 'success');
+                                }}
+                                className="p-1 text-[#929BAA] hover:text-[#F5F7FA] rounded hover:bg-[#252B36] transition-colors cursor-pointer"
+                                title="Download file"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           );
-                        }
+                        })}
+                      </div>
 
-                        if (att.type === 'audio') {
-                          return (
-                            <div key={att.id} onClick={(e) => e.stopPropagation()}>
-                              <VoiceMessagePlayer
-                                url={att.url}
-                                name={att.name}
-                                duration={att.duration}
-                                senderAvatar={senderAvatar}
-                              />
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div
-                            key={att.id}
-                            onClick={(e) => e.stopPropagation()}
-                            className="flex items-center space-x-3 px-3 py-2 bg-[#12151C] hover:bg-[#1E2330] border border-[#252B36] rounded-xl text-xs max-w-xs transition-colors"
+                      {/* Received Bubble Footer */}
+                      <div className="mt-1 flex items-center justify-start space-x-1.5 text-[10px] text-[#929BAA] font-mono">
+                        {message.editedAt && <span className="italic">(edited)</span>}
+                        {message.isTranslated && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShowOriginal(!showOriginal);
+                            }}
+                            className="text-[10px] text-[#4F8CFF] hover:underline cursor-pointer"
                           >
-                            <div className="p-2 bg-[#181C25] rounded-lg border border-[#252B36] text-[#4F8CFF]">
-                              {att.type === 'code' ? (
-                                <FileCode className="w-4 h-4" />
-                              ) : (
-                                <FileText className="w-4 h-4" />
-                              )}
-                            </div>
-                            <div className="flex-1 truncate">
-                              <div className="font-medium text-[#F5F7FA] truncate">{att.name}</div>
-                              <div className="text-[10px] text-[#929BAA]">{att.size}</div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                addToast(`Downloaded ${att.name}`, 'success');
-                              }}
-                              className="p-1 text-[#929BAA] hover:text-[#F5F7FA] rounded hover:bg-[#252B36] transition-colors cursor-pointer"
-                              title="Download file"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
+                            {showOriginal ? t('showing_original') : t('translated')}
+                          </button>
+                        )}
+                        <span>{formatTimestamp(message.timestamp)}</span>
+                      </div>
+                    </>
                   )}
-
-                  {/* Received Bubble Footer */}
-                  <div className="mt-1 flex items-center justify-start space-x-1.5 text-[10px] text-[#929BAA] font-mono">
-                    {message.editedAt && <span className="italic">(edited)</span>}
-                    {message.isTranslated && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setShowOriginal(!showOriginal);
-                        }}
-                        className="text-[10px] text-[#4F8CFF] hover:underline cursor-pointer"
-                      >
-                        {showOriginal ? t('showing_original') : t('translated')}
-                      </button>
-                    )}
-                    <span>{formatTimestamp(message.timestamp)}</span>
-                  </div>
                 </>
               )}
             </div>

@@ -26,6 +26,7 @@ import { translateText, getTranslation } from '../utils/translation';
 import { encryptMessage } from '../utils/crypto';
 import { sanitizeInput, rateLimiter } from '../utils/security';
 import { generateLetterAvatar, resolveUserAvatar } from '../utils/avatar';
+import { safeSetLocalStorage, cleanLocalStorageQuota } from '../utils/imageCompressor';
 import {
   isSupabaseConfigured,
   supabase,
@@ -46,6 +47,8 @@ import {
   updateMessageInSupabase,
   deleteMessageFromSupabase,
   deleteWorkspaceFromSupabase,
+  deleteChannelFromSupabase,
+  deleteConversationFromSupabase,
   updateProfileInSupabase,
   fetchInvitesFromSupabase,
   saveInviteToSupabase,
@@ -54,6 +57,74 @@ import {
 } from '../lib/supabase';
 
 const STORAGE_KEY_PREFIX = 'pulsechat_v6_fresh_';
+
+export const DELETED_CHANNELS_KEY = 'pulsechat_deleted_channel_ids';
+export const DELETED_DMS_KEY = 'pulsechat_deleted_dm_ids';
+export const DELETED_WORKSPACES_KEY = 'pulsechat_deleted_ws_ids';
+
+export const getDeletedIds = (key: string): Set<string> => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed) : new Set();
+  } catch {
+    return new Set();
+  }
+};
+
+export const getStarredSet = (key: string): Set<string> => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed) : new Set();
+  } catch {
+    return new Set();
+  }
+};
+
+export const saveStarredSet = (key: string, set: Set<string>) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(Array.from(set)));
+  } catch (e) {
+    console.warn('Failed to save starred set:', e);
+  }
+};
+
+export const recordDeletedEntity = (type: 'channel' | 'dm' | 'workspace', id: string) => {
+  const key =
+    type === 'channel'
+      ? DELETED_CHANNELS_KEY
+      : type === 'dm'
+      ? DELETED_DMS_KEY
+      : DELETED_WORKSPACES_KEY;
+  try {
+    const set = getDeletedIds(key);
+    set.add(id);
+    localStorage.setItem(key, JSON.stringify(Array.from(set)));
+  } catch (e) {
+    console.warn('Failed to record deleted entity:', e);
+  }
+};
+
+export const unrecordDeletedEntity = (type: 'channel' | 'dm' | 'workspace', id: string) => {
+  const key =
+    type === 'channel'
+      ? DELETED_CHANNELS_KEY
+      : type === 'dm'
+      ? DELETED_DMS_KEY
+      : DELETED_WORKSPACES_KEY;
+  try {
+    const set = getDeletedIds(key);
+    if (set.has(id)) {
+      set.delete(id);
+      localStorage.setItem(key, JSON.stringify(Array.from(set)));
+    }
+  } catch (e) {
+    console.warn('Failed to unrecord deleted entity:', e);
+  }
+};
 
 export const getCanonicalDMId = (userIdA: string, userIdB: string): string => {
   const sorted = [userIdA, userIdB].sort();
@@ -120,9 +191,27 @@ interface ChatContextType {
   toggleStarDM: (dmId: string) => void;
   createOrOpenDM: (participantIds: string[], groupName?: string) => string;
   updateChannelDetails: (channelId: string, updates: Partial<Channel>) => void;
-  deleteChannel: (channelId: string) => void;
-  deleteDM: (dmId: string) => void;
+  deleteChannel: (channelId: string) => Promise<void> | void;
+  deleteDM: (dmId: string) => Promise<void> | void;
   inviteToDMByEmail: (email: string) => Promise<string | null>;
+
+  // User Blocking (WhatsApp style)
+  blockedUserIds: string[];
+  blockUser: (userId: string) => void;
+  unblockUser: (userId: string) => void;
+  isUserBlocked: (userId: string) => boolean;
+
+  // Channel Blocking & Muting
+  blockedChannelIds: string[];
+  blockChannel: (channelId: string) => void;
+  unblockChannel: (channelId: string) => void;
+  isChannelBlocked: (channelId: string) => boolean;
+
+  // Workspace Blocking
+  blockedWorkspaceIds: string[];
+  blockWorkspace: (workspaceId: string) => void;
+  unblockWorkspace: (workspaceId: string) => void;
+  isWorkspaceBlocked: (workspaceId: string) => boolean;
 
   // Sidebar Collapse (Mac-style Genie animation to workspace button)
   isSidebarCollapsed: boolean;
@@ -228,57 +317,152 @@ interface ChatContextType {
 const ChatContext = createContext<ChatContextType | undefined>(undefined);
 
 export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Prune any legacy oversized items to prevent QuotaExceededError
+  cleanLocalStorageQuota();
+
   // Load state or default
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return localStorage.getItem('pulsechat_auth') === 'true';
   });
 
   const [currentUserId, setCurrentUserId] = useState<string>(() => {
-    return localStorage.getItem('pulsechat_current_user') || '';
+    try {
+      return localStorage.getItem('pulsechat_current_user') || '';
+    } catch {
+      return '';
+    }
   });
 
   const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'users');
-    return saved ? JSON.parse(saved) : INITIAL_USERS;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'users');
+      const parsed = saved ? JSON.parse(saved) : INITIAL_USERS;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_USERS;
+    } catch {
+      return INITIAL_USERS;
+    }
   });
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'workspaces');
-    return saved ? JSON.parse(saved) : INITIAL_WORKSPACES;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'workspaces');
+      const parsed = saved ? JSON.parse(saved) : INITIAL_WORKSPACES;
+      const deleted = getDeletedIds(DELETED_WORKSPACES_KEY);
+      const list = Array.isArray(parsed) ? parsed : INITIAL_WORKSPACES;
+      return list
+        .filter((w: any) => w && w.id && !deleted.has(w.id))
+        .map((w: any) => ({
+          ...w,
+          avatar: localStorage.getItem('pulsechat_custom_workspace_avatar_' + w.id) || w.avatar,
+        }));
+    } catch {
+      return INITIAL_WORKSPACES;
+    }
   });
 
   const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string>(() => {
-    return localStorage.getItem(STORAGE_KEY_PREFIX + 'active_workspace') || '';
+    try {
+      return localStorage.getItem(STORAGE_KEY_PREFIX + 'active_workspace') || '';
+    } catch {
+      return '';
+    }
   });
 
   const [channels, setChannels] = useState<Channel[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'channels');
-    return saved ? JSON.parse(saved) : INITIAL_CHANNELS;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'channels');
+      const parsed = saved ? JSON.parse(saved) : INITIAL_CHANNELS;
+      const deleted = getDeletedIds(DELETED_CHANNELS_KEY);
+      const uid = localStorage.getItem('pulsechat_current_user') || 'default';
+      const starredChannels = getStarredSet('pulsechat_starred_channels_' + uid);
+      const list = Array.isArray(parsed) ? parsed : INITIAL_CHANNELS;
+      const seen = new Set<string>();
+      const valid: Channel[] = [];
+      for (const c of list) {
+        if (c && c.id && !deleted.has(c.id) && !seen.has(c.id)) {
+          seen.add(c.id);
+          valid.push({
+            ...c,
+            name: c.name || 'channel',
+            memberIds: Array.isArray(c.memberIds) ? c.memberIds : [],
+            isStarred: starredChannels.has(c.id) || Boolean(c.isStarred),
+            avatar: localStorage.getItem('pulsechat_custom_channel_avatar_' + c.id) || c.avatar,
+          });
+        }
+      }
+      return valid;
+    } catch {
+      return INITIAL_CHANNELS;
+    }
   });
 
   const [dms, setDms] = useState<DirectMessageConversation[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'dms');
-    return saved ? JSON.parse(saved) : INITIAL_DMS;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'dms');
+      const parsed = saved ? JSON.parse(saved) : INITIAL_DMS;
+      const deleted = getDeletedIds(DELETED_DMS_KEY);
+      const uid = localStorage.getItem('pulsechat_current_user') || 'default';
+      const starredDMs = getStarredSet('pulsechat_starred_dms_' + uid);
+      const list = Array.isArray(parsed) ? parsed : INITIAL_DMS;
+      const seen = new Set<string>();
+      const valid: DirectMessageConversation[] = [];
+      for (const d of list) {
+        if (d && d.id && !deleted.has(d.id) && !seen.has(d.id)) {
+          seen.add(d.id);
+          valid.push({
+            ...d,
+            participantIds: Array.isArray(d.participantIds) ? d.participantIds : [],
+            isStarred: starredDMs.has(d.id) || Boolean(d.isStarred),
+          });
+        }
+      }
+      return valid;
+    } catch {
+      return INITIAL_DMS;
+    }
   });
 
   const [messages, setMessages] = useState<Message[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'messages');
-    return saved ? JSON.parse(saved) : INITIAL_MESSAGES;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'messages');
+      const parsed = saved ? JSON.parse(saved) : INITIAL_MESSAGES;
+      return Array.isArray(parsed) ? parsed : INITIAL_MESSAGES;
+    } catch {
+      return INITIAL_MESSAGES;
+    }
   });
 
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'notifications');
-    return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'notifications');
+      const parsed = saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+      return Array.isArray(parsed) ? parsed : INITIAL_NOTIFICATIONS;
+    } catch {
+      return INITIAL_NOTIFICATIONS;
+    }
   });
 
   const [invites, setInvites] = useState<ChatInvite[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'invites');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'invites');
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   });
 
   const [activeView, setActiveView] = useState<ActiveView>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'active_view');
-    return saved ? JSON.parse(saved) : { type: 'channel', id: '' };
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY_PREFIX + 'active_view');
+      const parsed = saved ? JSON.parse(saved) : null;
+      if (parsed && typeof parsed === 'object' && parsed.type && parsed.id) {
+        return parsed;
+      }
+      return { type: 'channel', id: '' };
+    } catch {
+      return { type: 'channel', id: '' };
+    }
   });
 
   // Mac-style collapsible channel sidebar (responsive: collapsed by default on mobile)
@@ -291,7 +475,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [pinnedMessageIds, setPinnedMessageIds] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem(`pulsechat_pins_${currentUserId || 'default'}`);
-      return saved ? new Set<string>(JSON.parse(saved)) : new Set<string>();
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? new Set<string>(parsed) : new Set<string>();
     } catch {
       return new Set<string>();
     }
@@ -300,7 +485,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     try {
       const saved = localStorage.getItem(`pulsechat_pins_${currentUserId || 'default'}`);
-      setPinnedMessageIds(saved ? new Set<string>(JSON.parse(saved)) : new Set<string>());
+      const parsed = saved ? JSON.parse(saved) : null;
+      setPinnedMessageIds(Array.isArray(parsed) ? new Set<string>(parsed) : new Set<string>());
     } catch {
       setPinnedMessageIds(new Set<string>());
     }
@@ -315,6 +501,63 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const workspacesRef = useRef<Workspace[]>(workspaces);
   const activeViewRef = useRef<ActiveView>(activeView);
   const currentUserIdRef = useRef<string>(currentUserId);
+
+  // Blocked Users State (WhatsApp style)
+  const [blockedUserIds, setBlockedUserIds] = useState<string[]>(() => {
+    try {
+      const uid = localStorage.getItem('pulsechat_current_user') || 'default';
+      const saved = localStorage.getItem('pulsechat_blocked_users_' + uid);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const blockedUserIdsRef = useRef<string[]>(blockedUserIds);
+  useEffect(() => {
+    blockedUserIdsRef.current = blockedUserIds;
+    const uid = currentUserId || 'default';
+    try {
+      localStorage.setItem('pulsechat_blocked_users_' + uid, JSON.stringify(blockedUserIds));
+    } catch (e) {}
+  }, [blockedUserIds, currentUserId]);
+
+  // Blocked Channels State
+  const [blockedChannelIds, setBlockedChannelIds] = useState<string[]>(() => {
+    try {
+      const uid = localStorage.getItem('pulsechat_current_user') || 'default';
+      const saved = localStorage.getItem('pulsechat_blocked_channels_' + uid);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const blockedChannelIdsRef = useRef<string[]>(blockedChannelIds);
+  useEffect(() => {
+    blockedChannelIdsRef.current = blockedChannelIds;
+    const uid = currentUserId || 'default';
+    try {
+      localStorage.setItem('pulsechat_blocked_channels_' + uid, JSON.stringify(blockedChannelIds));
+    } catch (e) {}
+  }, [blockedChannelIds, currentUserId]);
+
+  // Blocked Workspaces State
+  const [blockedWorkspaceIds, setBlockedWorkspaceIds] = useState<string[]>(() => {
+    try {
+      const uid = localStorage.getItem('pulsechat_current_user') || 'default';
+      const saved = localStorage.getItem('pulsechat_blocked_workspaces_' + uid);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const blockedWorkspaceIdsRef = useRef<string[]>(blockedWorkspaceIds);
+  useEffect(() => {
+    blockedWorkspaceIdsRef.current = blockedWorkspaceIds;
+    const uid = currentUserId || 'default';
+    try {
+      localStorage.setItem('pulsechat_blocked_workspaces_' + uid, JSON.stringify(blockedWorkspaceIds));
+    } catch (e) {}
+  }, [blockedWorkspaceIds, currentUserId]);
 
   useEffect(() => { usersRef.current = users; }, [users]);
   useEffect(() => { channelsRef.current = channels; }, [channels]);
@@ -415,33 +658,33 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Toasts
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  // Synchronize to localStorage
+  // Synchronize to localStorage safely
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'users', JSON.stringify(users));
+    safeSetLocalStorage(STORAGE_KEY_PREFIX + 'users', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'workspaces', JSON.stringify(workspaces));
+    safeSetLocalStorage(STORAGE_KEY_PREFIX + 'workspaces', JSON.stringify(workspaces));
   }, [workspaces]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'channels', JSON.stringify(channels));
+    safeSetLocalStorage(STORAGE_KEY_PREFIX + 'channels', JSON.stringify(channels));
   }, [channels]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'dms', JSON.stringify(dms));
+    safeSetLocalStorage(STORAGE_KEY_PREFIX + 'dms', JSON.stringify(dms));
   }, [dms]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'messages', JSON.stringify(messages));
+    safeSetLocalStorage(STORAGE_KEY_PREFIX + 'messages', JSON.stringify(messages));
   }, [messages]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'notifications', JSON.stringify(notifications));
+    safeSetLocalStorage(STORAGE_KEY_PREFIX + 'notifications', JSON.stringify(notifications));
   }, [notifications]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY_PREFIX + 'invites', JSON.stringify(invites));
+    safeSetLocalStorage(STORAGE_KEY_PREFIX + 'invites', JSON.stringify(invites));
   }, [invites]);
 
   useEffect(() => {
@@ -496,8 +739,32 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  // Current User helper
-  const currentUser = users.find((u) => u.id === currentUserId) || users[0] || GUEST_FALLBACK_USER;
+  // Current User helper with permanent custom avatar and profile preservation
+  const currentUser: User = React.useMemo(() => {
+    const baseUser = users.find((u) => u.id === currentUserId) || users[0] || GUEST_FALLBACK_USER;
+    const uid = currentUserId || baseUser.id;
+    let customAvatar: string | null = null;
+    let customProfile: Partial<User> = {};
+
+    try {
+      if (uid) {
+        customAvatar = localStorage.getItem(`pulsechat_custom_avatar_${uid}`);
+        const savedProf = localStorage.getItem(`pulsechat_custom_profile_${uid}`);
+        if (savedProf) customProfile = JSON.parse(savedProf);
+      }
+      if (!customAvatar && baseUser.email) {
+        customAvatar = localStorage.getItem(`pulsechat_custom_avatar_${baseUser.email.toLowerCase()}`);
+      }
+    } catch {}
+
+    const resolvedAvatar = customAvatar || customProfile.avatar || baseUser.avatar || generateLetterAvatar(baseUser.name);
+
+    return {
+      ...baseUser,
+      ...customProfile,
+      avatar: resolvedAvatar,
+    };
+  }, [users, currentUserId]);
 
   const setCurrentUser = useCallback((user: User) => {
     setUsers((prev) => prev.map((u) => (u.id === user.id ? user : u)));
@@ -513,16 +780,59 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [users, addToast]);
 
   const updateCurrentUserProfile = useCallback((updates: Partial<User>) => {
-    setUsers((prev) =>
-      prev.map((u) => (u.id === currentUserId ? { ...u, ...updates } : u))
-    );
-    if (isSupabaseConfigured) {
+    // 1. Permanently store in dedicated localStorage keys safely
+    try {
+      if (updates.avatar) {
+        if (currentUserId) safeSetLocalStorage(`pulsechat_custom_avatar_${currentUserId}`, updates.avatar);
+        if (currentUser.email) safeSetLocalStorage(`pulsechat_custom_avatar_${currentUser.email.toLowerCase()}`, updates.avatar);
+      }
+      if (currentUserId) {
+        const existing = localStorage.getItem(`pulsechat_custom_profile_${currentUserId}`);
+        const parsed = existing ? JSON.parse(existing) : {};
+        safeSetLocalStorage(`pulsechat_custom_profile_${currentUserId}`, JSON.stringify({ ...parsed, ...updates }));
+      }
+    } catch (e) {
+      console.warn('Failed saving custom profile to storage:', e);
+    }
+
+    setUsers((prev) => {
+      const exists = prev.some((u) => u.id === currentUserId);
+      if (exists) {
+        return prev.map((u) => (u.id === currentUserId ? { ...u, ...updates } : u));
+      } else {
+        const updatedMe = { ...currentUser, ...updates, id: currentUserId || currentUser.id };
+        return [...prev, updatedMe];
+      }
+    });
+
+    // 2. Broadcast avatar & profile update across local tabs
+    try {
+      if (localBroadcastRef.current && currentUserId) {
+        localBroadcastRef.current.postMessage({
+          type: 'profile_updated',
+          payload: { userId: currentUserId, updates },
+        });
+      }
+    } catch (e) {}
+
+    // 3. Broadcast across Supabase clients in real-time
+    try {
+      if (realtimeChannelRef.current && currentUserId) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'profile_updated',
+          payload: { userId: currentUserId, updates },
+        });
+      }
+    } catch (e) {}
+
+    if (isSupabaseConfigured && currentUserId && currentUserId !== 'guest') {
       updateProfileInSupabase(currentUserId, updates).catch((err) =>
         console.warn('Supabase profile update notice:', err)
       );
     }
     addToast('Profile updated successfully', 'success');
-  }, [currentUserId, addToast]);
+  }, [currentUserId, currentUser, addToast]);
 
   // Supabase Cloud Realtime Data Loader & Subscription
   useEffect(() => {
@@ -546,40 +856,82 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // 2. Fetch Workspaces from Supabase (filtered strictly to this user's created/joined workspaces)
         const remoteWorkspaces = await fetchWorkspacesFromSupabase(uid);
         if (isMounted && remoteWorkspaces.length > 0) {
-          setWorkspaces(remoteWorkspaces);
-          if (!remoteWorkspaces.some((w) => w.id === activeWorkspaceId)) {
-            setActiveWorkspaceIdState(remoteWorkspaces[0].id);
+          const deletedWs = getDeletedIds(DELETED_WORKSPACES_KEY);
+          const validWs = remoteWorkspaces.filter((w) => !deletedWs.has(w.id));
+          if (validWs.length > 0) {
+            setWorkspaces(validWs);
+            if (!validWs.some((w) => w.id === activeWorkspaceId)) {
+              setActiveWorkspaceIdState(validWs[0].id);
+            }
           }
         }
 
-        // 3. Fetch Profiles from Supabase
+        // 3. Fetch Profiles from Supabase (preserving user's permanent custom avatars)
         const remoteProfiles = await fetchProfilesFromSupabase();
         if (isMounted && remoteProfiles.length > 0) {
-          const mappedUsers: User[] = remoteProfiles.map((p) => ({
-            id: p.id,
-            name: p.full_name || p.username,
-            username: p.username,
-            email: p.email || p.username + '@pulsechat.io',
-            avatar: resolveUserAvatar(p.avatar_url, p.full_name || p.username),
-            role: p.role || 'member',
-            title: p.title || 'Product Engineer',
-            isOnline: Boolean(p.is_online),
-            joinedDate: 'Joined recently',
-          }));
+          const mappedUsers: User[] = remoteProfiles.map((p) => {
+            let savedAvatar: string | null = null;
+            let savedProfileUpdates: Partial<User> = {};
+            try {
+              savedAvatar = localStorage.getItem(`pulsechat_custom_avatar_${p.id}`);
+              if (!savedAvatar && p.email) {
+                savedAvatar = localStorage.getItem(`pulsechat_custom_avatar_${p.email.toLowerCase()}`);
+              }
+              const sp = localStorage.getItem(`pulsechat_custom_profile_${p.id}`);
+              if (sp) savedProfileUpdates = JSON.parse(sp);
+            } catch {}
+
+            const finalAvatar = savedAvatar || resolveUserAvatar(p.avatar_url, p.full_name || p.username);
+
+            return {
+              id: p.id,
+              name: savedProfileUpdates.name || p.full_name || p.username,
+              username: p.username,
+              email: p.email || p.username + '@pulsechat.io',
+              role: savedProfileUpdates.role || p.role || 'member',
+              title: savedProfileUpdates.title || p.title || 'Product Engineer',
+              isOnline: Boolean(p.is_online),
+              joinedDate: 'Joined recently',
+              ...savedProfileUpdates,
+              avatar: finalAvatar,
+            };
+          });
           setUsers(mappedUsers);
         }
 
         // 4. Fetch Channels for workspace & user
         const remoteChannels = await fetchChannelsFromSupabase(activeWorkspaceId, uid);
-        if (isMounted && remoteChannels.length > 0) {
-          setChannels(remoteChannels);
+        if (isMounted) {
+          const deletedChannels = getDeletedIds(DELETED_CHANNELS_KEY);
+          const starredChannels = getStarredSet('pulsechat_starred_channels_' + (uid || 'default'));
+          const validChannels = remoteChannels
+            .filter((c) => c && !deletedChannels.has(c.id))
+            .map((c) => ({
+              ...c,
+              name: c.name || 'channel',
+              memberIds: Array.isArray(c.memberIds) ? c.memberIds : [],
+              isStarred: starredChannels.has(c.id) || Boolean(c.isStarred),
+            }));
+          setChannels((prev) => {
+            const otherWs = prev.filter((c) => c && c.workspaceId !== activeWorkspaceId && !deletedChannels.has(c.id));
+            return [...otherWs, ...validChannels];
+          });
         }
 
-        // 4. Fetch Conversations (DMs & Groups) and Chat Invites for user
+        // 5. Fetch Conversations (DMs & Groups) and Chat Invites for user
         if (uid) {
           const remoteDMs = await fetchConversationsFromSupabase(activeWorkspaceId, uid);
-          if (isMounted && remoteDMs.length > 0) {
-            setDms(remoteDMs);
+          if (isMounted) {
+            const deletedDMs = getDeletedIds(DELETED_DMS_KEY);
+            const starredDMs = getStarredSet('pulsechat_starred_dms_' + (uid || 'default'));
+            const validDMs = remoteDMs
+              .filter((d) => d && !deletedDMs.has(d.id))
+              .map((d) => ({
+                ...d,
+                participantIds: Array.isArray(d.participantIds) ? d.participantIds : [],
+                isStarred: starredDMs.has(d.id) || Boolean(d.isStarred),
+              }));
+            setDms(validDMs);
           }
 
           const remoteInvites = await fetchInvitesFromSupabase(uid, currentUser.email);
@@ -651,10 +1003,50 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             handleUpdateMessage(payload);
           } else if (type === 'delete_message' && payload?.id) {
             handleDeleteMessage(payload.id);
+          } else if (type === 'channel_deleted' && payload?.id) {
+            recordDeletedEntity('channel', payload.id);
+            setChannels((prev) => prev.filter((c) => c.id !== payload.id));
+            setMessages((prev) => prev.filter((m) => !(m.conversationType === 'channel' && m.conversationId === payload.id)));
+          } else if (type === 'dm_deleted' && payload?.id) {
+            recordDeletedEntity('dm', payload.id);
+            setDms((prev) => prev.filter((d) => d.id !== payload.id));
+            setMessages((prev) => prev.filter((m) => !(m.conversationType === 'dm' && m.conversationId === payload.id)));
+          } else if (type === 'workspace_deleted' && payload?.id) {
+            recordDeletedEntity('workspace', payload.id);
+            setWorkspaces((prev) => prev.filter((w) => w.id !== payload.id));
+            setChannels((prev) => prev.filter((c) => c.workspaceId !== payload.id));
+            setDms((prev) => prev.filter((d) => d.workspaceId !== payload.id));
           } else if (type === 'new_invite' && payload) {
             handleIncomingInvite(payload);
           } else if (type === 'member_joined_channel' && payload) {
             handleMemberJoinedChannel(payload);
+          } else if (type === 'message_delivered' && payload?.id) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === payload.id && m.deliveryStatus !== 'read'
+                  ? { ...m, deliveryStatus: 'delivered' }
+                  : m
+              )
+            );
+          } else if (type === 'message_read' && payload?.id) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === payload.id ? { ...m, deliveryStatus: 'read' } : m
+              )
+            );
+          } else if (type === 'conversation_read' && payload?.conversationId) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                (m.conversationId === payload.conversationId || (payload.readerId && m.conversationId.includes(payload.readerId))) &&
+                m.senderId === currentUserIdRef.current
+                  ? { ...m, deliveryStatus: 'read' as const }
+                  : m
+              )
+            );
+          } else if (type === 'profile_updated' && payload?.userId) {
+            setUsers((prev) =>
+              prev.map((u) => (u.id === payload.userId ? { ...u, ...payload.updates } : u))
+            );
           }
         };
       }
@@ -663,6 +1055,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Unified incoming message handler
     const handleIncomingMessage = (incomingMsg: Message) => {
       if (!isMounted || !incomingMsg?.id) return;
+
+      // WhatsApp Block check: drop incoming messages from blocked users
+      if (incomingMsg.senderId && blockedUserIdsRef.current.includes(incomingMsg.senderId)) {
+        return;
+      }
 
       // Intercept and route fallback invites
       if (incomingMsg.content && typeof incomingMsg.content === 'string' && incomingMsg.content.startsWith('[PULSE_INVITE]:')) {
@@ -695,6 +1092,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const matchingDM = dmsRef.current.find(
           (d) =>
             !d.isGroup &&
+            Array.isArray(d.participantIds) &&
             d.participantIds.includes(msgToStore.senderId) &&
             d.participantIds.includes(currentUserIdRef.current)
         );
@@ -739,20 +1137,24 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return [...prev, msgToStore];
       });
 
-      // If sent by someone else, play sound and trigger notification
+      // If sent by someone else, play sound and trigger notification (unless channel or workspace is blocked)
       if (msgToStore.senderId !== currentUserIdRef.current) {
-        soundFX.playMessageReceived();
-
-        const latestUsers = usersRef.current;
+        const isChanBlocked = msgToStore.conversationType === 'channel' && blockedChannelIdsRef.current.includes(msgToStore.conversationId);
         const latestChannels = channelsRef.current;
-        const sender = latestUsers.find((u) => u.id === msgToStore.senderId);
-        const senderName = sender ? sender.name : 'Team member';
-        const isChannel = msgToStore.conversationType === 'channel';
-        const targetChan = isChannel ? latestChannels.find((c) => c.id === msgToStore.conversationId) : null;
-        
-        const notifTitle = isChannel
-          ? `New message in #${targetChan?.name || 'channel'}`
-          : `New message from ${senderName}`;
+        const targetChan = msgToStore.conversationType === 'channel' ? latestChannels.find((c) => c.id === msgToStore.conversationId) : null;
+        const isWsBlocked = targetChan ? blockedWorkspaceIdsRef.current.includes(targetChan.workspaceId) : false;
+
+        if (!isChanBlocked && !isWsBlocked) {
+          soundFX.playMessageReceived();
+
+          const latestUsers = usersRef.current;
+          const sender = latestUsers.find((u) => u.id === msgToStore.senderId);
+          const senderName = sender ? sender.name : 'Team member';
+          const isChannel = msgToStore.conversationType === 'channel';
+          
+          const notifTitle = isChannel
+            ? `New message in #${targetChan?.name || 'channel'}`
+            : `New message from ${senderName}`;
         const notifBody = isChannel
           ? `You got a message from ${senderName} in #${targetChan?.name || 'channel'}`
           : `You got a message from ${senderName}`;
@@ -769,6 +1171,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           targetId: msgToStore.conversationId,
         };
         setNotifications((prev) => [liveNotif, ...prev.filter((n) => n.id !== liveNotif.id)]);
+        addToast(notifTitle, 'info');
+
+        // Browser desktop notification if permission granted
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification(notifTitle, {
+              body: notifBody,
+              icon: sender?.avatar || '/favicon.ico',
+            });
+          } catch (e) {}
+        }
+        }
       }
     };
 
@@ -859,6 +1273,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setNotifications((prev) => [liveNotif, ...prev.filter((n) => n.id !== liveNotif.id)]);
         addToast(notifTitle, 'info');
 
+        // Browser desktop notification if permission granted
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            new Notification(notifTitle, {
+              body: notifBody,
+              icon: sender?.avatar || '/favicon.ico',
+            });
+          } catch (e) {}
+        }
+        addToast(notifTitle, 'info');
+
         fetchConversationsFromSupabase(activeWorkspaceId, myId).then((remoteDMs) => {
           if (isMounted && remoteDMs.length > 0) setDms(remoteDMs);
         });
@@ -914,6 +1339,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = payload?.payload;
         if (data) handleMemberJoinedChannel(data);
       })
+      .on('broadcast', { event: 'conversation_read' }, (payload) => {
+        const data = payload?.payload;
+        if (data?.conversationId) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              (m.conversationId === data.conversationId || (data.readerId && m.conversationId.includes(data.readerId))) &&
+              m.senderId === currentUserIdRef.current
+                ? { ...m, deliveryStatus: 'read' as const }
+                : m
+            )
+          );
+        }
+      })
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
@@ -968,20 +1406,53 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'channels' },
-        async () => {
+        async (payload) => {
           if (isMounted) {
+            const oldId = (payload.old as any)?.id;
+            if (payload.eventType === 'DELETE' && oldId) {
+              recordDeletedEntity('channel', oldId);
+              setChannels((prev) => prev.filter((c) => c.id !== oldId));
+              setMessages((prev) => prev.filter((m) => !(m.conversationType === 'channel' && m.conversationId === oldId)));
+              return;
+            }
             const updated = await fetchChannelsFromSupabase(activeWorkspaceId, currentUserId);
-            if (updated.length > 0) setChannels(updated);
+            const deleted = getDeletedIds(DELETED_CHANNELS_KEY);
+            const valid = updated
+              .filter((c) => c && !deleted.has(c.id))
+              .map((c) => ({
+                ...c,
+                name: c.name || 'channel',
+                memberIds: Array.isArray(c.memberIds) ? c.memberIds : [],
+              }));
+            setChannels((prev) => {
+              const otherWs = prev.filter((c) => c && c.workspaceId !== activeWorkspaceId && !deleted.has(c.id));
+              return [...otherWs, ...valid];
+            });
           }
         }
       )
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'conversations' },
-        async () => {
+        async (payload) => {
           if (isMounted) {
+            const oldId = (payload.old as any)?.id;
+            if (payload.eventType === 'DELETE' && oldId) {
+              recordDeletedEntity('dm', oldId);
+              setDms((prev) => prev.filter((d) => d.id !== oldId));
+              setMessages((prev) => prev.filter((m) => !(m.conversationType === 'dm' && m.conversationId === oldId)));
+              return;
+            }
             const updated = await fetchConversationsFromSupabase(activeWorkspaceId, currentUserId);
-            if (updated.length > 0) setDms(updated);
+            const deleted = getDeletedIds(DELETED_DMS_KEY);
+            setDms(
+              updated
+                .filter((d) => d && !deleted.has(d.id))
+                .map((d) => ({
+                  ...d,
+                  participantIds: Array.isArray(d.participantIds) ? d.participantIds : [],
+                }))
+            );
           }
         }
       )
@@ -992,22 +1463,38 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (isMounted) {
             const updated = await fetchProfilesFromSupabase();
             if (updated.length > 0) {
-              const mappedUsers: User[] = updated.map((p) => ({
-                id: p.id,
-                name: p.full_name || p.username,
-                username: p.username,
-                email: p.email || p.username + '@pulsechat.io',
-                avatar: resolveUserAvatar(p.avatar_url, p.full_name || p.username),
-                role: p.role || 'member',
-                title: p.title || 'Product Engineer',
-                isOnline: Boolean(p.is_online),
-                joinedDate: 'Joined recently',
-              }));
+              const mappedUsers: User[] = updated.map((p) => {
+                if (p.avatar_url) {
+                  try { safeSetLocalStorage(`pulsechat_custom_avatar_${p.id}`, p.avatar_url); } catch (e) {}
+                }
+                return {
+                  id: p.id,
+                  name: p.full_name || p.username,
+                  username: p.username,
+                  email: p.email || p.username + '@pulsechat.io',
+                  avatar: resolveUserAvatar(p.avatar_url, p.full_name || p.username),
+                  role: p.role || 'member',
+                  title: p.title || 'Product Engineer',
+                  isOnline: Boolean(p.is_online),
+                  joinedDate: 'Joined recently',
+                };
+              });
               setUsers(mappedUsers);
             }
           }
         }
       )
+      .on('broadcast', { event: 'profile_updated' }, (payload) => {
+        if (isMounted && payload?.payload?.userId) {
+          const { userId, updates } = payload.payload;
+          if (updates?.avatar) {
+            try { safeSetLocalStorage(`pulsechat_custom_avatar_${userId}`, updates.avatar); } catch (e) {}
+          }
+          setUsers((prev) =>
+            prev.map((u) => (u.id === userId ? { ...u, ...updates } : u))
+          );
+        }
+      })
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'chat_invites' },
@@ -1107,6 +1594,39 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [activeWorkspaceId, currentUserId]);
 
+  // Real-time Conversation Read Status Sync: mark received messages as read when activeView is viewed
+  useEffect(() => {
+    if (!activeView.id || !currentUserId) return;
+
+    // 1. Mark all incoming messages in this conversation as read
+    setMessages((prev) => {
+      let changed = false;
+      const updated = prev.map((m) => {
+        if (m.conversationId === activeView.id && m.senderId !== currentUserId && m.deliveryStatus !== 'read') {
+          changed = true;
+          return { ...m, deliveryStatus: 'read' as const };
+        }
+        return m;
+      });
+      return changed ? updated : prev;
+    });
+
+    // 2. Broadcast conversation_read to sender so their ticks update to double cyan/blue in real time
+    try {
+      localBroadcastRef.current?.postMessage({
+        type: 'conversation_read',
+        payload: { conversationId: activeView.id, readerId: currentUserId },
+      });
+      if (isSupabaseConfigured && realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'conversation_read',
+          payload: { conversationId: activeView.id, readerId: currentUserId },
+        }).catch(() => {});
+      }
+    } catch (e) {}
+  }, [activeView.id, currentUserId, isSupabaseConfigured]);
+
   // Live Active Conversation Sync & Continuous Real-time Polling
   useEffect(() => {
     if (!isSupabaseConfigured || !activeView.id) return;
@@ -1124,6 +1644,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             currentDMs.forEach((d) => {
               if (
                 !d.isGroup &&
+                Array.isArray(d.participantIds) &&
                 d.participantIds.length === 2 &&
                 d.participantIds.includes(activeDM.participantIds[0]) &&
                 d.participantIds.includes(activeDM.participantIds[1])
@@ -1202,13 +1723,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         if (isMounted) {
           if (remoteDMs.length > 0) {
+            const starredDMs = getStarredSet('pulsechat_starred_dms_' + (currentUserId || 'default'));
             setDms((prev) => {
               const map = new Map(prev.map((d) => [d.id, d]));
               let changed = false;
               remoteDMs.forEach((d) => {
                 const existing = map.get(d.id);
-                if (!existing || existing.lastActivity !== d.lastActivity || existing.unreadCount !== d.unreadCount) {
-                  map.set(d.id, { ...existing, ...d });
+                const isStarred = starredDMs.has(d.id) || (existing ? existing.isStarred : Boolean(d.isStarred));
+                if (!existing || existing.lastActivity !== d.lastActivity || existing.unreadCount !== d.unreadCount || existing.isStarred !== isStarred) {
+                  map.set(d.id, { ...existing, ...d, isStarred });
                   changed = true;
                 }
               });
@@ -1297,16 +1820,40 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [activeWorkspaceId, currentUserId, currentUser.email]);
 
-  // Fetch channels when active workspace changes
+  // Fetch channels when active workspace changes (Smooth & Flicker-free)
   useEffect(() => {
     if (!isSupabaseConfigured || !currentUserId || !activeWorkspaceId) return;
     let isMounted = true;
     fetchChannelsFromSupabase(activeWorkspaceId, currentUserId).then((remoteChannels) => {
-      if (isMounted && remoteChannels.length > 0) {
+      if (isMounted) {
+        const deleted = getDeletedIds(DELETED_CHANNELS_KEY);
+        const starredChannels = getStarredSet('pulsechat_starred_channels_' + (currentUserId || 'default'));
+        const valid = remoteChannels
+          .filter((c) => !deleted.has(c.id))
+          .map((c) => ({
+            ...c,
+            avatar: localStorage.getItem('pulsechat_custom_channel_avatar_' + c.id) || c.avatar,
+            isStarred: starredChannels.has(c.id) || Boolean(c.isStarred),
+          }));
         setChannels((prev) => {
-          const map = new Map(prev.map((c) => [c.id, c]));
-          remoteChannels.forEach((rc) => map.set(rc.id, rc));
-          return Array.from(map.values());
+          const currentWsChans = prev.filter((c) => c.workspaceId === activeWorkspaceId);
+          // Check if identical to avoid re-renders that cause flickering
+          const hasDiff =
+            currentWsChans.length !== valid.length ||
+            valid.some((vc) => {
+              const cur = currentWsChans.find((c) => c.id === vc.id);
+              return (
+                !cur ||
+                cur.name !== vc.name ||
+                cur.topic !== vc.topic ||
+                cur.avatar !== vc.avatar ||
+                cur.isStarred !== vc.isStarred
+              );
+            });
+          if (!hasDiff) return prev;
+
+          const otherWs = prev.filter((c) => c.workspaceId !== activeWorkspaceId && !deleted.has(c.id));
+          return [...otherWs, ...valid];
         });
       }
     });
@@ -1569,17 +2116,24 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Strictly filter workspaces so users only see their own workspaces or those they joined
   const userWorkspaces: Workspace[] = React.useMemo(() => {
     if (!currentUserId || currentUserId === 'guest') return workspaces;
-    return workspaces.filter((ws: Workspace) => {
+    const filtered = (workspaces || []).filter((ws: Workspace) => {
+      if (!ws || !ws.id) return false;
       if (ws.ownerId === currentUserId) return true;
-      if (ws.memberIds && ws.memberIds.includes(currentUserId)) return true;
+      if (Array.isArray(ws.memberIds) && ws.memberIds.includes(currentUserId)) return true;
       return false;
     });
+    return filtered.length > 0 ? filtered : (workspaces || []);
   }, [workspaces, currentUserId]);
 
   // Active Workspace
   const activeWorkspace: Workspace = React.useMemo(() => {
-    return userWorkspaces.find((w: Workspace) => w.id === activeWorkspaceId) || userWorkspaces[0] || EMPTY_WORKSPACE;
-  }, [userWorkspaces, activeWorkspaceId]);
+    return (
+      userWorkspaces.find((w: Workspace) => w && w.id === activeWorkspaceId) ||
+      userWorkspaces[0] ||
+      (workspaces || [])[0] ||
+      EMPTY_WORKSPACE
+    );
+  }, [userWorkspaces, workspaces, activeWorkspaceId]);
 
   const setActiveWorkspaceId = useCallback((id: string) => {
     setActiveWorkspaceIdState(id);
@@ -1680,9 +2234,20 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [currentUserId, addToast]);
 
   const updateWorkspace = useCallback((id: string, updates: Partial<Workspace>) => {
-    setWorkspaces((prev) =>
-      prev.map((w) => (w.id === id ? { ...w, ...updates } : w))
-    );
+    if (updates.avatar !== undefined) {
+      try {
+        if (updates.avatar) {
+          safeSetLocalStorage('pulsechat_custom_workspace_avatar_' + id, updates.avatar);
+        } else {
+          localStorage.removeItem('pulsechat_custom_workspace_avatar_' + id);
+        }
+      } catch (e) {}
+    }
+    setWorkspaces((prev) => {
+      const next = prev.map((w) => (w.id === id ? { ...w, ...updates } : w));
+      safeSetLocalStorage(STORAGE_KEY_PREFIX + 'workspaces', JSON.stringify(next));
+      return next;
+    });
     if (isSupabaseConfigured) {
       updateWorkspaceInSupabase(id, { name: updates.name, iconBg: updates.iconBg }).catch((err) =>
         console.warn('Supabase updateWorkspace notice:', err)
@@ -1693,13 +2258,25 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const deleteWorkspace = useCallback(
     async (workspaceId: string) => {
+      recordDeletedEntity('workspace', workspaceId);
+      try {
+        localStorage.removeItem('pulsechat_custom_workspace_avatar_' + workspaceId);
+      } catch (e) {}
+
       const wsChannelIds = new Set(channels.filter((c) => c.workspaceId === workspaceId).map((c) => c.id));
       const wsDmIds = new Set(dms.filter((d) => d.workspaceId === workspaceId).map((d) => d.id));
+
+      wsChannelIds.forEach((id) => recordDeletedEntity('channel', id));
+      wsDmIds.forEach((id) => recordDeletedEntity('dm', id));
 
       setWorkspaces((prev) => prev.filter((w) => w.id !== workspaceId));
       setChannels((prev) => prev.filter((c) => c.workspaceId !== workspaceId));
       setDms((prev) => prev.filter((d) => d.workspaceId !== workspaceId));
       setMessages((prev) => prev.filter((m) => !wsChannelIds.has(m.conversationId) && !wsDmIds.has(m.conversationId)));
+
+      if (localBroadcastRef.current) {
+        localBroadcastRef.current.postMessage({ type: 'workspace_deleted', payload: { id: workspaceId } });
+      }
 
       const remaining = userWorkspaces.filter((w: Workspace) => w.id !== workspaceId);
       if (remaining.length > 0) {
@@ -1735,6 +2312,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           unreadCount: 0,
           isStarred: true,
         };
+        unrecordDeletedEntity('workspace', newWs.id);
+        unrecordDeletedEntity('channel', genChannel.id);
         setWorkspaces([newWs]);
         setChannels((prev) => [...prev, genChannel]);
         setActiveWorkspaceIdState(newWs.id);
@@ -1769,13 +2348,24 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsWorkspaceSettingsOpen(false);
       addToast('Workspace deleted permanently', 'success');
     },
-    [userWorkspaces, channels, currentUser, currentUserId, isSupabaseConfigured, addToast, setIsWorkspaceSettingsOpen]
+    [userWorkspaces, channels, dms, currentUser, currentUserId, isSupabaseConfigured, addToast, setIsWorkspaceSettingsOpen]
   );
 
   // Channels
   const createChannel = useCallback(
     (name: string, topic: string, description: string, isPrivate: boolean, initialMemberIds?: string[]): Channel => {
-      const cleanName = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+      const cleanName = name.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+|-+$/g, '') || 'channel';
+      
+      // Prevent duplicates in active workspace
+      const existing = channels.find(
+        (c) => c.workspaceId === activeWorkspaceId && c.name.toLowerCase() === cleanName
+      );
+      if (existing) {
+        addToast(`Channel #${cleanName} already exists`, 'info');
+        setActiveView({ type: 'channel', id: existing.id });
+        return existing;
+      }
+
       const allMembers = Array.from(new Set([currentUserId, ...(initialMemberIds || [])]));
       const newChannel: Channel = {
         id: 'ch-' + Date.now(),
@@ -1790,6 +2380,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         unreadCount: 0,
         isStarred: false,
       };
+
+      unrecordDeletedEntity('channel', newChannel.id);
 
       setChannels((prev) => [...prev, newChannel]);
       setActiveView({ type: 'channel', id: newChannel.id });
@@ -1810,29 +2402,139 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       return newChannel;
     },
-    [activeWorkspaceId, currentUserId, addToast]
+    [activeWorkspaceId, currentUserId, channels, addToast]
   );
 
   const toggleStarChannel = useCallback((channelId: string) => {
+    const uid = currentUserId || 'default';
+    const key = 'pulsechat_starred_channels_' + uid;
+    const currentStarred = getStarredSet(key);
+    const nextState = !currentStarred.has(channelId);
+    if (nextState) {
+      currentStarred.add(channelId);
+    } else {
+      currentStarred.delete(channelId);
+    }
+    saveStarredSet(key, currentStarred);
+
     setChannels((prev) =>
       prev.map((c) =>
-        c.id === channelId ? { ...c, isStarred: !c.isStarred } : c
+        c.id === channelId ? { ...c, isStarred: nextState } : c
       )
     );
-  }, []);
+    addToast(nextState ? 'Channel added to Starred' : 'Channel unstarred', 'info');
+  }, [currentUserId, addToast]);
 
   const toggleStarDM = useCallback((dmId: string) => {
+    const uid = currentUserId || 'default';
+    const key = 'pulsechat_starred_dms_' + uid;
+    const currentStarred = getStarredSet(key);
+    const nextState = !currentStarred.has(dmId);
+    if (nextState) {
+      currentStarred.add(dmId);
+    } else {
+      currentStarred.delete(dmId);
+    }
+    saveStarredSet(key, currentStarred);
+
     setDms((prev) =>
       prev.map((d) =>
-        d.id === dmId ? { ...d, isStarred: !d.isStarred } : d
+        d.id === dmId ? { ...d, isStarred: nextState } : d
       )
     );
-  }, []);
+    addToast(nextState ? 'Conversation added to Starred' : 'Conversation unstarred', 'info');
+  }, [currentUserId, addToast]);
+
+  const blockUser = useCallback((userIdToBlock: string) => {
+    if (!userIdToBlock || userIdToBlock === currentUserId) return;
+    setBlockedUserIds((prev) => {
+      if (prev.includes(userIdToBlock)) return prev;
+      return [...prev, userIdToBlock];
+    });
+    const targetUser = users.find((u) => u.id === userIdToBlock);
+    const targetName = targetUser?.name || 'User';
+    soundFX.play('chime');
+    addToast(`${targetName} has been blocked. They cannot message you.`, 'info');
+  }, [currentUserId, users, addToast]);
+
+  const unblockUser = useCallback((userIdToUnblock: string) => {
+    if (!userIdToUnblock) return;
+    setBlockedUserIds((prev) => prev.filter((id) => id !== userIdToUnblock));
+    const targetUser = users.find((u) => u.id === userIdToUnblock);
+    const targetName = targetUser?.name || 'User';
+    addToast(`${targetName} has been unblocked.`, 'success');
+  }, [users, addToast]);
+
+  const isUserBlocked = useCallback((userIdToCheck: string) => {
+    if (!userIdToCheck) return false;
+    return blockedUserIds.includes(userIdToCheck);
+  }, [blockedUserIds]);
+
+  const blockChannel = useCallback((channelIdToBlock: string) => {
+    if (!channelIdToBlock) return;
+    setBlockedChannelIds((prev) => {
+      if (prev.includes(channelIdToBlock)) return prev;
+      return [...prev, channelIdToBlock];
+    });
+    const targetChannel = channels.find((c) => c.id === channelIdToBlock);
+    const targetName = targetChannel?.name || 'Channel';
+    soundFX.play('chime');
+    addToast(`#${targetName} has been blocked. Messaging and alerts are restricted.`, 'info');
+  }, [channels, addToast]);
+
+  const unblockChannel = useCallback((channelIdToUnblock: string) => {
+    if (!channelIdToUnblock) return;
+    setBlockedChannelIds((prev) => prev.filter((id) => id !== channelIdToUnblock));
+    const targetChannel = channels.find((c) => c.id === channelIdToUnblock);
+    const targetName = targetChannel?.name || 'Channel';
+    addToast(`#${targetName} has been unblocked.`, 'success');
+  }, [channels, addToast]);
+
+  const isChannelBlocked = useCallback((channelIdToCheck: string) => {
+    if (!channelIdToCheck) return false;
+    return blockedChannelIds.includes(channelIdToCheck);
+  }, [blockedChannelIds]);
+
+  const blockWorkspace = useCallback((workspaceIdToBlock: string) => {
+    if (!workspaceIdToBlock) return;
+    setBlockedWorkspaceIds((prev) => {
+      if (prev.includes(workspaceIdToBlock)) return prev;
+      return [...prev, workspaceIdToBlock];
+    });
+    const targetWorkspace = workspaces.find((w) => w.id === workspaceIdToBlock);
+    const targetName = targetWorkspace?.name || 'Workspace';
+    soundFX.play('chime');
+    addToast(`"${targetName}" workspace has been blocked. Background notifications are silenced.`, 'info');
+  }, [workspaces, addToast]);
+
+  const unblockWorkspace = useCallback((workspaceIdToUnblock: string) => {
+    if (!workspaceIdToUnblock) return;
+    setBlockedWorkspaceIds((prev) => prev.filter((id) => id !== workspaceIdToUnblock));
+    const targetWorkspace = workspaces.find((w) => w.id === workspaceIdToUnblock);
+    const targetName = targetWorkspace?.name || 'Workspace';
+    addToast(`"${targetName}" workspace has been unblocked.`, 'success');
+  }, [workspaces, addToast]);
+
+  const isWorkspaceBlocked = useCallback((workspaceIdToCheck: string) => {
+    if (!workspaceIdToCheck) return false;
+    return blockedWorkspaceIds.includes(workspaceIdToCheck);
+  }, [blockedWorkspaceIds]);
 
   const updateChannelDetails = useCallback((channelId: string, updates: Partial<Channel>) => {
-    setChannels((prev) =>
-      prev.map((c) => (c.id === channelId ? { ...c, ...updates } : c))
-    );
+    if (updates.avatar !== undefined) {
+      try {
+        if (updates.avatar) {
+          safeSetLocalStorage('pulsechat_custom_channel_avatar_' + channelId, updates.avatar);
+        } else {
+          localStorage.removeItem('pulsechat_custom_channel_avatar_' + channelId);
+        }
+      } catch (e) {}
+    }
+    setChannels((prev) => {
+      const next = prev.map((c) => (c.id === channelId ? { ...c, ...updates } : c));
+      safeSetLocalStorage(STORAGE_KEY_PREFIX + 'channels', JSON.stringify(next));
+      return next;
+    });
     if (isSupabaseConfigured) {
       updateChannelInSupabase(channelId, {
         name: updates.name,
@@ -1843,47 +2545,82 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     addToast('Channel details updated', 'success');
   }, [addToast]);
 
-  const deleteChannel = useCallback((channelId: string) => {
-    setChannels((prev) => prev.filter((c) => c.id !== channelId));
-    setMessages((prev) => prev.filter((m) => !(m.conversationType === 'channel' && m.conversationId === channelId)));
-    setActiveView((prev) => {
-      if (prev.type === 'channel' && prev.id === channelId) {
-        const remaining = channels.filter((c) => c.id !== channelId && c.workspaceId === activeWorkspaceId);
-        if (remaining.length > 0) {
-          return { type: 'channel', id: remaining[0].id };
-        }
-        return { type: 'channel', id: 'general' };
-      }
-      return prev;
-    });
-    setIsRightPanelOpen(false);
-    addToast('Channel deleted successfully', 'info');
-  }, [channels, activeWorkspaceId, addToast, setIsRightPanelOpen]);
+  const deleteChannel = useCallback(
+    async (channelId: string) => {
+      // 1. Record persistent deletion so it NEVER spawns back on reload/sync
+      recordDeletedEntity('channel', channelId);
+      try {
+        localStorage.removeItem('pulsechat_custom_channel_avatar_' + channelId);
+      } catch (e) {}
 
-  const deleteDM = useCallback((dmId: string) => {
-    setDms((prev) => prev.filter((d) => d.id !== dmId));
-    setMessages((prev) => prev.filter((m) => !(m.conversationType === 'dm' && m.conversationId === dmId)));
-    if (isSupabaseConfigured) {
-      (async () => {
-        try {
-          await supabase.from('messages').delete().eq('conversation_id', dmId);
-          await supabase.from('conversations').delete().eq('id', dmId);
-        } catch {}
-      })();
-    }
-    setActiveView((prev) => {
-      if (prev.type === 'dm' && prev.id === dmId) {
-        const remaining = channels.filter((c) => c.workspaceId === activeWorkspaceId);
-        if (remaining.length > 0) {
-          return { type: 'channel', id: remaining[0].id };
+      // 2. Remove immediately from local state & messages
+      setChannels((prev) => prev.filter((c) => c.id !== channelId));
+      setMessages((prev) => prev.filter((m) => !(m.conversationType === 'channel' && m.conversationId === channelId)));
+
+      // 3. Switch active view if deleted channel is active
+      setActiveView((prev) => {
+        if (prev.type === 'channel' && prev.id === channelId) {
+          const remaining = channels.filter((c) => c.id !== channelId && c.workspaceId === activeWorkspaceId);
+          if (remaining.length > 0) {
+            return { type: 'channel', id: remaining[0].id };
+          }
+          return { type: 'channel', id: 'general' };
         }
-        return { type: 'channel', id: 'general' };
+        return prev;
+      });
+
+      setIsRightPanelOpen(false);
+      addToast('Channel deleted permanently', 'success');
+
+      // 4. Notify other open tabs in real-time
+      if (localBroadcastRef.current) {
+        localBroadcastRef.current.postMessage({ type: 'channel_deleted', payload: { id: channelId } });
       }
-      return prev;
-    });
-    setIsRightPanelOpen(false);
-    addToast('Conversation deleted', 'info');
-  }, [channels, activeWorkspaceId, addToast, setIsRightPanelOpen]);
+
+      // 5. Permanently delete from Supabase database
+      if (isSupabaseConfigured) {
+        await deleteChannelFromSupabase(channelId);
+      }
+    },
+    [channels, activeWorkspaceId, isSupabaseConfigured, addToast, setIsRightPanelOpen]
+  );
+
+  const deleteDM = useCallback(
+    async (dmId: string) => {
+      // 1. Record persistent deletion so it NEVER spawns back on reload/sync
+      recordDeletedEntity('dm', dmId);
+
+      // 2. Remove immediately from local state & messages
+      setDms((prev) => prev.filter((d) => d.id !== dmId));
+      setMessages((prev) => prev.filter((m) => !(m.conversationType === 'dm' && m.conversationId === dmId)));
+
+      // 3. Switch active view if deleted DM is active
+      setActiveView((prev) => {
+        if (prev.type === 'dm' && prev.id === dmId) {
+          const remaining = channels.filter((c) => c.workspaceId === activeWorkspaceId);
+          if (remaining.length > 0) {
+            return { type: 'channel', id: remaining[0].id };
+          }
+          return { type: 'channel', id: 'general' };
+        }
+        return prev;
+      });
+
+      setIsRightPanelOpen(false);
+      addToast('Conversation deleted permanently', 'success');
+
+      // 4. Notify other open tabs in real-time
+      if (localBroadcastRef.current) {
+        localBroadcastRef.current.postMessage({ type: 'dm_deleted', payload: { id: dmId } });
+      }
+
+      // 5. Permanently delete from Supabase database
+      if (isSupabaseConfigured) {
+        await deleteConversationFromSupabase(dmId);
+      }
+    },
+    [channels, activeWorkspaceId, isSupabaseConfigured, addToast, setIsRightPanelOpen]
+  );
 
   // Direct Messages
   const createOrOpenDM = useCallback((participantIds: string[], groupName?: string): string => {
@@ -1896,6 +2633,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (canonicalId && d.id === canonicalId) return true;
       if (allParticipants.length === 2 && !d.isGroup) {
         return (
+          Array.isArray(d.participantIds) &&
           d.participantIds.length === 2 &&
           d.participantIds.includes(participantIds[0]) &&
           d.participantIds.includes(currentUserId)
@@ -1905,11 +2643,15 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (existing) {
+      unrecordDeletedEntity('dm', existing.id);
       setActiveView({ type: 'dm', id: existing.id });
       return existing.id;
     }
 
     const dmId = canonicalId || 'dm-' + Date.now();
+    unrecordDeletedEntity('dm', dmId);
+    const uid = currentUserId || 'default';
+    const starredDMs = getStarredSet('pulsechat_starred_dms_' + uid);
     const newDM: DirectMessageConversation = {
       id: dmId,
       workspaceId: activeWorkspaceId,
@@ -1917,9 +2659,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isGroup,
       groupName: isGroup ? (groupName || 'Group Discussion') : undefined,
       unreadCount: 0,
-      isStarred: false,
+      isStarred: starredDMs.has(dmId),
       lastActivity: new Date().toISOString(),
-      status: isGroup ? 'accepted' : 'pending',
+      status: 'accepted',
       invitedBy: currentUserId,
     };
 
@@ -1928,33 +2670,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (!isGroup && otherUserId) {
       const targetUser = users.find((u) => u.id === otherUserId);
-      const newInvite: ChatInvite = {
-        id: 'inv-' + Date.now(),
-        workspaceId: activeWorkspaceId,
-        senderId: currentUserId,
-        receiverId: otherUserId,
-        receiverEmail: targetUser?.email,
-        senderName: currentUser.name,
-        conversationId: newDM.id,
-        inviteType: 'dm',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
-      setInvites((prev) => [newInvite, ...prev.filter((i) => i.id !== newInvite.id)]);
-      if (isSupabaseConfigured) {
-        saveInviteToSupabase(newInvite).catch(() => {});
-        if (realtimeChannelRef.current) {
-          realtimeChannelRef.current.send({
-            type: 'broadcast',
-            event: 'new_invite',
-            payload: newInvite,
-          }).catch(() => {});
-        }
-      }
-      if (localBroadcastRef.current) {
-        localBroadcastRef.current.postMessage({ type: 'new_invite', payload: newInvite });
-      }
-      addToast('Chat invitation sent! Conversation unlocks once accepted.', 'info');
+      addToast(`Direct message with ${targetUser?.name || 'user'} started`, 'success');
     } else {
       addToast('Group conversation started', 'success');
     }
@@ -2001,8 +2717,44 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               },
             ]);
           }
+        } else {
+          const syntheticName = clean.split('@')[0];
+          targetId = 'user-' + clean.replace(/[^a-z0-9]/g, '-');
+          setUsers((prev) => [
+            ...prev,
+            {
+              id: targetId,
+              name: syntheticName,
+              username: syntheticName,
+              email: clean,
+              avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80`,
+              role: 'member',
+              title: 'Team Member',
+              isOnline: true,
+              joinedDate: new Date().toISOString(),
+            },
+          ]);
         }
       } catch (e) {}
+    } else {
+      const syntheticName = clean.split('@')[0];
+      targetId = 'user-' + clean.replace(/[^a-z0-9]/g, '-');
+      if (!users.some((u) => u.id === targetId || u.email.toLowerCase() === clean)) {
+        setUsers((prev) => [
+          ...prev,
+          {
+            id: targetId,
+            name: syntheticName,
+            username: syntheticName,
+            email: clean,
+            avatar: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80`,
+            role: 'member',
+            title: 'Team Member',
+            isOnline: true,
+            joinedDate: new Date().toISOString(),
+          },
+        ]);
+      }
     }
 
     const dmId = createOrOpenDM([targetId]);
@@ -2419,7 +3171,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (otherUserId && (m.senderId === otherUserId || m.senderId === currentUserId)) {
             const msgDM = dms.find((d) => d.id === m.conversationId);
             if (msgDM && !msgDM.isGroup) {
-              return msgDM.participantIds.includes(otherUserId) && msgDM.participantIds.includes(currentUserId);
+              return (
+                Array.isArray(msgDM.participantIds) &&
+                msgDM.participantIds.includes(otherUserId) &&
+                msgDM.participantIds.includes(currentUserId)
+              );
             }
             if (m.conversationId.includes(otherUserId) || m.senderId === otherUserId) {
               return true;
@@ -2492,6 +3248,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (content: string, attachments?: Attachment[]) => {
       if (!content.trim() && (!attachments || attachments.length === 0)) return;
 
+      // WhatsApp Block Check: prevent sending to a blocked contact
+      if (activeView.type === 'dm') {
+        const activeDM = dms.find((d) => d.id === activeView.id);
+        const otherId = activeDM && !activeDM.isGroup
+          ? activeDM.participantIds.find((id) => id !== currentUserId)
+          : null;
+        if (otherId && blockedUserIds.includes(otherId)) {
+          addToast('You cannot send messages to a blocked contact. Unblock them first.', 'warning');
+          return;
+        }
+      }
+
       // Anti-Flooding / DoS rate limiter defense
       const rateCheck = rateLimiter.checkLimit();
       if (!rateCheck.allowed) {
@@ -2522,12 +3290,13 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         attachments: attachments && attachments.length > 0 ? attachments : undefined,
         reactions: {},
         isEncrypted: true,
+        deliveryStatus: 'sent',
       };
 
       // Encrypt message with AES-256-GCM and persist to Supabase
       encryptMessage(cleanContent, targetConvId).then((payload) => {
         setMessages((prev) =>
-          prev.map((m) => (m.id === msgId ? { ...m, encryptedPayload: payload } : m))
+          prev.map((m) => (m.id === msgId ? { ...m, encryptedPayload: payload, deliveryStatus: 'delivered' } : m))
         );
 
         if (isSupabaseConfigured) {
@@ -2541,6 +3310,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             attachments: attachments && attachments.length > 0 ? attachments : [],
             reactions: {},
             encryptedPayload: payload,
+          }).then(() => {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === msgId ? { ...m, deliveryStatus: 'delivered' } : m))
+            );
           }).catch((err) => {
             console.warn('Supabase saveMessage error:', err);
           });
@@ -2851,11 +3624,12 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         parentId: parentMessageId,
         reactions: {},
         isEncrypted: true,
+        deliveryStatus: 'sent',
       };
 
       encryptMessage(cleanContent, parentMsg.conversationId).then((payload) => {
         setMessages((prev) =>
-          prev.map((m) => (m.id === replyId ? { ...m, encryptedPayload: payload } : m))
+          prev.map((m) => (m.id === replyId ? { ...m, encryptedPayload: payload, deliveryStatus: 'delivered' } : m))
         );
         if (isSupabaseConfigured) {
           saveMessageToSupabase({
@@ -2869,6 +3643,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             attachments: [],
             reactions: {},
             encryptedPayload: payload,
+          }).then(() => {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === replyId ? { ...m, deliveryStatus: 'delivered' } : m))
+            );
           }).catch((err) => console.warn('Supabase saveThreadReply notice:', err));
         }
       });
@@ -3176,6 +3954,21 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         deleteChannel,
         deleteDM,
         inviteToDMByEmail,
+
+        blockedUserIds,
+        blockUser,
+        unblockUser,
+        isUserBlocked,
+
+        blockedChannelIds,
+        blockChannel,
+        unblockChannel,
+        isChannelBlocked,
+
+        blockedWorkspaceIds,
+        blockWorkspace,
+        unblockWorkspace,
+        isWorkspaceBlocked,
 
         isSidebarCollapsed,
         setIsSidebarCollapsed,

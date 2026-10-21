@@ -19,21 +19,24 @@ export const BrowseChannelsModal: React.FC = () => {
 
   if (!isBrowseChannelsOpen) return null;
 
-  const workspaceChannels = channels.filter((c) => c.workspaceId === activeWorkspace.id);
+  const workspaceChannels = (channels || []).filter((c) => c && c.workspaceId === (activeWorkspace?.id || ''));
   const filtered = workspaceChannels.filter(
     (c) =>
-      c.name.toLowerCase().includes(query.toLowerCase()) ||
-      c.description.toLowerCase().includes(query.toLowerCase()) ||
-      c.topic.toLowerCase().includes(query.toLowerCase())
+      (c.name || '').toLowerCase().includes(query.toLowerCase()) ||
+      (c.description || '').toLowerCase().includes(query.toLowerCase()) ||
+      (c.topic || '').toLowerCase().includes(query.toLowerCase())
   );
 
   const handleJoinOrJump = (channelId: string) => {
-    const channel = channels.find((c) => c.id === channelId);
-    if (channel && !channel.memberIds.includes(currentUser.id)) {
-      updateChannelDetails(channelId, {
-        memberIds: [...channel.memberIds, currentUser.id],
-      });
-      addToast(`Joined #${channel.name}`, 'success');
+    const channel = (channels || []).find((c) => c && c.id === channelId);
+    if (channel) {
+      const currentMembers = Array.isArray(channel.memberIds) ? channel.memberIds : [];
+      if (!currentMembers.includes(currentUser?.id)) {
+        updateChannelDetails(channelId, {
+          memberIds: [...currentMembers, currentUser?.id || 'guest'],
+        });
+        addToast(`Joined #${channel.name}`, 'success');
+      }
     }
     setActiveView({ type: 'channel', id: channelId });
     setIsBrowseChannelsOpen(false);
@@ -100,7 +103,8 @@ export const BrowseChannelsModal: React.FC = () => {
             </div>
           ) : (
             filtered.map((ch) => {
-              const isMember = ch.memberIds.includes(currentUser.id);
+              const chMembers = Array.isArray(ch.memberIds) ? ch.memberIds : [];
+              const isMember = chMembers.includes(currentUser?.id);
               return (
                 <div
                   key={ch.id}
@@ -124,7 +128,7 @@ export const BrowseChannelsModal: React.FC = () => {
                       {ch.topic || ch.description}
                     </p>
                     <div className="text-[10px] text-[#636D7E] flex items-center gap-1 font-mono">
-                      <Users className="w-3 h-3" /> {ch.memberIds.length} members
+                      <Users className="w-3 h-3" /> {chMembers.length} members
                     </div>
                   </div>
 

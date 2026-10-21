@@ -8,6 +8,8 @@ export const CreateChannelModal: React.FC = () => {
     isCreateChannelOpen,
     setIsCreateChannelOpen,
     createChannel,
+    channels,
+    activeWorkspace,
     users,
     invites,
     dms,
@@ -77,11 +79,19 @@ export const CreateChannelModal: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
+    const cleanName = name.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
+    if (!cleanName) {
       setError('Please provide a channel name.');
       return;
     }
-    const created = createChannel(name, topic, description, isPrivate, selectedUserIds);
+    const alreadyExists = (channels || []).some(
+      (c) => c && c.workspaceId === activeWorkspace?.id && (c.name || '').toLowerCase() === cleanName
+    );
+    if (alreadyExists) {
+      setError(`A channel named #${cleanName} already exists in this workspace.`);
+      return;
+    }
+    const created = createChannel(cleanName, topic, description, isPrivate, selectedUserIds);
 
     if (inviteEmail.trim()) {
       inviteUsersToChannel(created.id, [], inviteEmail.trim()).catch(() => {});

@@ -175,8 +175,16 @@ html.light nav[aria-label="Workspace channels and messages"] .h-14,
 
 /* 4. Background surfaces */
 html.light .bg-\[\#0B0D12\],
-[data-theme="light"] .bg-\[\#0B0D12\] {
-  background-color: #F1F5F9 !important;
+html.light .bg-\[\#0B0D12\]\/30,
+html.light .bg-\[\#0B0D12\]\/40,
+html.light .bg-\[\#0B0D12\]\/60,
+html.light .bg-\[\#0B0D12\]\/70,
+[data-theme="light"] .bg-\[\#0B0D12\],
+[data-theme="light"] .bg-\[\#0B0D12\]\/30,
+[data-theme="light"] .bg-\[\#0B0D12\]\/40,
+[data-theme="light"] .bg-\[\#0B0D12\]\/60,
+[data-theme="light"] .bg-\[\#0B0D12\]\/70 {
+  background-color: #F8FAFC !important;
 }
 
 html.light .bg-\[\#0F1117\],

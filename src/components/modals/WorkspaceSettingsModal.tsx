@@ -11,7 +11,12 @@ import {
   Check,
   Building2,
   Upload,
+  ShieldAlert,
+  ShieldCheck,
+  Ban,
 } from 'lucide-react';
+import { compressImageFile } from '../../utils/imageCompressor';
+import { resolveUserAvatar } from '../../utils/avatar';
 
 export const WorkspaceSettingsModal: React.FC = () => {
   const {
@@ -22,6 +27,12 @@ export const WorkspaceSettingsModal: React.FC = () => {
     deleteWorkspace,
     users,
     currentUser,
+    isUserBlocked,
+    blockUser,
+    unblockUser,
+    blockWorkspace,
+    unblockWorkspace,
+    isWorkspaceBlocked,
     addToast,
   } = useChat();
 
@@ -44,22 +55,16 @@ export const WorkspaceSettingsModal: React.FC = () => {
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
-  const handleWorkspaceAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleWorkspaceAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      addToast('Image size should be less than 5MB', 'error');
-      return;
+    try {
+      const compressedDataUrl = await compressImageFile(file, 256, 256, 0.82);
+      updateWorkspace(activeWorkspace.id, { avatar: compressedDataUrl });
+      addToast('Workspace profile picture updated', 'success');
+    } catch (err) {
+      addToast('Failed to process workspace image', 'error');
     }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        updateWorkspace(activeWorkspace.id, { avatar: dataUrl });
-        addToast('Workspace profile picture updated', 'success');
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
   const workspaceMembers = users.filter((u) => {
@@ -72,50 +77,50 @@ export const WorkspaceSettingsModal: React.FC = () => {
   return (
     <div 
       onClick={() => setIsWorkspaceSettingsOpen(false)}
-      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in select-none cursor-pointer"
+      className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-3 sm:p-4 animate-fade-in select-none cursor-pointer"
     >
       <div 
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-2xl bg-[#181C25] border border-[#252B36] rounded-2xl shadow-modal overflow-hidden flex flex-col max-h-[85vh] cursor-default"
+        className="w-full max-w-[500px] bg-[#181C25] border border-[#252B36] rounded-2xl shadow-modal overflow-hidden flex flex-col max-h-[88vh] cursor-default"
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#252B36] flex items-center justify-between">
-          <div className="flex items-center space-x-2.5">
+        <div className="px-4 py-2.5 border-b border-[#252B36] flex items-center justify-between">
+          <div className="flex items-center space-x-2">
             {activeWorkspace.avatar ? (
               <img
                 src={activeWorkspace.avatar}
                 alt=""
-                className="w-8 h-8 rounded-xl object-cover border border-[#252B36]"
+                className="w-7 h-7 rounded-lg object-cover border border-[#252B36]"
               />
             ) : (
               <div
-                className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-bold text-xs"
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-white font-bold text-xs"
                 style={{ backgroundColor: activeWorkspace.iconBg || '#4F8CFF' }}
               >
                 {activeWorkspace.icon}
               </div>
             )}
             <div>
-              <h2 className="text-sm font-bold text-[#F5F7FA]">{activeWorkspace.name} Settings</h2>
-              <p className="text-[11px] text-[#929BAA]">
-                Manage workspace permissions, team members, and enterprise preferences.
+              <h2 className="text-sm font-bold text-[#F5F7FA] leading-tight">{activeWorkspace.name} Settings</h2>
+              <p className="text-[10px] text-[#929BAA] leading-tight mt-0.5">
+                Manage workspace permissions, team members, and preferences.
               </p>
             </div>
           </div>
 
           <button
             onClick={() => setIsWorkspaceSettingsOpen(false)}
-            className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36] rounded-md transition-colors"
+            className="p-1 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#252B36] rounded-md transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Strip */}
-        <div className="px-6 pt-2 border-b border-[#252B36] flex items-center space-x-2 bg-[#12151C]/60 text-xs">
+        <div className="px-4 border-b border-[#252B36] flex items-center space-x-1 bg-[#12151C]/60 text-xs">
           <button
             onClick={() => setActiveTab('general')}
-            className={`px-3 py-2 border-b-2 font-medium transition-colors ${
+            className={`px-3 py-1.5 border-b-2 font-medium transition-colors ${
               activeTab === 'general'
                 ? 'border-[#4F8CFF] text-[#4F8CFF]'
                 : 'border-transparent text-[#929BAA] hover:text-[#F5F7FA]'
@@ -125,7 +130,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('members')}
-            className={`px-3 py-2 border-b-2 font-medium transition-colors ${
+            className={`px-3 py-1.5 border-b-2 font-medium transition-colors ${
               activeTab === 'members'
                 ? 'border-[#4F8CFF] text-[#4F8CFF]'
                 : 'border-transparent text-[#929BAA] hover:text-[#F5F7FA]'
@@ -135,7 +140,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('danger')}
-            className={`px-3 py-2 border-b-2 font-medium transition-colors ${
+            className={`px-3 py-1.5 border-b-2 font-medium transition-colors ${
               activeTab === 'danger'
                 ? 'border-[#F05D6C] text-[#F05D6C]'
                 : 'border-transparent text-[#929BAA] hover:text-[#F05D6C]'
@@ -146,25 +151,25 @@ export const WorkspaceSettingsModal: React.FC = () => {
         </div>
 
         {/* Content Body */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {activeTab === 'general' && (
-            <form onSubmit={handleSaveGeneral} className="space-y-4">
+            <form onSubmit={handleSaveGeneral} className="space-y-3">
               {/* Workspace Profile Picture Upload */}
               <div>
-                <label className="block text-xs font-semibold text-[#F5F7FA] mb-2">
+                <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
                   Workspace Profile Picture
                 </label>
-                <div className="flex items-center space-x-3.5">
+                <div className="flex items-center space-x-3">
                   <div className="relative group flex-shrink-0">
                     {activeWorkspace.avatar ? (
                       <img
                         src={activeWorkspace.avatar}
                         alt={activeWorkspace.name}
-                        className="w-14 h-14 rounded-2xl object-cover border border-[#252B36] shadow-sm"
+                        className="w-11 h-11 rounded-xl object-cover border border-[#252B36] shadow-sm"
                       />
                     ) : (
                       <div
-                        className="w-14 h-14 rounded-2xl flex items-center justify-center text-white font-bold text-lg shadow-sm"
+                        className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-sm"
                         style={{ backgroundColor: activeWorkspace.iconBg || '#4F8CFF' }}
                       >
                         {activeWorkspace.icon}
@@ -172,9 +177,9 @@ export const WorkspaceSettingsModal: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="space-y-1.5">
+                  <div className="space-y-1">
                     <div className="flex items-center space-x-2">
-                      <label className="px-3 py-1.5 bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 border border-[#4F8CFF]/30 text-[#4F8CFF] text-xs font-medium rounded-lg cursor-pointer transition-colors flex items-center gap-1.5">
+                      <label className="px-2.5 py-1 bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 border border-[#4F8CFF]/30 text-[#4F8CFF] text-[11px] font-medium rounded-lg cursor-pointer transition-colors flex items-center gap-1.5">
                         <Upload className="w-3.5 h-3.5" />
                         <span>Change Workspace Picture</span>
                         <input
@@ -188,13 +193,13 @@ export const WorkspaceSettingsModal: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => updateWorkspace(activeWorkspace.id, { avatar: undefined })}
-                          className="px-2.5 py-1.5 text-xs text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
+                          className="px-2 py-1 text-[11px] text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
                         >
                           Remove
                         </button>
                       )}
                     </div>
-                    <p className="text-[11px] text-[#929BAA]">
+                    <p className="text-[10px] text-[#929BAA]">
                       Recommended: square image, PNG or JPG, max 5MB.
                     </p>
                   </div>
@@ -202,45 +207,45 @@ export const WorkspaceSettingsModal: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
+                <label className="block text-xs font-semibold text-[#F5F7FA] mb-1">
                   Workspace Name
                 </label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-[#F5F7FA] outline-none"
+                  className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-2.5 py-1.5 text-xs text-[#F5F7FA] outline-none"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
+                <label className="block text-xs font-semibold text-[#F5F7FA] mb-1">
                   Workspace Description
                 </label>
                 <textarea
                   rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-[#F5F7FA] outline-none resize-none"
+                  className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-2.5 py-1.5 text-xs text-[#F5F7FA] outline-none resize-none"
                 />
               </div>
 
               {/* Invite Link */}
-              <div className="p-4 bg-[#12151C] border border-[#252B36] rounded-xl space-y-2">
-                <div className="text-xs font-semibold text-[#F5F7FA] flex items-center gap-1.5">
+              <div className="p-2.5 bg-[#12151C] border border-[#252B36] rounded-xl space-y-1.5">
+                <div className="text-[11px] font-semibold text-[#F5F7FA] flex items-center gap-1.5">
                   <Link className="w-3.5 h-3.5 text-[#4F8CFF]" /> Team Invite Link
                 </div>
-                <div className="flex items-center space-x-2">
+                <div className="flex items-center space-x-1.5">
                   <input
                     type="text"
                     readOnly
                     value={`https://pulsechat.app/join/${activeWorkspace.slug}`}
-                    className="flex-1 bg-[#181C25] border border-[#252B36] rounded-lg px-3 py-1.5 text-xs text-[#929BAA] outline-none font-mono"
+                    className="flex-1 bg-[#181C25] border border-[#252B36] rounded-lg px-2.5 py-1 text-xs text-[#929BAA] outline-none font-mono"
                   />
                   <button
                     type="button"
                     onClick={handleCopyInviteLink}
-                    className="px-3 py-1.5 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-xs font-medium rounded-lg flex items-center space-x-1 transition-colors"
+                    className="px-2.5 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-xs font-medium rounded-lg flex items-center space-x-1 transition-colors cursor-pointer"
                   >
                     {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
                     <span>{copiedLink ? 'Copied' : 'Copy'}</span>
@@ -248,10 +253,10 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end">
+              <div className="pt-1 flex justify-end">
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-xs font-semibold rounded-xl shadow-accent-glow transition-all"
+                  className="px-3.5 py-1.5 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-xs font-semibold rounded-lg shadow-accent-glow transition-all cursor-pointer"
                 >
                   Save Settings
                 </button>
@@ -279,7 +284,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                       <div className="flex items-center space-x-3 truncate">
                         <div className="relative">
                           <img
-                            src={member.avatar}
+                            src={resolveUserAvatar(member.avatar, member.name)}
                             alt={member.name}
                             className="w-8 h-8 rounded-lg object-cover"
                           />
@@ -306,6 +311,25 @@ export const WorkspaceSettingsModal: React.FC = () => {
                         <span className="text-xs font-medium text-[#929BAA] bg-[#12151C] border border-[#252B36] px-2.5 py-1 rounded-lg capitalize">
                           {member.role}
                         </span>
+                        {member.id !== currentUser.id && (
+                          isUserBlocked(member.id) ? (
+                            <button
+                              type="button"
+                              onClick={() => unblockUser(member.id)}
+                              className="px-2 py-1 bg-[#32C48D]/15 hover:bg-[#32C48D]/25 border border-[#32C48D]/40 text-[#32C48D] text-[11px] font-semibold rounded-lg transition-colors cursor-pointer"
+                            >
+                              Unblock
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => blockUser(member.id)}
+                              className="px-2 py-1 bg-[#F05D6C]/10 hover:bg-[#F05D6C]/20 border border-[#F05D6C]/30 text-[#F05D6C] text-[11px] font-semibold rounded-lg transition-colors cursor-pointer"
+                            >
+                              Block
+                            </button>
+                          )
+                        )}
                       </div>
                     </div>
                   ))}
@@ -316,6 +340,38 @@ export const WorkspaceSettingsModal: React.FC = () => {
 
           {activeTab === 'danger' && (
             <div className="space-y-4">
+              {/* Block Workspace Option */}
+              <div className="p-4 bg-[#181C25] border border-[#252B36] rounded-xl space-y-2">
+                <div className="flex items-center space-x-2 text-xs font-semibold text-amber-400">
+                  <ShieldAlert className="w-4 h-4" />
+                  <span>Block Workspace Access & Notifications</span>
+                </div>
+                <p className="text-[11px] text-[#929BAA] leading-relaxed">
+                  {isWorkspaceBlocked(activeWorkspace.id)
+                    ? `"${activeWorkspace.name}" is currently blocked. All incoming notifications, sound chimes, and channel alerts from this workspace are silenced.`
+                    : `Block "${activeWorkspace.name}" to silence all incoming notifications, sound chimes, and activity alerts across all its channels and chats.`}
+                </p>
+                {isWorkspaceBlocked(activeWorkspace.id) ? (
+                  <button
+                    type="button"
+                    onClick={() => unblockWorkspace(activeWorkspace.id)}
+                    className="px-3 py-1.5 bg-[#32C48D]/15 hover:bg-[#32C48D]/25 border border-[#32C48D]/40 text-[#32C48D] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>Unblock Workspace</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => blockWorkspace(activeWorkspace.id)}
+                    className="px-3 py-1.5 bg-[#F05D6C]/15 hover:bg-[#F05D6C]/25 border border-[#F05D6C]/40 text-[#F05D6C] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Ban className="w-4 h-4" />
+                    <span>Block Workspace</span>
+                  </button>
+                )}
+              </div>
+
               <div className="p-4 bg-[#F05D6C]/10 border border-[#F05D6C]/30 rounded-xl space-y-2">
                 <div className="flex items-center space-x-2 text-xs font-semibold text-[#F05D6C]">
                   <Trash2 className="w-4 h-4" />

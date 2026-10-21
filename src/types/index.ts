@@ -110,6 +110,7 @@ export interface Message {
   translatedLanguage?: string;
   hiddenForUserIds?: string[];
   isEncrypted?: boolean;
+  deliveryStatus?: 'sending' | 'sent' | 'delivered' | 'read';
   encryptedPayload?: {
     ciphertext: string;
     iv: string;

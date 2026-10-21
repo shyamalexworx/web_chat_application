@@ -54,42 +54,68 @@ const ChatDashboard: React.FC = () => {
   return (
     <>
       {!isAuthenticated ? (
-        <AuthPage />
+        <ErrorBoundary componentName="Authentication">
+          <AuthPage />
+        </ErrorBoundary>
       ) : (
         <div className="h-full w-full flex flex-col overflow-hidden bg-[#0B0D12] text-[#F5F7FA] fixed inset-0">
           {/* Top Global Navigation Bar (Section 4D) */}
-          <TopNavigation />
+          <ErrorBoundary componentName="Top Navigation">
+            <TopNavigation />
+          </ErrorBoundary>
 
           {/* Main Workspace Frame */}
           <div className="flex-1 min-h-0 w-full flex overflow-hidden relative">
             {/* Leftmost Workspace Rail */}
-            <WorkspaceRail />
+            <ErrorBoundary componentName="Workspace Rail">
+              <WorkspaceRail />
+            </ErrorBoundary>
 
-            {/* Collapsible Channels & DMs Sidebar (Mac-style Genie animation to workspace button) */}
-            <ChannelSidebar />
+            {/* Collapsible Channels & DMs Sidebar */}
+            <ErrorBoundary componentName="Sidebar">
+              <ChannelSidebar />
+            </ErrorBoundary>
 
             {/* Central Conversation Feed (Section 4B) */}
             <main 
               aria-label="Main conversation feed"
               className="flex-1 min-h-0 flex flex-col min-w-0 bg-[#0B0D12] relative overflow-hidden"
             >
-              <ChatHeader />
-              <MessageList />
-              <MessageComposer />
+              <ErrorBoundary componentName="Chat Header">
+                <ChatHeader />
+              </ErrorBoundary>
+              <ErrorBoundary componentName="Message Feed">
+                <MessageList />
+              </ErrorBoundary>
+              <ErrorBoundary componentName="Message Composer">
+                <MessageComposer />
+              </ErrorBoundary>
             </main>
 
             {/* Side Thread Panel (if thread is open) */}
-            {activeThreadMessage && <ThreadDrawer />}
+            {activeThreadMessage && (
+              <ErrorBoundary componentName="Thread Panel">
+                <ThreadDrawer />
+              </ErrorBoundary>
+            )}
 
-            {/* Pulse AI Copilot Drawer (Red circled one) */}
-            {isAIAssistantOpen && <AIAssistantDrawer />}
+            {/* Pulse AI Copilot Drawer */}
+            {isAIAssistantOpen && (
+              <ErrorBoundary componentName="AI Copilot">
+                <AIAssistantDrawer />
+              </ErrorBoundary>
+            )}
 
-            {/* Right Collapsible Inspector Panel (Section 4C) */}
-            {isRightPanelOpen && <RightInfoPanel />}
+            {/* Right Collapsible Inspector Panel */}
+            {isRightPanelOpen && (
+              <ErrorBoundary componentName="Info Panel">
+                <RightInfoPanel />
+              </ErrorBoundary>
+            )}
           </div>
 
           {/* Modals & Overlays */}
-          <ErrorBoundary>
+          <ErrorBoundary componentName="Dialogs & Modals">
             <CreateChannelModal />
             <BrowseChannelsModal />
             <NewDirectMessageModal />
@@ -114,8 +140,12 @@ const ChatDashboard: React.FC = () => {
 
 export default function App() {
   return (
-    <ChatProvider>
-      <ChatDashboard />
-    </ChatProvider>
+    <ErrorBoundary componentName="PulseChat Root">
+      <ChatProvider>
+        <ErrorBoundary componentName="Dashboard Frame">
+          <ChatDashboard />
+        </ErrorBoundary>
+      </ChatProvider>
+    </ErrorBoundary>
   );
 }

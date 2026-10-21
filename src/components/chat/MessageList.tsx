@@ -31,7 +31,11 @@ export const MessageList: React.FC = () => {
     : null;
 
   const dmPartner = activeDM && !activeDM.isGroup
-    ? users.find((u) => u.id === (activeDM.participantIds.find((id) => id !== currentUser.id) || activeDM.participantIds[0]))
+    ? users.find((u) => {
+        const parts = Array.isArray(activeDM.participantIds) ? activeDM.participantIds : [];
+        const otherUserId = parts.find((id) => id !== currentUser.id) || parts[0];
+        return u.id === otherUserId;
+      })
     : null;
 
   // Auto-scroll inside container only (prevents ancestor/window scrolling)
@@ -78,9 +82,9 @@ export const MessageList: React.FC = () => {
       ref={containerRef}
       className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col relative bg-[#0B0D12]"
     >
-      <div className="py-4 space-y-4">
+      <div className="py-2 space-y-1.5">
         {/* Onboarding Header Banner at top of channel history */}
-        <div className="px-5 pt-6 pb-4 border-b border-[#252B36]/50">
+        <div className="px-4 pt-4 pb-3 border-b border-[#252B36]/50">
           {activeChannel ? (
             <div>
               <div className="w-12 h-12 rounded-2xl bg-[#181C25] border border-[#252B36] flex items-center justify-center text-[#4F8CFF] mb-3 shadow-subtle">
@@ -105,7 +109,7 @@ export const MessageList: React.FC = () => {
                   className="px-3 py-1.5 bg-[#181C25] hover:bg-[#252B36] text-xs font-medium text-[#F5F7FA] border border-[#252B36] rounded-lg transition-colors flex items-center space-x-1.5 cursor-pointer"
                 >
                   <Users className="w-3.5 h-3.5 text-[#4F8CFF]" />
-                  <span>{t('view_members')} ({activeChannel.memberIds.length})</span>
+                  <span>{t('view_members')} ({(activeChannel.memberIds || []).length})</span>
                 </button>
               </div>
             </div>
@@ -127,8 +131,8 @@ export const MessageList: React.FC = () => {
               </h1>
               <p className="text-xs text-[#929BAA] mt-1 max-w-xl">
                 {activeDM.isGroup
-                  ? `${t('group_conversation_with')} (${activeDM.participantIds.length} ${t('members')})`
-                  : `${t('dm_beginning')} ${dmPartner?.name} (${dmPartner?.title}).`}
+                  ? `${t('group_conversation_with')} (${(activeDM.participantIds || []).length} ${t('members')})`
+                  : `${t('dm_beginning')} ${dmPartner?.name || 'chat'} (${dmPartner?.title || 'Member'}).`}
               </p>
             </div>
           ) : (
@@ -175,9 +179,9 @@ export const MessageList: React.FC = () => {
               return (
                 <React.Fragment key={msg.id}>
                   {showDateDivider && (
-                    <div className="relative flex items-center justify-center my-4 select-none px-5">
-                      <div className="absolute inset-x-5 h-[1px] bg-[#252B36]" />
-                      <span className="relative bg-[#181C25] border border-[#252B36] text-[11px] font-semibold text-[#929BAA] px-3 py-1 rounded-full shadow-subtle">
+                    <div className="relative flex items-center justify-center my-2 select-none px-4">
+                      <div className="absolute inset-x-4 h-[1px] bg-[#252B36]" />
+                      <span className="relative bg-[#181C25] border border-[#252B36] text-[10px] font-semibold text-[#929BAA] px-2.5 py-0.5 rounded-full shadow-subtle">
                         {msgDate}
                       </span>
                     </div>

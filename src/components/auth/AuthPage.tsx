@@ -52,8 +52,8 @@ export const AuthPage: React.FC = () => {
     } catch (e) {}
 
     // 2. All registered users in the app
-    users.forEach((u) => {
-      if (u.email && !map.has(u.email.toLowerCase())) {
+    (users || []).forEach((u) => {
+      if (u && u.email && !map.has(u.email.toLowerCase())) {
         map.set(u.email.toLowerCase(), {
           email: u.email.toLowerCase(),
           name: u.name || u.username || 'User',
@@ -306,7 +306,7 @@ export const AuthPage: React.FC = () => {
     <div className="fixed inset-0 h-full w-full overflow-y-auto select-none z-50 bg-slate-50 dark:bg-[#07090D] flex flex-col items-center justify-center p-3 sm:p-4 transition-colors">
       <div className="w-full max-w-[460px] mx-auto py-2 px-3">
         {/* Main Authentication Card */}
-        <div className="w-full rounded-3xl bg-white dark:bg-[#0E1118] border border-slate-200 dark:border-[#252B36] shadow-xl shadow-slate-200/50 dark:shadow-black/50 p-6 sm:p-7 relative text-left flex flex-col justify-between min-h-[580px] sm:h-[600px] transition-colors">
+        <div className="w-full rounded-3xl bg-white dark:bg-[#0E1118] border border-slate-200 dark:border-[#252B36] shadow-xl shadow-slate-200/50 dark:shadow-black/50 pt-5 pb-6 px-6 sm:pt-5 sm:pb-7 sm:px-7 relative text-left flex flex-col justify-center gap-3.5 min-h-0 transition-colors">
           {/* Top Section: Brand Logo, Name, Heading & Subtitle */}
           <div className="w-full flex flex-col items-center flex-shrink-0">
             {/* Brand Logo - clean & static */}
@@ -316,22 +316,22 @@ export const AuthPage: React.FC = () => {
 
             {/* Website Name - clean & static */}
             <div className="flex items-center justify-center mt-2.5 mb-0.5">
-              <span className="text-2xl sm:text-[26px] font-black tracking-tight text-slate-900 dark:text-white">
+              <span className="text-[25px] sm:text-[27px] font-black tracking-tight text-slate-900 dark:text-white">
                 Pulse
               </span>
-              <span className="text-2xl sm:text-[26px] font-black tracking-tight text-[#4F8CFF]">
+              <span className="text-[25px] sm:text-[27px] font-black tracking-tight text-[#4F8CFF]">
                 Chat
               </span>
             </div>
 
             {/* Header Heading & Subtitle */}
-            <div className="text-center mb-2.5">
-              <h1 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
+            <div className="text-center mb-1">
+              <h1 className="text-[17px] font-bold text-slate-900 dark:text-white tracking-tight">
                 {mode === 'login' && 'Sign in to your account'}
                 {mode === 'register' && 'Create your account'}
                 {mode === 'forgot' && 'Reset your password'}
               </h1>
-              <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] mt-0.5">
+              <p className="text-[12px] text-slate-500 dark:text-[#94A3B8] mt-0.5">
                 {mode === 'login' && 'Welcome back! Please enter your details.'}
                 {mode === 'register' && 'Start collaborating with your team today.'}
                 {mode === 'forgot' && 'Enter your email for reset instructions.'}
@@ -340,7 +340,7 @@ export const AuthPage: React.FC = () => {
 
             {/* Error Alert */}
             {error && (
-              <div className="w-full mb-2 p-2 bg-[#F05D6C]/10 border border-[#F05D6C]/30 text-[#F05D6C] text-xs rounded-xl text-center leading-snug">
+              <div className="w-full mb-2 p-2 bg-[#F05D6C]/10 border border-[#F05D6C]/30 text-[#F05D6C] text-[13px] rounded-xl text-center leading-snug">
                 <p>{error}</p>
                 {error.toLowerCase().includes('already') && (
                   <div className="mt-1.5 flex items-center justify-center gap-2">
@@ -350,7 +350,7 @@ export const AuthPage: React.FC = () => {
                         setMode('login');
                         setError('');
                       }}
-                      className="px-2.5 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white font-semibold rounded-lg text-xs shadow-sm transition-colors cursor-pointer"
+                      className="px-2.5 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white font-semibold rounded-lg text-[13px] shadow-sm transition-colors cursor-pointer"
                     >
                       Sign in now &rarr;
                     </button>
@@ -360,7 +360,7 @@ export const AuthPage: React.FC = () => {
                         setMode('forgot');
                         setError('');
                       }}
-                      className="px-2.5 py-1 bg-slate-100 dark:bg-[#181C25] hover:bg-slate-200 dark:hover:bg-[#252B36] text-slate-700 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-[#FFFFFF] border border-slate-200 dark:border-[#252B36] rounded-lg text-xs transition-colors cursor-pointer"
+                      className="px-2.5 py-1 bg-slate-100 dark:bg-[#181C25] hover:bg-slate-200 dark:hover:bg-[#252B36] text-slate-700 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-[#FFFFFF] border border-slate-200 dark:border-[#252B36] rounded-lg text-[13px] transition-colors cursor-pointer"
                     >
                       Reset password
                     </button>
@@ -371,7 +371,7 @@ export const AuthPage: React.FC = () => {
 
             {/* Success Alert */}
             {successMessage && (
-              <div className="w-full mb-2 p-2 bg-[#32C48D]/10 border border-[#32C48D]/30 text-[#32C48D] text-xs rounded-xl text-left flex items-start space-x-2 leading-snug">
+              <div className="w-full mb-2 p-2 bg-[#32C48D]/10 border border-[#32C48D]/30 text-[#32C48D] text-[13px] rounded-xl text-left flex items-start space-x-2 leading-snug">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <span>{successMessage}</span>
               </div>
@@ -379,7 +379,7 @@ export const AuthPage: React.FC = () => {
           </div>
 
           {/* Middle Section: Form inputs & Primary action button */}
-          <div className="w-full flex-1 flex flex-col justify-center">
+          <div className="w-full flex-col justify-center">
             {mode !== 'forgot' ? (
               <form
                 onSubmit={mode === 'login' ? handleLogin : handleRegister}
@@ -387,7 +387,7 @@ export const AuthPage: React.FC = () => {
               >
                 {mode === 'register' && (
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-[#F1F5F9] mb-1.5">
+                    <label className="block text-[13px] font-semibold text-slate-700 dark:text-[#F1F5F9] mb-1.5">
                       Full name
                     </label>
                     <input
@@ -395,14 +395,14 @@ export const AuthPage: React.FC = () => {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Alex Smith"
-                      className="w-full h-11 sm:h-12 bg-slate-50 hover:bg-slate-100/70 focus:bg-white dark:bg-[#181C25] dark:hover:bg-[#1E2330] dark:focus:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] focus:ring-1 focus:ring-[#4F8CFF]/50 rounded-xl px-4 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#64748B] outline-none transition-all shadow-sm"
+                      className="w-full h-11 sm:h-12 bg-slate-50 hover:bg-slate-100/70 focus:bg-white dark:bg-[#181C25] dark:hover:bg-[#1E2330] dark:focus:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] focus:ring-1 focus:ring-[#4F8CFF]/50 rounded-xl px-4 text-[15px] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#64748B] outline-none transition-all shadow-sm"
                       required
                     />
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-[#F1F5F9] mb-1.5">
+                  <label className="block text-[13px] font-semibold text-slate-700 dark:text-[#F1F5F9] mb-1.5">
                     Email address
                   </label>
                   <input
@@ -410,20 +410,20 @@ export const AuthPage: React.FC = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="alex@gmail.com"
-                    className="w-full h-11 sm:h-12 bg-slate-50 hover:bg-slate-100/70 focus:bg-white dark:bg-[#181C25] dark:hover:bg-[#1E2330] dark:focus:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] focus:ring-1 focus:ring-[#4F8CFF]/50 rounded-xl px-4 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#64748B] outline-none transition-all shadow-sm"
+                    className="w-full h-11 sm:h-12 bg-slate-50 hover:bg-slate-100/70 focus:bg-white dark:bg-[#181C25] dark:hover:bg-[#1E2330] dark:focus:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] focus:ring-1 focus:ring-[#4F8CFF]/50 rounded-xl px-4 text-[15px] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#64748B] outline-none transition-all shadow-sm"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-[#F1F5F9] mb-1.5">Password</label>
+                  <label className="block text-[13px] font-semibold text-slate-700 dark:text-[#F1F5F9] mb-1.5">Password</label>
                   <div className="relative">
                     <input
                       type={showPassword ? 'text' : 'password'}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full h-11 sm:h-12 bg-slate-50 hover:bg-slate-100/70 focus:bg-white dark:bg-[#181C25] dark:hover:bg-[#1E2330] dark:focus:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] focus:ring-1 focus:ring-[#4F8CFF]/50 rounded-xl pl-4 pr-11 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#64748B] outline-none transition-all shadow-sm"
+                      className="w-full h-11 sm:h-12 bg-slate-50 hover:bg-slate-100/70 focus:bg-white dark:bg-[#181C25] dark:hover:bg-[#1E2330] dark:focus:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] focus:ring-1 focus:ring-[#4F8CFF]/50 rounded-xl pl-4 pr-11 text-[15px] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#64748B] outline-none transition-all shadow-sm"
                       required
                     />
                     <button
@@ -450,7 +450,7 @@ export const AuthPage: React.FC = () => {
                           onChange={(e) => setRememberMe(e.target.checked)}
                           className="w-4 h-4 rounded border-slate-300 dark:border-[#252B36] bg-slate-50 dark:bg-[#181C25] text-[#4F8CFF] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#4F8CFF]"
                         />
-                        <span className="text-xs text-slate-600 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-[#F1F5F9] transition-colors">Remember me</span>
+                        <span className="text-[13px] text-slate-600 dark:text-[#94A3B8] hover:text-slate-900 dark:hover:text-[#F1F5F9] transition-colors">Remember me</span>
                       </label>
                       <button
                         type="button"
@@ -459,7 +459,7 @@ export const AuthPage: React.FC = () => {
                           setError('');
                           setSuccessMessage('');
                         }}
-                        className="text-xs text-slate-500 hover:text-[#4F8CFF] dark:text-[#94A3B8] dark:hover:text-[#4F8CFF] transition-colors cursor-pointer"
+                        className="text-[13px] text-slate-500 hover:text-[#4F8CFF] dark:text-[#94A3B8] dark:hover:text-[#4F8CFF] transition-colors cursor-pointer"
                       >
                         Forgot password?
                       </button>
@@ -472,7 +472,7 @@ export const AuthPage: React.FC = () => {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className={`w-full h-11 sm:h-12 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-blue-500/20 active:scale-[0.99] flex items-center justify-center space-x-2 ${
+                    className={`w-full h-11 sm:h-12 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-[15px] font-semibold rounded-xl transition-all shadow-md shadow-blue-500/20 active:scale-[0.99] flex items-center justify-center space-x-2 ${
                       isSubmitting ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'
                     }`}
                   >
@@ -493,7 +493,7 @@ export const AuthPage: React.FC = () => {
               /* Mode 3: Dedicated Forgot Password Form */
               <form onSubmit={handleForgotPasswordSubmit} className="space-y-3.5">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-[#F1F5F9] mb-1.5">
+                  <label className="block text-[13px] font-semibold text-slate-700 dark:text-[#F1F5F9] mb-1.5">
                     Registered Email address
                   </label>
                   <input
@@ -501,10 +501,10 @@ export const AuthPage: React.FC = () => {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="alex@gmail.com"
-                    className="w-full h-11 sm:h-12 bg-slate-50 hover:bg-slate-100/70 focus:bg-white dark:bg-[#181C25] dark:hover:bg-[#1E2330] dark:focus:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] focus:ring-1 focus:ring-[#4F8CFF]/50 rounded-xl px-4 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#64748B] outline-none transition-all shadow-sm"
+                    className="w-full h-11 sm:h-12 bg-slate-50 hover:bg-slate-100/70 focus:bg-white dark:bg-[#181C25] dark:hover:bg-[#1E2330] dark:focus:bg-[#181C25] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] focus:ring-1 focus:ring-[#4F8CFF]/50 rounded-xl px-4 text-[15px] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#64748B] outline-none transition-all shadow-sm"
                     required
                   />
-                  <p className="text-[11px] text-slate-500 dark:text-[#94A3B8] mt-1">
+                  <p className="text-[12px] text-slate-500 dark:text-[#94A3B8] mt-1">
                     We will send a password reset verification link to this email.
                   </p>
                 </div>
@@ -513,7 +513,7 @@ export const AuthPage: React.FC = () => {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className={`w-full h-11 sm:h-12 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-sm font-semibold rounded-xl transition-all shadow-md shadow-blue-500/20 active:scale-[0.99] flex items-center justify-center space-x-2 ${
+                    className={`w-full h-11 sm:h-12 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-[15px] font-semibold rounded-xl transition-all shadow-md shadow-blue-500/20 active:scale-[0.99] flex items-center justify-center space-x-2 ${
                       isSubmitting ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'
                     }`}
                   >
@@ -532,7 +532,7 @@ export const AuthPage: React.FC = () => {
                       setError('');
                       setSuccessMessage('');
                     }}
-                    className="inline-flex items-center space-x-1.5 text-xs text-slate-500 hover:text-slate-800 dark:text-[#94A3B8] dark:hover:text-[#FFFFFF] transition-colors cursor-pointer"
+                    className="inline-flex items-center space-x-1.5 text-[13px] text-slate-500 hover:text-slate-800 dark:text-[#94A3B8] dark:hover:text-[#FFFFFF] transition-colors cursor-pointer"
                   >
                     <ArrowLeft className="w-3.5 h-3.5" />
                     <span>Back to sign in</span>
@@ -544,13 +544,13 @@ export const AuthPage: React.FC = () => {
 
           {/* Bottom Section: Social Authentication & Mode Toggle */}
           {mode !== 'forgot' && (
-            <div className="w-full flex-shrink-0 pt-1">
+            <div className="w-full flex-shrink-0 pt-0.5">
               {/* Divider with OR */}
-              <div className="relative flex items-center justify-center my-3">
+              <div className="relative flex items-center justify-center my-2.5">
                 <div className="absolute inset-0 flex items-center">
                   <div className="w-full border-t border-dashed border-slate-200 dark:border-[#252B36]" />
                 </div>
-                <div className="relative bg-white dark:bg-[#0E1118] px-3 text-[11px] font-semibold text-slate-400 dark:text-[#94A3B8] tracking-wider">
+                <div className="relative bg-white dark:bg-[#0E1118] px-3 text-[12px] font-semibold text-slate-400 dark:text-[#94A3B8] tracking-wider">
                   OR
                 </div>
               </div>
@@ -561,7 +561,7 @@ export const AuthPage: React.FC = () => {
                   type="button"
                   onClick={handleOpenGoogleChooser}
                   disabled={isSubmitting}
-                  className="w-full h-11 sm:h-12 bg-white hover:bg-slate-50 dark:bg-[#181C25] dark:hover:bg-[#1E2330] text-slate-700 dark:text-white border border-slate-200 dark:border-[#252B36] rounded-xl text-xs sm:text-sm font-medium flex items-center justify-center space-x-2.5 transition-all shadow-sm active:scale-[0.99] cursor-pointer"
+                  className="w-full h-11 sm:h-12 bg-white hover:bg-slate-50 dark:bg-[#181C25] dark:hover:bg-[#1E2330] text-slate-700 dark:text-white border border-slate-200 dark:border-[#252B36] rounded-xl text-[13px] sm:text-[15px] font-medium flex items-center justify-center space-x-2.5 transition-all shadow-sm active:scale-[0.99] cursor-pointer"
                 >
                   <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24">
                     <path
@@ -586,7 +586,7 @@ export const AuthPage: React.FC = () => {
               </div>
 
               {/* Toggle between Sign In and Sign Up */}
-              <div className="text-center mt-3 text-xs text-slate-500 dark:text-[#94A3B8]">
+              <div className="text-center mt-2.5 text-[13px] text-slate-500 dark:text-[#94A3B8]">
                 {mode === 'login' ? (
                   <span>
                     Don't have an account?{' '}
@@ -661,10 +661,10 @@ export const AuthPage: React.FC = () => {
                 </div>
               </div>
 
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
+              <h2 className="text-[19px] font-semibold text-slate-900 dark:text-white">
                 Choose an account
               </h2>
-              <p className="text-xs text-slate-500 dark:text-[#94A3B8] mt-1">
+              <p className="text-[13px] text-slate-500 dark:text-[#94A3B8] mt-1">
                 to continue to <span className="font-semibold text-slate-700 dark:text-slate-200">PulseChat</span>
               </p>
             </div>
@@ -678,7 +678,7 @@ export const AuthPage: React.FC = () => {
                   className="p-3.5 px-6 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-[#181C25] transition-colors cursor-pointer group"
                 >
                   <div className="flex items-center space-x-3.5 min-w-0">
-                    <div className="w-10 h-10 rounded-full flex-shrink-0 bg-blue-600 text-white font-bold text-sm flex items-center justify-center overflow-hidden shadow-sm">
+                    <div className="w-10 h-10 rounded-full flex-shrink-0 bg-blue-600 text-white font-bold text-[15px] flex items-center justify-center overflow-hidden shadow-sm">
                       {acc.avatar ? (
                         <img src={acc.avatar} alt={acc.name} className="w-full h-full object-cover" />
                       ) : (
@@ -686,10 +686,10 @@ export const AuthPage: React.FC = () => {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <div className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                      <div className="text-[15px] font-semibold text-slate-900 dark:text-white truncate">
                         {acc.name}
                       </div>
-                      <div className="text-xs text-slate-500 dark:text-[#94A3B8] truncate">
+                      <div className="text-[13px] text-slate-500 dark:text-[#94A3B8] truncate">
                         {acc.email}
                       </div>
                     </div>
@@ -717,7 +717,7 @@ export const AuthPage: React.FC = () => {
                 <div className="w-10 h-10 rounded-full border border-dashed border-slate-300 dark:border-[#2E3748] flex items-center justify-center flex-shrink-0 text-slate-500 dark:text-slate-400">
                   <UserPlus className="w-4 h-4" />
                 </div>
-                <div className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                <div className="text-[15px] font-medium text-slate-800 dark:text-slate-200">
                   Use another account
                 </div>
               </div>
@@ -726,7 +726,7 @@ export const AuthPage: React.FC = () => {
             {/* Expandable Add Account Form */}
             {showAddAccountInput && (
               <form onSubmit={handleAddCustomGoogleAccount} className="p-4 mx-6 my-2 bg-slate-50 dark:bg-[#161B24] rounded-xl border border-slate-200 dark:border-[#252B36] space-y-2.5">
-                <div className="text-xs font-semibold text-slate-800 dark:text-slate-200">
+                <div className="text-[13px] font-semibold text-slate-800 dark:text-slate-200">
                   Sign in or sign up with another Gmail
                 </div>
                 <input
@@ -734,28 +734,28 @@ export const AuthPage: React.FC = () => {
                   value={customName}
                   onChange={(e) => setCustomName(e.target.value)}
                   placeholder="Your Name (e.g. Shyam)"
-                  className="w-full h-9 bg-white dark:bg-[#0E1118] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 outline-none"
+                  className="w-full h-9 bg-white dark:bg-[#0E1118] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-3 text-[13px] text-slate-900 dark:text-white placeholder-slate-400 outline-none"
                 />
                 <input
                   type="email"
                   value={customEmail}
                   onChange={(e) => setCustomEmail(e.target.value)}
                   placeholder="name@gmail.com"
-                  className="w-full h-9 bg-white dark:bg-[#0E1118] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-3 text-xs text-slate-900 dark:text-white placeholder-slate-400 outline-none"
+                  className="w-full h-9 bg-white dark:bg-[#0E1118] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-3 text-[13px] text-slate-900 dark:text-white placeholder-slate-400 outline-none"
                   autoFocus
                 />
                 <div className="flex space-x-2 pt-1">
                   <button
                     type="submit"
                     disabled={!customEmail.trim() || isSubmitting}
-                    className="flex-1 h-9 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white font-medium text-xs rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
+                    className="flex-1 h-9 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white font-medium text-[13px] rounded-lg transition-colors disabled:opacity-50 cursor-pointer"
                   >
                     {isSubmitting ? 'Signing in...' : 'Sign in / Sign up'}
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowAddAccountInput(false)}
-                    className="px-3 h-9 text-xs text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-[#252B36] cursor-pointer"
+                    className="px-3 h-9 text-[13px] text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-lg border border-slate-200 dark:border-[#252B36] cursor-pointer"
                   >
                     Cancel
                   </button>
@@ -770,13 +770,13 @@ export const AuthPage: React.FC = () => {
                   type="button"
                   onClick={handleBrowserGoogleOAuth}
                   disabled={isSubmitting}
-                  className="text-xs text-blue-600 dark:text-[#4F8CFF] hover:underline flex items-center space-x-1 cursor-pointer"
+                  className="text-[13px] text-blue-600 dark:text-[#4F8CFF] hover:underline flex items-center space-x-1 cursor-pointer"
                 >
                   <span>Sign in with Google OAuth in browser</span>
                   <ExternalLink className="w-3 h-3" />
                 </button>
               )}
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 text-center leading-relaxed">
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 text-center leading-relaxed">
                 To continue, Google shares your name, email address, and profile picture with PulseChat.
               </p>
             </div>

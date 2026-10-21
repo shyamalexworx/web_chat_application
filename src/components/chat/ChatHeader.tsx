@@ -47,7 +47,8 @@ export const ChatHeader: React.FC = () => {
 
   const getDMParticipant = () => {
     if (!activeDM || activeDM.isGroup) return null;
-    const otherUserId = activeDM.participantIds.find((id) => id !== currentUser.id) || activeDM.participantIds[0];
+    const parts = Array.isArray(activeDM.participantIds) ? activeDM.participantIds : [];
+    const otherUserId = parts.find((id) => id !== currentUser.id) || parts[0];
     return users.find((u) => u.id === otherUserId) || null;
   };
 
@@ -78,7 +79,7 @@ export const ChatHeader: React.FC = () => {
   };
 
   return (
-    <header className="hidden md:flex h-14 min-h-[56px] flex-shrink-0 bg-[#0F1117] border-b border-[#252B36] px-3 sm:px-4 items-center justify-between select-none z-10">
+    <header className="hidden md:flex h-11 min-h-[44px] flex-shrink-0 bg-[#0F1117] border-b border-[#252B36] px-3 sm:px-4 items-center justify-between select-none z-10">
       {/* Mobile Sidebar Toggle Button */}
       <button
         onClick={toggleSidebarCollapsed}
@@ -204,7 +205,7 @@ export const ChatHeader: React.FC = () => {
 
             <div className="text-xs text-[#929BAA] truncate">
               {activeDM.isGroup
-                ? `${activeDM.participantIds.length} ${t('members')}`
+                ? `${(activeDM.participantIds || []).length} ${t('members')}`
                 : `${dmPartner?.title || 'Team member'} • ${
                     dmPartner?.isOnline ? t('online') : t('offline')
                   }`}

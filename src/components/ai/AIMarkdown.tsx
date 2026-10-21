@@ -7,7 +7,7 @@ interface AIMarkdownProps {
 
 export const AIMarkdown: React.FC<AIMarkdownProps> = ({ content }) => {
   return (
-    <div className="space-y-2 select-text text-inherit">
+    <div className="space-y-1 select-text text-inherit">
       {renderMarkdownContent(content)}
     </div>
   );
@@ -27,7 +27,7 @@ function renderMarkdownContent(rawText: string): React.ReactNode[] {
     const textBefore = rawText.slice(lastIndex, match.index);
     if (textBefore) {
       nodes.push(
-        <div key={`text-${lastIndex}`} className="space-y-1.5">
+        <div key={`text-${lastIndex}`} className="space-y-0.5">
           {renderTextSegments(textBefore)}
         </div>
       );
@@ -49,7 +49,7 @@ function renderMarkdownContent(rawText: string): React.ReactNode[] {
   const remainingText = rawText.slice(lastIndex);
   if (remainingText) {
     nodes.push(
-      <div key={`text-end`} className="space-y-1.5">
+      <div key={`text-end`} className="space-y-0.5">
         {renderTextSegments(remainingText)}
       </div>
     );
@@ -71,15 +71,15 @@ const CodeBlockSnippet: React.FC<{ language: string; code: string }> = ({
   };
 
   return (
-    <div className="my-2.5 rounded-xl border border-[#252B36] bg-[#12151C] overflow-hidden shadow-sm">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#0B0D12]/70 border-b border-[#252B36] text-[11px] text-[#929BAA] font-mono">
-        <span className="flex items-center gap-1.5 capitalize font-medium">
+    <div className="my-2 rounded-xl border border-slate-200 dark:border-[#252B36] bg-slate-900 overflow-hidden shadow-sm">
+      <div className="flex items-center justify-between px-3 py-1.5 bg-slate-950/80 dark:bg-[#0B0D12]/70 border-b border-slate-800 dark:border-[#252B36] text-[11px] text-[#929BAA] font-mono">
+        <span className="flex items-center gap-1.5 capitalize font-medium text-slate-300">
           <Code className="w-3.5 h-3.5 text-[#4F8CFF]" />
           {language}
         </span>
         <button
           onClick={handleCopyCode}
-          className="flex items-center gap-1 hover:text-[#F5F7FA] transition-colors px-1.5 py-0.5 rounded hover:bg-[#181C25] cursor-pointer"
+          className="flex items-center gap-1 hover:text-[#F5F7FA] text-slate-400 transition-colors px-1.5 py-0.5 rounded hover:bg-slate-800 cursor-pointer"
           title="Copy code"
         >
           {copied ? (
@@ -95,7 +95,7 @@ const CodeBlockSnippet: React.FC<{ language: string; code: string }> = ({
           )}
         </button>
       </div>
-      <pre className="p-3 overflow-x-auto text-xs font-mono leading-relaxed text-[#F5F7FA] selection:bg-[#4F8CFF]/30">
+      <pre className="p-3 overflow-x-auto text-xs font-mono leading-relaxed text-slate-100 selection:bg-[#4F8CFF]/30">
         <code>{code}</code>
       </pre>
     </div>
@@ -112,8 +112,77 @@ function renderTextSegments(text: string): React.ReactNode[] {
 
     if (!trimmed) {
       // Empty line -> spacing
-      renderedElements.push(<div key={`empty-${i}`} className="h-1" />);
+      renderedElements.push(<div key={`empty-${i}`} className="h-0.5" />);
       continue;
+    }
+
+    // Markdown Table detection: lines start and end with |
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      const tableLines: string[] = [];
+      let j = i;
+      while (
+        j < lines.length &&
+        lines[j].trim().startsWith('|') &&
+        lines[j].trim().endsWith('|')
+      ) {
+        tableLines.push(lines[j].trim());
+        j++;
+      }
+
+      if (tableLines.length >= 2 && /^\|[\s-:]+\|/.test(tableLines[1])) {
+        const headerCells = tableLines[0]
+          .split('|')
+          .slice(1, -1)
+          .map((c) => c.trim());
+        const bodyRows = tableLines.slice(2).map((row) =>
+          row
+            .split('|')
+            .slice(1, -1)
+            .map((c) => c.trim())
+        );
+
+        renderedElements.push(
+          <div
+            key={`table-${i}`}
+            className="my-1.5 overflow-x-auto rounded-lg border border-slate-200 dark:border-[#252B36]"
+          >
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-slate-100 dark:bg-[#12151C] border-b border-slate-200 dark:border-[#252B36]">
+                  {headerCells.map((h, hIdx) => (
+                    <th
+                      key={hIdx}
+                      className="px-2.5 py-1.5 font-semibold text-slate-800 dark:text-[#F5F7FA]"
+                    >
+                      {parseInlineFormatting(h)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 dark:divide-[#252B36]">
+                {bodyRows.map((r, rIdx) => (
+                  <tr
+                    key={rIdx}
+                    className="hover:bg-slate-50 dark:hover:bg-[#12151C]/50 transition-colors"
+                  >
+                    {r.map((cell, cIdx) => (
+                      <td
+                        key={cIdx}
+                        className="px-2.5 py-1 text-slate-700 dark:text-[#929BAA]"
+                      >
+                        {parseInlineFormatting(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+
+        i = j - 1;
+        continue;
+      }
     }
 
     // Headers
@@ -121,7 +190,7 @@ function renderTextSegments(text: string): React.ReactNode[] {
       renderedElements.push(
         <h4
           key={`h4-${i}`}
-          className="font-bold text-sm text-[#F5F7FA] mt-2 mb-1"
+          className="font-bold text-sm text-slate-900 dark:text-[#F5F7FA] mt-1.5 mb-0.5"
         >
           {parseInlineFormatting(trimmed.slice(4))}
         </h4>
@@ -132,7 +201,7 @@ function renderTextSegments(text: string): React.ReactNode[] {
       renderedElements.push(
         <h3
           key={`h3-${i}`}
-          className="font-bold text-base text-[#F5F7FA] mt-2.5 mb-1"
+          className="font-bold text-base text-slate-900 dark:text-[#F5F7FA] mt-2 mb-0.5"
         >
           {parseInlineFormatting(trimmed.slice(3))}
         </h3>
@@ -143,7 +212,7 @@ function renderTextSegments(text: string): React.ReactNode[] {
       renderedElements.push(
         <h2
           key={`h2-${i}`}
-          className="font-extrabold text-lg text-[#F5F7FA] mt-3 mb-1"
+          className="font-extrabold text-lg text-slate-900 dark:text-[#F5F7FA] mt-2 mb-0.5"
         >
           {parseInlineFormatting(trimmed.slice(2))}
         </h2>
@@ -155,9 +224,9 @@ function renderTextSegments(text: string): React.ReactNode[] {
     if (/^[-*•]\s+/.test(trimmed)) {
       const itemContent = trimmed.replace(/^[-*•]\s+/, '');
       renderedElements.push(
-        <div key={`bullet-${i}`} className="flex items-start space-x-2 pl-1 my-0.5">
+        <div key={`bullet-${i}`} className="flex items-start space-x-1.5 pl-0.5 my-0.2">
           <span className="text-[#4F8CFF] font-bold text-xs mt-0.5">•</span>
-          <div className="flex-1 leading-relaxed">
+          <div className="flex-1 leading-snug">
             {parseInlineFormatting(itemContent)}
           </div>
         </div>
@@ -169,11 +238,11 @@ function renderTextSegments(text: string): React.ReactNode[] {
     const numberedMatch = trimmed.match(/^(\d+)\.\s+(.*)$/);
     if (numberedMatch) {
       renderedElements.push(
-        <div key={`num-${i}`} className="flex items-start space-x-2 pl-1 my-0.5">
+        <div key={`num-${i}`} className="flex items-start space-x-1.5 pl-0.5 my-0.2">
           <span className="text-[#4F8CFF] font-semibold text-xs mt-0.5 font-mono">
             {numberedMatch[1]}.
           </span>
-          <div className="flex-1 leading-relaxed">
+          <div className="flex-1 leading-snug">
             {parseInlineFormatting(numberedMatch[2])}
           </div>
         </div>
@@ -183,7 +252,7 @@ function renderTextSegments(text: string): React.ReactNode[] {
 
     // Standard paragraph line
     renderedElements.push(
-      <p key={`p-${i}`} className="leading-relaxed my-0.5">
+      <p key={`p-${i}`} className="leading-snug my-0.5">
         {parseInlineFormatting(line)}
       </p>
     );
@@ -196,7 +265,6 @@ function renderTextSegments(text: string): React.ReactNode[] {
  * Parses bold (**bold**), inline code (`code`), and italic (*italic*)
  */
 function parseInlineFormatting(str: string): React.ReactNode[] {
-  // Regex splitting by bold, inline code, italic
   const parts: React.ReactNode[] = [];
   // Tokenizer pattern: (**bold**)|(`code`)|(\*italic\*)
   const inlineRegex = /(\*\*[^*]+\*\*)|(`[^`]+`)|(\*[^*]+\*)/g;
@@ -211,7 +279,7 @@ function parseInlineFormatting(str: string): React.ReactNode[] {
     const token = match[0];
     if (token.startsWith('**') && token.endsWith('**')) {
       parts.push(
-        <strong key={`b-${match.index}`} className="font-semibold text-[#F5F7FA]">
+        <strong key={`b-${match.index}`} className="font-semibold text-slate-900 dark:text-[#F5F7FA]">
           {token.slice(2, -2)}
         </strong>
       );
@@ -219,7 +287,7 @@ function parseInlineFormatting(str: string): React.ReactNode[] {
       parts.push(
         <code
           key={`code-${match.index}`}
-          className="px-1.5 py-0.5 mx-0.5 rounded-md bg-[#252B36]/80 text-[#4F8CFF] font-mono text-[11px] border border-[#252B36]"
+          className="px-1.5 py-0.5 mx-0.5 rounded-md bg-slate-100 dark:bg-[#252B36]/80 text-[#2563EB] dark:text-[#4F8CFF] font-mono text-[11px] border border-slate-200 dark:border-[#252B36]"
         >
           {token.slice(1, -1)}
         </code>
@@ -241,4 +309,3 @@ function parseInlineFormatting(str: string): React.ReactNode[] {
 
   return parts.length > 0 ? parts : [str];
 }
-

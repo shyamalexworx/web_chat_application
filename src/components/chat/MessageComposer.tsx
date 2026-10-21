@@ -36,6 +36,10 @@ export const MessageComposer: React.FC = () => {
     declineInvite,
     sendMessage,
     typingUsers,
+    isUserBlocked,
+    unblockUser,
+    isChannelBlocked,
+    unblockChannel,
     addToast,
     t,
   } = useChat();
@@ -63,8 +67,15 @@ export const MessageComposer: React.FC = () => {
   const currentChannel = activeChannel || (!activeDM ? (channels.find((c) => c.workspaceId === activeWorkspace?.id) || channels[0] || null) : null);
 
   const dmPartner = activeDM && !activeDM.isGroup
-    ? users.find((u) => u.id === (activeDM.participantIds.find((id) => id !== currentUser.id) || activeDM.participantIds[0]))
+    ? users.find((u) => {
+        const parts = Array.isArray(activeDM.participantIds) ? activeDM.participantIds : [];
+        const otherUserId = parts.find((id) => id !== currentUser.id) || parts[0];
+        return u.id === otherUserId;
+      })
     : null;
+
+  const isOtherUserBlocked = dmPartner ? isUserBlocked(dmPartner.id) : false;
+  const isCurrentChannelBlocked = currentChannel ? isChannelBlocked(currentChannel.id) : false;
 
   const placeholderText = currentChannel
     ? `${t('message')} #${currentChannel.name}`
@@ -75,6 +86,10 @@ export const MessageComposer: React.FC = () => {
   // Handle send
   const handleSend = () => {
     if (!content.trim() && attachments.length === 0) return;
+    if (isCurrentChannelBlocked) {
+      addToast('This channel is blocked. Unblock it to send messages.', 'error');
+      return;
+    }
     sendMessage(content, attachments);
     setContent('');
     setAttachments([]);
@@ -340,7 +355,7 @@ export const MessageComposer: React.FC = () => {
   }
 
   return (
-    <div className="px-3 sm:px-4 pt-1 pb-2.5 sm:pb-[11px] pb-[calc(0.65rem+env(safe-area-inset-bottom,0px))] bg-[#0B0D12] select-none flex-shrink-0 relative z-10 w-full">
+    <div className="px-3 sm:px-4 pt-0.5 pb-2 sm:pb-2.5 pb-[calc(0.5rem+env(safe-area-inset-bottom,0px))] bg-[#0B0D12] select-none flex-shrink-0 relative z-10 w-full">
       {/* Typing Indicator Bar */}
       {typingUsers.length > 0 ? (
         <div className="h-5 px-1 flex items-center space-x-2 text-[11px] text-[#929BAA] animate-fade-in">
@@ -355,7 +370,7 @@ export const MessageComposer: React.FC = () => {
           <span>{typingUsers.length === 1 ? t('typing_single') : t('typing_plural')}</span>
         </div>
       ) : (
-        <div className="h-1" />
+        <div className="h-0.5" />
       )}
 
       {/* Main Composer Box / WhatsApp Voice Recording Console */}
@@ -412,16 +427,44 @@ export const MessageComposer: React.FC = () => {
             </button>
           </div>
         </div>
+      ) : isOtherUserBlocked ? (
+        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center justify-between text-xs text-red-400">
+          <div className="flex items-center space-x-2">
+            <span className="font-semibold text-[#F5F7FA]">You blocked this contact.</span>
+            <span className="text-[#929BAA] hidden sm:inline">Messages cannot be sent or received.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => dmPartner && unblockUser(dmPartner.id)}
+            className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 font-semibold rounded-lg transition-colors cursor-pointer"
+          >
+            Unblock
+          </button>
+        </div>
+      ) : isCurrentChannelBlocked ? (
+        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center justify-between text-xs text-red-400">
+          <div className="flex items-center space-x-2">
+            <span className="font-semibold text-[#F5F7FA]">#{currentChannel?.name} is blocked.</span>
+            <span className="text-[#929BAA] hidden sm:inline">Messaging is restricted in this channel.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => currentChannel && unblockChannel(currentChannel.id)}
+            className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 font-semibold rounded-lg transition-colors cursor-pointer"
+          >
+            Unblock Channel
+          </button>
+        </div>
       ) : (
       <div className="bg-[#12151C] border border-[#252B36] focus-within:border-[#4F8CFF] rounded-xl overflow-hidden shadow-subtle transition-colors">
         {/* Formatting Toolbar (Highlighted in Image 2 - 100% Functional with active feedback) */}
-        <div className="px-3 py-1.5 bg-[#181C25] border-b border-[#252B36] flex items-center justify-between text-[#929BAA] overflow-x-auto no-scrollbar">
-          <div className="flex items-center space-x-1">
+        <div className="px-2.5 py-1 bg-[#181C25] border-b border-[#252B36] flex items-center justify-between text-[#929BAA] overflow-x-auto no-scrollbar">
+          <div className="flex items-center space-x-0.5 sm:space-x-1">
             {/* Bold */}
             <button
               type="button"
               onClick={() => insertFormat('**', '**', 'bold')}
-              className={`w-7 h-7 flex items-center justify-center rounded text-xs font-bold font-serif transition-colors ${
+              className={`w-6 h-6 flex items-center justify-center rounded text-xs font-bold font-serif transition-colors ${
                 activeFormats.bold ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
               }`}
               title="Bold (**text**)"
@@ -433,7 +476,7 @@ export const MessageComposer: React.FC = () => {
             <button
               type="button"
               onClick={() => insertFormat('*', '*', 'italic')}
-              className={`w-7 h-7 flex items-center justify-center rounded text-xs italic font-serif transition-colors ${
+              className={`w-6 h-6 flex items-center justify-center rounded text-xs italic font-serif transition-colors ${
                 activeFormats.italic ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
               }`}
               title="Italic (*text*)"
@@ -445,7 +488,7 @@ export const MessageComposer: React.FC = () => {
             <button
               type="button"
               onClick={() => insertFormat('~~', '~~', 'strike')}
-              className={`w-7 h-7 flex items-center justify-center rounded text-xs line-through transition-colors ${
+              className={`w-6 h-6 flex items-center justify-center rounded text-xs line-through transition-colors ${
                 activeFormats.strike ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
               }`}
               title="Strikethrough (~~text~~)"
@@ -453,13 +496,13 @@ export const MessageComposer: React.FC = () => {
               S
             </button>
 
-            <div className="w-[1px] h-3.5 bg-[#252B36] mx-1" />
+            <div className="w-[1px] h-3 bg-[#252B36] mx-0.5 sm:mx-1" />
 
             {/* Inline Code */}
             <button
               type="button"
               onClick={() => insertFormat('`', '`', 'inline-code')}
-              className={`w-7 h-7 flex items-center justify-center rounded text-xs font-mono transition-colors ${
+              className={`w-6 h-6 flex items-center justify-center rounded text-xs font-mono transition-colors ${
                 activeFormats['inline-code'] ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
               }`}
               title="Inline Code (`code`)"
@@ -471,17 +514,17 @@ export const MessageComposer: React.FC = () => {
             <button
               type="button"
               onClick={() => insertFormat('```typescript\n', '\n```', 'codeblock')}
-              className="px-2 h-7 flex items-center space-x-1 rounded text-xs font-mono hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
+              className="px-1.5 h-6 flex items-center space-x-1 rounded text-xs font-mono hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
               title="Code Snippet Block"
             >
-              <span className="text-[11px] font-bold">Code</span>
+              <span className="text-[10px] font-bold">Code</span>
             </button>
 
             {/* Blockquote */}
             <button
               type="button"
               onClick={() => insertFormat('> ', '', 'quote')}
-              className="w-7 h-7 flex items-center justify-center rounded text-xs font-serif font-bold hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
+              className="w-6 h-6 flex items-center justify-center rounded text-xs font-serif font-bold hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
               title="Quote (> quote)"
             >
               &ldquo;&rdquo;
@@ -491,25 +534,21 @@ export const MessageComposer: React.FC = () => {
             <button
               type="button"
               onClick={() => insertFormat('- ', '', 'list')}
-              className="w-7 h-7 flex items-center justify-center rounded text-xs font-mono hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
+              className="w-6 h-6 flex items-center justify-center rounded text-xs font-mono hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
               title="Bulleted List (- item)"
             >
               &bull;&equiv;
             </button>
           </div>
-
-          <div className="text-[11px] font-mono text-[#929BAA] hidden sm:block">
-            {t('shift_enter')}
-          </div>
         </div>
 
         {/* Draft Attachments Preview */}
         {attachments.length > 0 && (
-          <div className="p-2.5 bg-[#181C25]/40 border-b border-[#252B36] flex flex-wrap gap-2">
+          <div className="p-2 bg-[#181C25]/40 border-b border-[#252B36] flex flex-wrap gap-1.5">
             {attachments.map((att) => (
               <div
                 key={att.id}
-                className="flex items-center space-x-2 bg-[#181C25] border border-[#252B36] px-2.5 py-1 rounded-lg text-xs"
+                className="flex items-center space-x-2 bg-[#181C25] border border-[#252B36] px-2 py-0.5 rounded-lg text-xs"
               >
                 {att.type === 'image' ? (
                   <ImageIcon className="w-3.5 h-3.5 text-[#4F8CFF]" />
@@ -532,7 +571,7 @@ export const MessageComposer: React.FC = () => {
         )}
 
         {/* Text Input Area */}
-        <div className="p-3">
+        <div className="px-3 py-2">
           <textarea
             ref={textareaRef}
             rows={1}
@@ -540,12 +579,12 @@ export const MessageComposer: React.FC = () => {
             onChange={(e) => setContent(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={placeholderText}
-            className="w-full bg-transparent text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none resize-none leading-relaxed font-sans max-h-48 min-h-[22px]"
+            className="w-full bg-transparent text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none resize-none leading-normal font-sans max-h-48 min-h-[20px]"
           />
         </div>
 
         {/* Composer Bottom Bar (Attachments, Emoji, Voice, Send) */}
-        <div className="h-11 px-3 flex items-center justify-between border-t border-[#252B36]/50">
+        <div className="h-9 px-2.5 flex items-center justify-between border-t border-[#252B36]/40">
           <div className="flex items-center space-x-1">
             {/* File Upload Input */}
             <input
@@ -558,7 +597,7 @@ export const MessageComposer: React.FC = () => {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors"
+              className="p-1 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors"
               title="Add attachment"
             >
               <Paperclip className="w-4 h-4" />
@@ -567,7 +606,7 @@ export const MessageComposer: React.FC = () => {
             {/* Emoji Picker Button */}
             <button
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors relative"
+              className="p-1 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors relative"
               title="Add emoji"
             >
               <Smile className="w-4 h-4" />
@@ -577,7 +616,7 @@ export const MessageComposer: React.FC = () => {
             <button
               type="button"
               onClick={startVoiceRecording}
-              className="p-1.5 rounded-md transition-colors text-[#929BAA] hover:text-[#32C48D] hover:bg-[#181C25] cursor-pointer"
+              className="p-1 rounded-md transition-colors text-[#929BAA] hover:text-[#32C48D] hover:bg-[#181C25] cursor-pointer"
               title="Record voice note (WhatsApp style)"
             >
               <Mic className="w-4 h-4" />
@@ -589,7 +628,7 @@ export const MessageComposer: React.FC = () => {
             type="button"
             onClick={handleSend}
             disabled={!content.trim() && attachments.length === 0}
-            className={`h-8 px-2.5 rounded-lg font-medium text-xs flex items-center space-x-1.5 transition-all ${
+            className={`h-7 px-2.5 rounded-lg font-medium text-xs flex items-center space-x-1 transition-all ${
               content.trim() || attachments.length > 0
                 ? 'bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white shadow-accent-glow cursor-pointer'
                 : 'bg-[#181C25] text-[#929BAA]/50 cursor-not-allowed'

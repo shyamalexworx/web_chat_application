@@ -412,6 +412,27 @@ export async function supabaseSignInWithOAuth(provider: 'google' | 'apple') {
   return data;
 }
 
+/**
+ * Delete a channel and its messages/members from Supabase permanently
+ */
+export async function deleteChannelFromSupabase(channelId: string): Promise<boolean> {
+  if (!isSupabaseConfigured) return true;
+  try {
+    await supabase.from('messages').delete().eq('conversation_id', channelId);
+    await supabase.from('chat_invites').delete().eq('channel_id', channelId);
+    await supabase.from('channel_members').delete().eq('channel_id', channelId);
+    const { error } = await supabase.from('channels').delete().eq('id', channelId);
+    if (error) {
+      console.warn('Supabase deleteChannel error:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Supabase deleteChannel exception:', err);
+    return false;
+  }
+}
+
 export async function supabaseSignOut(userId?: string) {
   if (!isSupabaseConfigured) return;
   if (userId) {
@@ -597,19 +618,26 @@ export async function fetchChannelsFromSupabase(workspaceId: string, userId: str
   // Filter channels accessible to user (public OR user is member)
   return (data || [])
     .filter((ch: any) => !ch.is_private || (ch.channel_members || []).some((m: any) => m.user_id === userId))
-    .map((ch: any) => ({
-      id: ch.id,
-      workspaceId: ch.workspace_id,
-      name: ch.name,
-      topic: ch.topic || '',
-      description: ch.description || '',
-      isPrivate: Boolean(ch.is_private),
-      memberIds: (ch.channel_members || []).map((m: any) => m.user_id),
-      createdBy: ch.created_by || 'system',
-      createdAt: ch.created_at || new Date().toISOString(),
-      unreadCount: 0,
-      isStarred: false,
-    }));
+    .map((ch: any) => {
+      let customAvatar: string | undefined = undefined;
+      try {
+        customAvatar = localStorage.getItem('pulsechat_custom_channel_avatar_' + ch.id) || undefined;
+      } catch (e) {}
+      return {
+        id: ch.id,
+        workspaceId: ch.workspace_id,
+        name: ch.name,
+        topic: ch.topic || '',
+        description: ch.description || '',
+        avatar: customAvatar,
+        isPrivate: Boolean(ch.is_private),
+        memberIds: (ch.channel_members || []).map((m: any) => m.user_id),
+        createdBy: ch.created_by || 'system',
+        createdAt: ch.created_at || new Date().toISOString(),
+        unreadCount: 0,
+        isStarred: false,
+      };
+    });
 }
 
 /**
@@ -658,6 +686,8 @@ export async function saveChannelToSupabase(channel: {
 
   return data;
 }
+
+
 
 /**
  * Fetch conversations (DMs & groups) where user is participant
@@ -744,6 +774,8 @@ export async function saveConversationToSupabase(conv: {
 
   return data;
 }
+
+
 
 /**
  * Fetch messages for a conversation/channel from Supabase
@@ -845,6 +877,8 @@ export async function saveMessageToSupabase(msg: {
   return data;
 }
 
+
+
 /**
  * Delete message from Supabase
  */
@@ -883,6 +917,8 @@ export async function updateMessageInSupabase(
   return data;
 }
 
+
+
 /**
  * Update user profile in Supabase
  */
@@ -916,6 +952,8 @@ export async function updateProfileInSupabase(
   }
   return data;
 }
+
+
 
 /**
  * Fetch workspaces from Supabase, filtering by user membership/ownership if userId provided
@@ -956,19 +994,26 @@ export async function fetchWorkspacesFromSupabase(userId?: string) {
         })
       : list;
 
-    return accessible.map((w: any) => ({
-      id: w.id,
-      name: w.name,
-      slug: w.slug,
-      icon: w.icon || '⚡',
-      iconBg: w.icon_bg || '#4F8CFF',
-      description: w.name + ' workspace',
-      ownerId: w.created_by || 'system',
-      memberIds: (w.workspace_members || []).map((m: any) => m.user_id),
-      membersCount: Math.max(1, (w.workspace_members || []).length),
-      plan: w.plan || 'Pro',
-      createdAt: w.created_at || new Date().toISOString(),
-    }));
+    return accessible.map((w: any) => {
+      let customAvatar: string | undefined = undefined;
+      try {
+        customAvatar = localStorage.getItem('pulsechat_custom_workspace_avatar_' + w.id) || undefined;
+      } catch (e) {}
+      return {
+        id: w.id,
+        name: w.name,
+        slug: w.slug,
+        icon: w.icon || '⚡',
+        iconBg: w.icon_bg || '#4F8CFF',
+        description: w.name + ' workspace',
+        avatar: customAvatar,
+        ownerId: w.created_by || 'system',
+        memberIds: (w.workspace_members || []).map((m: any) => m.user_id),
+        membersCount: Math.max(1, (w.workspace_members || []).length),
+        plan: w.plan || 'Pro',
+        createdAt: w.created_at || new Date().toISOString(),
+      };
+    });
   } catch (err) {
     console.warn('fetchWorkspacesFromSupabase exception:', err);
     return [];
@@ -1022,6 +1067,8 @@ export async function saveWorkspaceToSupabase(ws: {
   return data;
 }
 
+
+
 /**
  * Delete workspace from Supabase and cascade delete its channels and messages
  */
@@ -1040,6 +1087,29 @@ export async function deleteWorkspaceFromSupabase(workspaceId: string): Promise<
     return true;
   } catch (err) {
     console.warn('Supabase deleteWorkspace notice:', err);
+    return false;
+  }
+}
+
+
+
+/**
+ * Delete a conversation (DM or group chat) and its messages/participants permanently from Supabase
+ */
+export async function deleteConversationFromSupabase(conversationId: string): Promise<boolean> {
+  if (!isSupabaseConfigured) return true;
+  try {
+    await supabase.from('messages').delete().eq('conversation_id', conversationId);
+    await supabase.from('chat_invites').delete().eq('conversation_id', conversationId);
+    await supabase.from('conversation_participants').delete().eq('conversation_id', conversationId);
+    const { error } = await supabase.from('conversations').delete().eq('id', conversationId);
+    if (error) {
+      console.warn('Supabase deleteConversation error:', error);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn('Supabase deleteConversation exception:', err);
     return false;
   }
 }

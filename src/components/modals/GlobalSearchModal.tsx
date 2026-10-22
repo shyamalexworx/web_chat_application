@@ -166,7 +166,7 @@ export const GlobalSearchModal: React.FC = () => {
             className="flex-1 bg-transparent text-sm text-[#F5F7FA] placeholder-[#929BAA] outline-none"
             autoFocus
           />
-          <kbd className="text-[10px] bg-[#181C25] border border-[#252B36] px-2 py-1 rounded text-[#929BAA] font-mono">
+          <kbd className="hidden md:inline-block text-[10px] bg-[#181C25] border border-[#252B36] px-2 py-1 rounded text-[#929BAA] font-mono">
             ESC
           </kbd>
           <button

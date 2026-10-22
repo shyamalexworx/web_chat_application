@@ -27,9 +27,11 @@ import {
   Ban,
   ShieldAlert,
   UserCheck,
+  Edit2,
 } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
 import { compressImageFile } from '../../utils/imageCompressor';
+import { uploadChatMedia, isSupabaseConfigured } from '../../lib/supabase';
 
 export const RightInfoPanel: React.FC = () => {
   const {
@@ -66,6 +68,8 @@ export const RightInfoPanel: React.FC = () => {
   const [confirmDeleteChannel, setConfirmDeleteChannel] = useState(false);
   const [confirmDeleteDM, setConfirmDeleteDM] = useState(false);
   const [activeMemberActionId, setActiveMemberActionId] = useState<string | null>(null);
+  const [isEditingDescription, setIsEditingDescription] = useState(false);
+  const [descriptionDraft, setDescriptionDraft] = useState('');
 
   if (!isRightPanelOpen) return null;
 
@@ -131,14 +135,48 @@ export const RightInfoPanel: React.FC = () => {
     };
   });
 
+  const isChannelCreator = Boolean(activeChannel && activeChannel.createdBy === currentUser.id);
+  const isChannelAdmin = Boolean(activeChannel && activeChannel.adminIds?.includes(currentUser.id));
+  const canEditChannel = isChannelCreator || isChannelAdmin || Boolean(activeChannel?.allowMemberEdits);
+
+  React.useEffect(() => {
+    setIsEditingDescription(false);
+    setDescriptionDraft('');
+  }, [activeChannel?.id]);
+
+  const handleStartEditDescription = () => {
+    setDescriptionDraft(activeChannel?.description || '');
+    setIsEditingDescription(true);
+  };
+
+  const handleSaveDescription = () => {
+    if (!activeChannel) return;
+    updateChannelDetails(activeChannel.id, { description: descriptionDraft.trim() });
+    setIsEditingDescription(false);
+    addToast('Channel description updated', 'success');
+  };
+
   const handleChannelAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!activeChannel) return;
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const compressedDataUrl = await compressImageFile(file, 256, 256, 0.82);
+      // Immediately set local avatar so UI responds instantly
       updateChannelDetails(activeChannel.id, { avatar: compressedDataUrl });
       addToast('Channel profile picture updated', 'success');
+
+      // Upload to cloud storage for a fast permanent public URL accessible to all users
+      try {
+        if (isSupabaseConfigured) {
+          const uploaded = await uploadChatMedia(file, file.name, 'images');
+          if (uploaded?.url) {
+            updateChannelDetails(activeChannel.id, { avatar: uploaded.url });
+          }
+        }
+      } catch (cloudErr) {
+        console.warn('Channel cloud avatar notice:', cloudErr);
+      }
     } catch (err) {
       addToast('Failed to process channel image', 'error');
     }
@@ -283,49 +321,135 @@ export const RightInfoPanel: React.FC = () => {
                       )}
                     </div>
                     <div className="space-y-1">
-                      <div className="flex items-center space-x-2">
-                        <label className="px-2 py-0.5 bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 border border-[#4F8CFF]/30 text-[#4F8CFF] text-xs font-medium rounded cursor-pointer transition-colors flex items-center gap-1.5">
-                          <Upload className="w-3 h-3" />
-                          <span>Change Picture</span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={handleChannelAvatarChange}
-                          />
-                        </label>
-                        {activeChannel.avatar && (
-                          <button
-                            type="button"
-                            onClick={() => updateChannelDetails(activeChannel.id, { avatar: undefined })}
-                            className="px-1.5 py-0.5 text-xs text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#12151C] rounded transition-colors cursor-pointer"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-[#929BAA]">Square image, PNG or JPG, max 5MB.</p>
+                      {canEditChannel ? (
+                        <>
+                          <div className="flex items-center space-x-2">
+                            <label className="px-2 py-0.5 bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 border border-[#4F8CFF]/30 text-[#4F8CFF] text-xs font-medium rounded cursor-pointer transition-colors flex items-center gap-1.5">
+                              <Upload className="w-3 h-3" />
+                              <span>Change Picture</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={handleChannelAvatarChange}
+                              />
+                            </label>
+                            {activeChannel.avatar && (
+                              <button
+                                type="button"
+                                onClick={() => updateChannelDetails(activeChannel.id, { avatar: undefined })}
+                                className="px-1.5 py-0.5 text-xs text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#12151C] rounded transition-colors cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-[#929BAA]">Square image, PNG or JPG, max 5MB.</p>
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-[#929BAA]">
+                          Only channel creator or admins can update this picture.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
 
-                <div className="p-2.5 bg-[#181C25] rounded-lg border border-[#252B36] space-y-1">
-                  <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider">
-                    Topic
+                {/* Channel Description */}
+                <div className="p-2.5 bg-[#181C25] rounded-lg border border-[#252B36] space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider">
+                      Description
+                    </div>
+                    {canEditChannel && !isEditingDescription && (
+                      <button
+                        type="button"
+                        onClick={handleStartEditDescription}
+                        className="text-[11px] text-[#4F8CFF] hover:text-[#70A3FF] flex items-center gap-1 font-medium transition-colors cursor-pointer"
+                        title="Edit channel description"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                        <span>Edit</span>
+                      </button>
+                    )}
                   </div>
-                  <p className="text-[#F5F7FA] leading-snug">
-                    {activeChannel.topic || 'No topic configured.'}
-                  </p>
+                  {isEditingDescription ? (
+                    <div className="space-y-2 pt-1">
+                      <textarea
+                        value={descriptionDraft}
+                        onChange={(e) => setDescriptionDraft(e.target.value)}
+                        placeholder="Add a description for this channel..."
+                        rows={3}
+                        className="w-full px-2.5 py-1.5 bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded text-xs text-[#F5F7FA] placeholder-[#929BAA] resize-none outline-none focus:ring-1 focus:ring-[#4F8CFF]"
+                        autoFocus
+                      />
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={handleSaveDescription}
+                          className="px-2.5 py-1 bg-[#4F8CFF] hover:bg-[#3D7BF0] text-white text-xs font-medium rounded transition-colors cursor-pointer"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsEditingDescription(false)}
+                          className="px-2 py-1 bg-[#252B36] hover:bg-[#323A4A] text-[#929BAA] hover:text-[#F5F7FA] text-xs rounded transition-colors cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[#F5F7FA] leading-snug whitespace-pre-wrap break-words">
+                      {activeChannel.description || 'No description provided.'}
+                    </p>
+                  )}
                 </div>
 
-                <div className="p-2.5 bg-[#181C25] rounded-lg border border-[#252B36] space-y-1">
-                  <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider">
-                    Description
+                {/* Allow Member Edits Toggle - Visible ONLY to the creator of the channel */}
+                {isChannelCreator && (
+                  <div className="p-2.5 bg-[#181C25] rounded-lg border border-[#252B36] space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="space-y-0.5">
+                        <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider">
+                          Member Permissions
+                        </div>
+                        <p className="text-xs font-medium text-[#F5F7FA]">
+                          Allow members to edit picture & description
+                        </p>
+                        <p className="text-[10px] text-[#929BAA] leading-snug">
+                          When enabled, all members in this channel can edit the channel profile picture and description.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={Boolean(activeChannel.allowMemberEdits)}
+                        onClick={() => {
+                          const nextVal = !activeChannel.allowMemberEdits;
+                          updateChannelDetails(activeChannel.id, { allowMemberEdits: nextVal });
+                          addToast(
+                            nextVal
+                              ? 'Channel members can now edit profile picture & description'
+                              : 'Channel member edits disabled',
+                            'info'
+                          );
+                        }}
+                        className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          activeChannel.allowMemberEdits ? 'bg-[#4F8CFF]' : 'bg-[#252B36]'
+                        }`}
+                        title={activeChannel.allowMemberEdits ? 'Disable member editing' : 'Enable member editing'}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                            activeChannel.allowMemberEdits ? 'translate-x-4' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-[#F5F7FA] leading-snug">
-                    {activeChannel.description || 'No description provided.'}
-                  </p>
-                </div>
+                )}
 
                 <div className="p-2.5 bg-[#181C25] rounded-lg border border-[#252B36] space-y-1.5">
                   <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider">

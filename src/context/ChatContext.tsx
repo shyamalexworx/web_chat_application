@@ -54,6 +54,8 @@ import {
   saveInviteToSupabase,
   updateInviteStatusInSupabase,
   resolveUserByEmailOrUsername,
+  markMessagesAsReadInSupabase,
+  markMessagesAsDeliveredInSupabase,
 } from '../lib/supabase';
 
 const STORAGE_KEY_PREFIX = 'pulsechat_v6_fresh_';
@@ -566,6 +568,62 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => { activeViewRef.current = activeView; }, [activeView]);
   useEffect(() => { currentUserIdRef.current = currentUserId; }, [currentUserId]);
 
+  const broadcastDeliveryStatus = useCallback((conversationId: string, messageId: string) => {
+    const myId = currentUserIdRef.current;
+    if (!myId || !messageId) return;
+    const payload = { id: messageId, conversationId, recipientId: myId };
+    try {
+      localBroadcastRef.current?.postMessage({
+        type: 'message_delivered',
+        payload,
+      });
+      if (isSupabaseConfigured && realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'message_delivered',
+          payload,
+        }).catch(() => {});
+      }
+      markMessagesAsDeliveredInSupabase([messageId], myId).catch(() => {});
+    } catch (e) {}
+  }, []);
+
+  const broadcastReadStatus = useCallback((conversationId: string, messageIds?: string[]) => {
+    const myId = currentUserIdRef.current;
+    if (!myId || !conversationId) return;
+
+    let canonicalId: string | undefined = undefined;
+    const currentDMs = dmsRef.current;
+    const activeDM = currentDMs.find((d) => d.id === conversationId);
+    if (activeDM && !activeDM.isGroup && activeDM.participantIds?.length === 2) {
+      canonicalId = getCanonicalDMId(activeDM.participantIds[0], activeDM.participantIds[1]);
+    }
+
+    const payload = {
+      conversationId,
+      canonicalId,
+      readerId: myId,
+      messageIds,
+    };
+
+    try {
+      localBroadcastRef.current?.postMessage({
+        type: 'conversation_read',
+        payload,
+      });
+      if (isSupabaseConfigured && realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'conversation_read',
+          payload,
+        }).catch(() => {});
+      }
+      if (messageIds && messageIds.length > 0) {
+        markMessagesAsReadInSupabase(messageIds, myId).catch(() => {});
+      }
+    } catch (e) {}
+  }, []);
+
   // Translation State
   const [isTranslationOpen, setIsTranslationOpen] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState('en');
@@ -1023,7 +1081,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else if (type === 'message_delivered' && payload?.id) {
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === payload.id && m.deliveryStatus !== 'read'
+                m.id === payload.id && m.deliveryStatus === 'sent'
+                  ? { ...m, deliveryStatus: 'delivered' }
+                  : m
+              )
+            );
+          } else if (type === 'conversation_delivered' && payload?.conversationId) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                (m.conversationId === payload.conversationId || (payload.canonicalId && m.conversationId === payload.canonicalId)) &&
+                m.senderId === currentUserIdRef.current &&
+                m.deliveryStatus === 'sent'
                   ? { ...m, deliveryStatus: 'delivered' }
                   : m
               )
@@ -1031,13 +1099,16 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else if (type === 'message_read' && payload?.id) {
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === payload.id ? { ...m, deliveryStatus: 'read' } : m
+                m.id === payload.id ? { ...m, deliveryStatus: 'read' as const } : m
               )
             );
           } else if (type === 'conversation_read' && payload?.conversationId) {
             setMessages((prev) =>
               prev.map((m) =>
-                (m.conversationId === payload.conversationId || (payload.readerId && m.conversationId.includes(payload.readerId))) &&
+                (m.conversationId === payload.conversationId ||
+                  (payload.canonicalId && (m.conversationId === payload.canonicalId || payload.canonicalId.includes(m.conversationId))) ||
+                  (payload.messageIds && payload.messageIds.includes(m.id)) ||
+                  (payload.readerId && m.conversationId.includes(payload.readerId))) &&
                 m.senderId === currentUserIdRef.current
                   ? { ...m, deliveryStatus: 'read' as const }
                   : m
@@ -1046,6 +1117,39 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } else if (type === 'profile_updated' && payload?.userId) {
             setUsers((prev) =>
               prev.map((u) => (u.id === payload.userId ? { ...u, ...payload.updates } : u))
+            );
+          } else if (type === 'workspace_updated' && payload?.workspaceId) {
+            const { workspaceId, updates } = payload;
+            if (updates?.avatar !== undefined) {
+              try {
+                if (updates.avatar) {
+                  safeSetLocalStorage('pulsechat_custom_workspace_avatar_' + workspaceId, updates.avatar);
+                } else {
+                  localStorage.removeItem('pulsechat_custom_workspace_avatar_' + workspaceId);
+                }
+              } catch (e) {}
+            }
+            setWorkspaces((prev) =>
+              prev.map((w) => (w.id === workspaceId ? { ...w, ...updates } : w))
+            );
+          } else if (type === 'channel_updated' && payload?.channelId) {
+            const { channelId, updates } = payload;
+            if (updates?.avatar !== undefined) {
+              try {
+                if (updates.avatar) {
+                  safeSetLocalStorage('pulsechat_custom_channel_avatar_' + channelId, updates.avatar);
+                } else {
+                  localStorage.removeItem('pulsechat_custom_channel_avatar_' + channelId);
+                }
+              } catch (e) {}
+            }
+            if (updates?.allowMemberEdits !== undefined) {
+              try {
+                safeSetLocalStorage('pulsechat_channel_allow_edits_' + channelId, String(updates.allowMemberEdits));
+              } catch (e) {}
+            }
+            setChannels((prev) =>
+              prev.map((c) => (c.id === channelId ? { ...c, ...updates } : c))
             );
           }
         };
@@ -1137,8 +1241,29 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return [...prev, msgToStore];
       });
 
-      // If sent by someone else, play sound and trigger notification (unless channel or workspace is blocked)
+      // If sent by someone else, acknowledge receipt / read status and trigger notification
       if (msgToStore.senderId !== currentUserIdRef.current) {
+        const currentActive = activeViewRef.current;
+        const isViewing =
+          currentActive?.id === msgToStore.conversationId ||
+          (currentActive?.type === 'dm' &&
+            dmsRef.current.some(
+              (d) =>
+                d.id === currentActive?.id &&
+                !d.isGroup &&
+                Array.isArray(d.participantIds) &&
+                d.participantIds.includes(msgToStore.senderId)
+            ));
+        const isVisible = typeof document !== 'undefined' ? document.visibilityState === 'visible' : true;
+
+        if (isViewing && isVisible) {
+          msgToStore.deliveryStatus = 'read';
+          broadcastReadStatus(msgToStore.conversationId, [msgToStore.id]);
+        } else {
+          msgToStore.deliveryStatus = 'delivered';
+          broadcastDeliveryStatus(msgToStore.conversationId, msgToStore.id);
+        }
+
         const isChanBlocked = msgToStore.conversationType === 'channel' && blockedChannelIdsRef.current.includes(msgToStore.conversationId);
         const latestChannels = channelsRef.current;
         const targetChan = msgToStore.conversationType === 'channel' ? latestChannels.find((c) => c.id === msgToStore.conversationId) : null;
@@ -1339,12 +1464,51 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const data = payload?.payload;
         if (data) handleMemberJoinedChannel(data);
       })
+      .on('broadcast', { event: 'message_delivered' }, (payload) => {
+        const data = payload?.payload;
+        if (data?.id) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === data.id && m.deliveryStatus === 'sent'
+                ? { ...m, deliveryStatus: 'delivered' }
+                : m
+            )
+          );
+        }
+      })
+      .on('broadcast', { event: 'conversation_delivered' }, (payload) => {
+        const data = payload?.payload;
+        if (data?.conversationId) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              (m.conversationId === data.conversationId || (data.canonicalId && m.conversationId === data.canonicalId)) &&
+              m.senderId === currentUserIdRef.current &&
+              m.deliveryStatus === 'sent'
+                ? { ...m, deliveryStatus: 'delivered' }
+                : m
+            )
+          );
+        }
+      })
+      .on('broadcast', { event: 'message_read' }, (payload) => {
+        const data = payload?.payload;
+        if (data?.id) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === data.id ? { ...m, deliveryStatus: 'read' as const } : m
+            )
+          );
+        }
+      })
       .on('broadcast', { event: 'conversation_read' }, (payload) => {
         const data = payload?.payload;
         if (data?.conversationId) {
           setMessages((prev) =>
             prev.map((m) =>
-              (m.conversationId === data.conversationId || (data.readerId && m.conversationId.includes(data.readerId))) &&
+              (m.conversationId === data.conversationId ||
+                (data.canonicalId && (m.conversationId === data.canonicalId || data.canonicalId.includes(m.conversationId))) ||
+                (data.messageIds && data.messageIds.includes(m.id)) ||
+                (data.readerId && m.conversationId.includes(data.readerId))) &&
               m.senderId === currentUserIdRef.current
                 ? { ...m, deliveryStatus: 'read' as const }
                 : m
@@ -1495,6 +1659,45 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           );
         }
       })
+      .on('broadcast', { event: 'workspace_updated' }, (payload) => {
+        if (isMounted && payload?.payload?.workspaceId) {
+          const { workspaceId, updates } = payload.payload;
+          if (updates?.avatar !== undefined) {
+            try {
+              if (updates.avatar) {
+                safeSetLocalStorage('pulsechat_custom_workspace_avatar_' + workspaceId, updates.avatar);
+              } else {
+                localStorage.removeItem('pulsechat_custom_workspace_avatar_' + workspaceId);
+              }
+            } catch (e) {}
+          }
+          setWorkspaces((prev) =>
+            prev.map((w) => (w.id === workspaceId ? { ...w, ...updates } : w))
+          );
+        }
+      })
+      .on('broadcast', { event: 'channel_updated' }, (payload) => {
+        if (isMounted && payload?.payload?.channelId) {
+          const { channelId, updates } = payload.payload;
+          if (updates?.avatar !== undefined) {
+            try {
+              if (updates.avatar) {
+                safeSetLocalStorage('pulsechat_custom_channel_avatar_' + channelId, updates.avatar);
+              } else {
+                localStorage.removeItem('pulsechat_custom_channel_avatar_' + channelId);
+              }
+            } catch (e) {}
+          }
+          if (updates?.allowMemberEdits !== undefined) {
+            try {
+              safeSetLocalStorage('pulsechat_channel_allow_edits_' + channelId, String(updates.allowMemberEdits));
+            } catch (e) {}
+          }
+          setChannels((prev) =>
+            prev.map((c) => (c.id === channelId ? { ...c, ...updates } : c))
+          );
+        }
+      })
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'chat_invites' },
@@ -1599,11 +1802,23 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!activeView.id || !currentUserId) return;
 
     // 1. Mark all incoming messages in this conversation as read
+    const unreadMessageIds: string[] = [];
     setMessages((prev) => {
       let changed = false;
       const updated = prev.map((m) => {
-        if (m.conversationId === activeView.id && m.senderId !== currentUserId && m.deliveryStatus !== 'read') {
+        const isThisConv =
+          m.conversationId === activeView.id ||
+          (activeView.type === 'dm' &&
+            dmsRef.current.some(
+              (d) =>
+                d.id === activeView.id &&
+                !d.isGroup &&
+                Array.isArray(d.participantIds) &&
+                d.participantIds.includes(m.senderId)
+            ));
+        if (isThisConv && m.senderId !== currentUserId && m.deliveryStatus !== 'read') {
           changed = true;
+          unreadMessageIds.push(m.id);
           return { ...m, deliveryStatus: 'read' as const };
         }
         return m;
@@ -1611,21 +1826,9 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return changed ? updated : prev;
     });
 
-    // 2. Broadcast conversation_read to sender so their ticks update to double cyan/blue in real time
-    try {
-      localBroadcastRef.current?.postMessage({
-        type: 'conversation_read',
-        payload: { conversationId: activeView.id, readerId: currentUserId },
-      });
-      if (isSupabaseConfigured && realtimeChannelRef.current) {
-        realtimeChannelRef.current.send({
-          type: 'broadcast',
-          event: 'conversation_read',
-          payload: { conversationId: activeView.id, readerId: currentUserId },
-        }).catch(() => {});
-      }
-    } catch (e) {}
-  }, [activeView.id, currentUserId, isSupabaseConfigured]);
+    // 2. Broadcast conversation_read to sender so their ticks update in real time
+    broadcastReadStatus(activeView.id, unreadMessageIds);
+  }, [activeView.id, currentUserId, broadcastReadStatus]);
 
   // Live Active Conversation Sync & Continuous Real-time Polling
   useEffect(() => {
@@ -1674,9 +1877,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 JSON.stringify(existing.reactions) !== JSON.stringify(normalizedM.reactions) ||
                 existing.isPinned !== normalizedM.isPinned ||
                 existing.editedAt !== normalizedM.editedAt ||
-                existing.conversationId !== normalizedM.conversationId
+                existing.conversationId !== normalizedM.conversationId ||
+                (normalizedM.deliveryStatus === 'read' && existing.deliveryStatus !== 'read') ||
+                (normalizedM.deliveryStatus === 'delivered' && existing.deliveryStatus === 'sent')
               ) {
-                map.set(normalizedM.id, { ...existing, ...normalizedM });
+                const nextDelivery =
+                  (existing.deliveryStatus === 'read' || normalizedM.deliveryStatus === 'read')
+                    ? 'read'
+                    : (existing.deliveryStatus === 'delivered' || normalizedM.deliveryStatus === 'delivered')
+                    ? 'delivered'
+                    : (existing.deliveryStatus || normalizedM.deliveryStatus || 'sent');
+
+                map.set(normalizedM.id, { ...existing, ...normalizedM, deliveryStatus: nextDelivery });
                 hasChanges = true;
               }
             });
@@ -2248,8 +2460,34 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       safeSetLocalStorage(STORAGE_KEY_PREFIX + 'workspaces', JSON.stringify(next));
       return next;
     });
+
+    // 1. Broadcast across local browser tabs
+    try {
+      if (localBroadcastRef.current) {
+        localBroadcastRef.current.postMessage({
+          type: 'workspace_updated',
+          payload: { workspaceId: id, updates },
+        });
+      }
+    } catch (e) {}
+
+    // 2. Broadcast across Supabase clients in real-time
+    try {
+      if (realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'workspace_updated',
+          payload: { workspaceId: id, updates },
+        });
+      }
+    } catch (e) {}
+
     if (isSupabaseConfigured) {
-      updateWorkspaceInSupabase(id, { name: updates.name, iconBg: updates.iconBg }).catch((err) =>
+      updateWorkspaceInSupabase(id, {
+        name: updates.name,
+        iconBg: updates.iconBg,
+        avatar: updates.avatar,
+      }).catch((err) =>
         console.warn('Supabase updateWorkspace notice:', err)
       );
     }
@@ -2530,16 +2768,45 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } catch (e) {}
     }
+    if (updates.allowMemberEdits !== undefined) {
+      try {
+        safeSetLocalStorage('pulsechat_channel_allow_edits_' + channelId, String(updates.allowMemberEdits));
+      } catch (e) {}
+    }
     setChannels((prev) => {
       const next = prev.map((c) => (c.id === channelId ? { ...c, ...updates } : c));
       safeSetLocalStorage(STORAGE_KEY_PREFIX + 'channels', JSON.stringify(next));
       return next;
     });
+
+    // 1. Broadcast across local browser tabs
+    try {
+      if (localBroadcastRef.current) {
+        localBroadcastRef.current.postMessage({
+          type: 'channel_updated',
+          payload: { channelId, updates },
+        });
+      }
+    } catch (e) {}
+
+    // 2. Broadcast across Supabase clients in real-time
+    try {
+      if (realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'channel_updated',
+          payload: { channelId, updates },
+        });
+      }
+    } catch (e) {}
+
     if (isSupabaseConfigured) {
       updateChannelInSupabase(channelId, {
         name: updates.name,
         topic: updates.topic,
         description: updates.description,
+        avatar: updates.avatar,
+        allowMemberEdits: updates.allowMemberEdits,
       }).catch((err) => console.warn('Supabase updateChannel notice:', err));
     }
     addToast('Channel details updated', 'success');
@@ -3296,7 +3563,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Encrypt message with AES-256-GCM and persist to Supabase
       encryptMessage(cleanContent, targetConvId).then((payload) => {
         setMessages((prev) =>
-          prev.map((m) => (m.id === msgId ? { ...m, encryptedPayload: payload, deliveryStatus: 'delivered' } : m))
+          prev.map((m) => (m.id === msgId ? { ...m, encryptedPayload: payload } : m))
         );
 
         if (isSupabaseConfigured) {
@@ -3310,10 +3577,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             attachments: attachments && attachments.length > 0 ? attachments : [],
             reactions: {},
             encryptedPayload: payload,
-          }).then(() => {
-            setMessages((prev) =>
-              prev.map((m) => (m.id === msgId ? { ...m, deliveryStatus: 'delivered' } : m))
-            );
           }).catch((err) => {
             console.warn('Supabase saveMessage error:', err);
           });
@@ -3354,7 +3617,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
     },
-    [activeView, currentUserId, activeWorkspaceId, dms, addToast]
+    [activeView, currentUserId, activeWorkspaceId, dms, blockedUserIds, addToast]
   );
 
   // Edit Message
@@ -3629,7 +3892,7 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       encryptMessage(cleanContent, parentMsg.conversationId).then((payload) => {
         setMessages((prev) =>
-          prev.map((m) => (m.id === replyId ? { ...m, encryptedPayload: payload, deliveryStatus: 'delivered' } : m))
+          prev.map((m) => (m.id === replyId ? { ...m, encryptedPayload: payload } : m))
         );
         if (isSupabaseConfigured) {
           saveMessageToSupabase({
@@ -3643,10 +3906,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
             attachments: [],
             reactions: {},
             encryptedPayload: payload,
-          }).then(() => {
-            setMessages((prev) =>
-              prev.map((m) => (m.id === replyId ? { ...m, deliveryStatus: 'delivered' } : m))
-            );
           }).catch((err) => console.warn('Supabase saveThreadReply notice:', err));
         }
       });

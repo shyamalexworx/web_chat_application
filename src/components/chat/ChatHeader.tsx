@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useChat } from '../../context/ChatContext';
 import {
   Hash,
@@ -6,9 +6,6 @@ import {
   Star,
   Users,
   PanelRight,
-  Edit2,
-  Check,
-  X,
   Menu,
   Clock,
   Pin,
@@ -33,9 +30,6 @@ export const ChatHeader: React.FC = () => {
     toggleSidebarCollapsed,
     t,
   } = useChat();
-
-  const [isEditingTopic, setIsEditingTopic] = useState(false);
-  const [topicDraft, setTopicDraft] = useState('');
 
   const activeChannel = activeView.type === 'channel'
     ? channels.find((c) => c.id === activeView.id)
@@ -70,13 +64,6 @@ export const ChatHeader: React.FC = () => {
   }, [messages, activeView, activeDM, isMessagePinnedByMe]);
 
   const hasPinnedByMe = pinnedMessagesByMe.length > 0;
-
-  const handleSaveTopic = () => {
-    if (activeChannel) {
-      updateChannelDetails(activeChannel.id, { topic: topicDraft });
-      setIsEditingTopic(false);
-    }
-  };
 
   return (
     <header className="hidden md:flex h-11 min-h-[44px] flex-shrink-0 bg-[#0F1117] border-b border-[#252B36] px-3 sm:px-4 items-center justify-between select-none z-10">
@@ -121,44 +108,18 @@ export const ChatHeader: React.FC = () => {
 
             <div className="h-4 w-[1px] bg-[#252B36] mx-1 flex-shrink-0" />
 
-            {/* Editable Topic */}
-            {isEditingTopic ? (
-              <div className="flex items-center space-x-1 flex-1 max-w-md">
-                <input
-                  type="text"
-                  value={topicDraft}
-                  onChange={(e) => setTopicDraft(e.target.value)}
-                  className="bg-[#12151C] border border-[#4F8CFF] rounded px-2 py-0.5 text-xs text-[#F5F7FA] outline-none w-full"
-                  autoFocus
-                />
-                <button
-                  onClick={handleSaveTopic}
-                  className="p-1 hover:bg-[#181C25] rounded text-[#32C48D]"
-                  title="Save topic"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => setIsEditingTopic(false)}
-                  className="p-1 hover:bg-[#181C25] rounded text-[#F05D6C]"
-                  title="Cancel"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <div
-                onClick={() => {
-                  setTopicDraft(activeChannel.topic);
-                  setIsEditingTopic(true);
-                }}
-                className="text-xs text-[#929BAA] truncate cursor-pointer hover:text-[#F5F7FA] flex items-center gap-1 group"
-                title="Click to edit topic"
-              >
-                <span className="truncate">{activeChannel.topic || 'Add a topic...'}</span>
-                <Edit2 className="w-3 h-3 opacity-0 group-hover:opacity-100 text-[#4F8CFF] flex-shrink-0 transition-opacity" />
-              </div>
-            )}
+            {/* Channel Description (Clicking opens details panel) */}
+            <button
+              type="button"
+              onClick={() => {
+                setRightPanelTab('details');
+                setIsRightPanelOpen(true);
+              }}
+              className="text-xs text-[#929BAA] truncate cursor-pointer hover:text-[#F5F7FA] flex items-center gap-1 group text-left max-w-xs sm:max-w-md transition-colors"
+              title="Click to view channel description in details"
+            >
+              <span className="truncate">{activeChannel.description || 'Add a description...'}</span>
+            </button>
           </>
         ) : activeDM ? (
           <>

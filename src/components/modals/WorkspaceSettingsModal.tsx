@@ -3,13 +3,10 @@ import { useChat } from '../../context/ChatContext';
 import {
   X,
   Settings,
-  Users,
-  Shield,
   Link,
   Copy,
   Trash2,
   Check,
-  Building2,
   Upload,
   ShieldAlert,
   ShieldCheck,
@@ -17,6 +14,7 @@ import {
 } from 'lucide-react';
 import { compressImageFile } from '../../utils/imageCompressor';
 import { resolveUserAvatar } from '../../utils/avatar';
+import { uploadChatMedia, isSupabaseConfigured } from '../../lib/supabase';
 
 export const WorkspaceSettingsModal: React.FC = () => {
   const {
@@ -60,8 +58,21 @@ export const WorkspaceSettingsModal: React.FC = () => {
     if (!file) return;
     try {
       const compressedDataUrl = await compressImageFile(file, 256, 256, 0.82);
+      // Immediately set local avatar so UI responds instantly
       updateWorkspace(activeWorkspace.id, { avatar: compressedDataUrl });
       addToast('Workspace profile picture updated', 'success');
+
+      // Upload to cloud storage for a fast permanent public URL accessible to all users
+      try {
+        if (isSupabaseConfigured) {
+          const uploaded = await uploadChatMedia(file, file.name, 'images');
+          if (uploaded?.url) {
+            updateWorkspace(activeWorkspace.id, { avatar: uploaded.url });
+          }
+        }
+      } catch (cloudErr) {
+        console.warn('Workspace cloud avatar notice:', cloudErr);
+      }
     } catch (err) {
       addToast('Failed to process workspace image', 'error');
     }
@@ -117,10 +128,10 @@ export const WorkspaceSettingsModal: React.FC = () => {
         </div>
 
         {/* Tab Strip */}
-        <div className="px-4 border-b border-[#252B36] flex items-center space-x-1 bg-[#12151C]/60 text-xs">
+        <div className="px-2 md:px-4 border-b border-[#252B36] flex items-center space-x-0.5 md:space-x-1 bg-[#12151C]/60 text-xs overflow-x-auto no-scrollbar">
           <button
             onClick={() => setActiveTab('general')}
-            className={`px-3 py-1.5 border-b-2 font-medium transition-colors ${
+            className={`whitespace-nowrap flex-shrink-0 text-[11px] md:text-xs px-2 md:px-3 py-1.5 border-b-2 font-medium transition-colors cursor-pointer ${
               activeTab === 'general'
                 ? 'border-[#4F8CFF] text-[#4F8CFF]'
                 : 'border-transparent text-[#929BAA] hover:text-[#F5F7FA]'
@@ -130,7 +141,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('members')}
-            className={`px-3 py-1.5 border-b-2 font-medium transition-colors ${
+            className={`whitespace-nowrap flex-shrink-0 text-[11px] md:text-xs px-2 md:px-3 py-1.5 border-b-2 font-medium transition-colors cursor-pointer ${
               activeTab === 'members'
                 ? 'border-[#4F8CFF] text-[#4F8CFF]'
                 : 'border-transparent text-[#929BAA] hover:text-[#F5F7FA]'
@@ -140,7 +151,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('danger')}
-            className={`px-3 py-1.5 border-b-2 font-medium transition-colors ${
+            className={`whitespace-nowrap flex-shrink-0 text-[11px] md:text-xs px-2 md:px-3 py-1.5 border-b-2 font-medium transition-colors cursor-pointer ${
               activeTab === 'danger'
                 ? 'border-[#F05D6C] text-[#F05D6C]'
                 : 'border-transparent text-[#929BAA] hover:text-[#F05D6C]'

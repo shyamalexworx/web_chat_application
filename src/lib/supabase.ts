@@ -1,6 +1,7 @@
-import { createClient, RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { generateLetterAvatar, resolveUserAvatar } from '../utils/avatar';
 import type { ChatInvite } from '../types';
+import { safeSetLocalStorage } from '../utils/imageCompressor';
 
 // ==============================================================================
 // 1. CONFIGURATION & CLIENT INITIALIZATION
@@ -623,13 +624,53 @@ export async function fetchChannelsFromSupabase(workspaceId: string, userId: str
       try {
         customAvatar = localStorage.getItem('pulsechat_custom_channel_avatar_' + ch.id) || undefined;
       } catch (e) {}
+      // Extract remote avatar and allowMemberEdits embedded in channel description if present
+      let cleanDescription = ch.description || '';
+      let remoteAvatar: string | undefined = undefined;
+      const avatarMatch = cleanDescription.match(/<!--pulse_avatar:(.*?)-->/);
+      if (avatarMatch) {
+        remoteAvatar = avatarMatch[1];
+        cleanDescription = cleanDescription.replace(/<!--pulse_avatar:.*?-->/, '').trim();
+      }
+
+      let remoteAllowEdits: boolean | undefined = undefined;
+      const editsMatch = cleanDescription.match(/<!--pulse_allow_edits:(true|false)-->/);
+      if (editsMatch) {
+        remoteAllowEdits = editsMatch[1] === 'true';
+        cleanDescription = cleanDescription.replace(/<!--pulse_allow_edits:.*?-->/, '').trim();
+      }
+
+      let localAllowEdits: boolean | undefined = undefined;
+      try {
+        const savedEdits = localStorage.getItem('pulsechat_channel_allow_edits_' + ch.id);
+        if (savedEdits !== null) localAllowEdits = savedEdits === 'true';
+      } catch (e) {}
+
+      const resolvedAllowEdits = remoteAllowEdits !== undefined ? remoteAllowEdits : (localAllowEdits ?? false);
+      try {
+        safeSetLocalStorage('pulsechat_channel_allow_edits_' + ch.id, String(resolvedAllowEdits));
+      } catch (e) {}
+
+      const resolvedAvatar = remoteAvatar || customAvatar;
+      if (resolvedAvatar) {
+        try {
+          safeSetLocalStorage('pulsechat_custom_channel_avatar_' + ch.id, resolvedAvatar);
+        } catch (e) {}
+      }
+
+      // If local has custom avatar but Supabase doesn't, automatically sync it up
+      if (customAvatar && !remoteAvatar && isSupabaseConfigured) {
+        updateChannelInSupabase(ch.id, { avatar: customAvatar, description: cleanDescription }).catch(() => {});
+      }
+
       return {
         id: ch.id,
         workspaceId: ch.workspace_id,
         name: ch.name,
         topic: ch.topic || '',
-        description: ch.description || '',
-        avatar: customAvatar,
+        description: cleanDescription,
+        avatar: resolvedAvatar,
+        allowMemberEdits: resolvedAllowEdits,
         isPrivate: Boolean(ch.is_private),
         memberIds: (ch.channel_members || []).map((m: any) => m.user_id),
         createdBy: ch.created_by || 'system',
@@ -649,11 +690,17 @@ export async function saveChannelToSupabase(channel: {
   name: string;
   topic?: string;
   description?: string;
+  avatar?: string;
   isPrivate: boolean;
   createdBy: string;
   memberIds?: string[];
 }) {
   if (!isSupabaseConfigured) return null;
+
+  let desc = channel.description || '';
+  if (channel.avatar) {
+    desc = `${desc.replace(/<!--pulse_avatar:.*?-->/, '').trim()}<!--pulse_avatar:${channel.avatar}-->`;
+  }
 
   const { data, error } = await supabase
     .from('channels')
@@ -662,7 +709,7 @@ export async function saveChannelToSupabase(channel: {
       workspace_id: channel.workspaceId,
       name: channel.name,
       topic: channel.topic || '',
-      description: channel.description || '',
+      description: desc,
       is_private: channel.isPrivate,
       created_by: channel.createdBy,
     })
@@ -809,22 +856,79 @@ export async function fetchMessagesFromSupabase(
     return [];
   }
 
-  return (data || []).map((m: any) => ({
-    id: m.id,
-    conversationType: m.conversation_type,
-    conversationId: m.conversation_id,
-    senderId: m.sender_id,
-    content: m.content,
-    timestamp: m.created_at,
-    attachments: m.attachments || [],
-    reactions: m.reactions || {},
-    isPinned: Boolean(m.is_pinned),
-    pinnedBy: m.reactions?.__pinnedBy?.[0] || undefined,
-    parentId: m.parent_id || undefined,
-    encryptedPayload: m.encrypted_payload || undefined,
-    isEncrypted: Boolean(m.encrypted_payload),
-    editedAt: m.edited_at || undefined,
-  }));
+  return (data || []).map((m: any) => {
+    const reactions = m.reactions && typeof m.reactions === 'object' ? m.reactions : {};
+    const readBy = Array.isArray(reactions.__readBy) ? reactions.__readBy : [];
+    const deliveredTo = Array.isArray(reactions.__deliveredTo) ? reactions.__deliveredTo : [];
+    let deliveryStatus: 'sent' | 'delivered' | 'read' = 'sent';
+    if (readBy.some((uid: string) => uid !== m.sender_id)) {
+      deliveryStatus = 'read';
+    } else if (deliveredTo.some((uid: string) => uid !== m.sender_id)) {
+      deliveryStatus = 'delivered';
+    }
+
+    return {
+      id: m.id,
+      conversationType: m.conversation_type,
+      conversationId: m.conversation_id,
+      senderId: m.sender_id,
+      content: m.content,
+      timestamp: m.created_at,
+      attachments: m.attachments || [],
+      reactions,
+      isPinned: Boolean(m.is_pinned),
+      pinnedBy: reactions.__pinnedBy?.[0] || undefined,
+      parentId: m.parent_id || undefined,
+      encryptedPayload: m.encrypted_payload || undefined,
+      isEncrypted: Boolean(m.encrypted_payload),
+      editedAt: m.edited_at || undefined,
+      deliveryStatus,
+    };
+  });
+}
+
+/**
+ * Persist read receipts in Supabase
+ */
+export async function markMessagesAsReadInSupabase(messageIds: string[], readerId: string) {
+  if (!isSupabaseConfigured || !messageIds.length || !readerId) return;
+  for (const msgId of messageIds) {
+    try {
+      const { data: row } = await supabase.from('messages').select('reactions').eq('id', msgId).single();
+      if (row) {
+        const reactions = (row.reactions && typeof row.reactions === 'object') ? { ...row.reactions } : {};
+        const readBy: string[] = Array.isArray(reactions.__readBy) ? [...reactions.__readBy] : [];
+        if (!readBy.includes(readerId)) {
+          reactions.__readBy = [...readBy, readerId];
+          await supabase.from('messages').update({ reactions }).eq('id', msgId);
+        }
+      }
+    } catch (err) {
+      // Background receipt sync, ignore non-fatal errors
+    }
+  }
+}
+
+/**
+ * Persist delivery receipts in Supabase
+ */
+export async function markMessagesAsDeliveredInSupabase(messageIds: string[], recipientId: string) {
+  if (!isSupabaseConfigured || !messageIds.length || !recipientId) return;
+  for (const msgId of messageIds) {
+    try {
+      const { data: row } = await supabase.from('messages').select('reactions').eq('id', msgId).single();
+      if (row) {
+        const reactions = (row.reactions && typeof row.reactions === 'object') ? { ...row.reactions } : {};
+        const deliveredTo: string[] = Array.isArray(reactions.__deliveredTo) ? [...reactions.__deliveredTo] : [];
+        if (!deliveredTo.includes(recipientId)) {
+          reactions.__deliveredTo = [...deliveredTo, recipientId];
+          await supabase.from('messages').update({ reactions }).eq('id', msgId);
+        }
+      }
+    } catch (err) {
+      // Background receipt sync, ignore non-fatal errors
+    }
+  }
 }
 
 /**
@@ -999,14 +1103,30 @@ export async function fetchWorkspacesFromSupabase(userId?: string) {
       try {
         customAvatar = localStorage.getItem('pulsechat_custom_workspace_avatar_' + w.id) || undefined;
       } catch (e) {}
+
+      // If w.icon is a URL or data URL, it represents the custom workspace avatar
+      const isImgAvatar = Boolean(w.icon && (w.icon.startsWith('http://') || w.icon.startsWith('https://') || w.icon.startsWith('data:image/') || w.icon.startsWith('avatar:')));
+      const resolvedAvatar = isImgAvatar ? w.icon.replace(/^avatar:/, '') : customAvatar;
+
+      if (resolvedAvatar) {
+        try {
+          safeSetLocalStorage('pulsechat_custom_workspace_avatar_' + w.id, resolvedAvatar);
+        } catch (e) {}
+      }
+
+      // If local has avatar but Supabase doesn't, automatically sync it up
+      if (customAvatar && !isImgAvatar && isSupabaseConfigured) {
+        updateWorkspaceInSupabase(w.id, { avatar: customAvatar }).catch(() => {});
+      }
+
       return {
         id: w.id,
         name: w.name,
         slug: w.slug,
-        icon: w.icon || '⚡',
+        icon: isImgAvatar ? (w.name ? w.name[0].toUpperCase() : '⚡') : (w.icon || '⚡'),
         iconBg: w.icon_bg || '#4F8CFF',
         description: w.name + ' workspace',
-        avatar: customAvatar,
+        avatar: resolvedAvatar,
         ownerId: w.created_by || 'system',
         memberIds: (w.workspace_members || []).map((m: any) => m.user_id),
         membersCount: Math.max(1, (w.workspace_members || []).length),
@@ -1031,6 +1151,7 @@ export async function saveWorkspaceToSupabase(ws: {
   iconBg?: string;
   plan?: string;
   createdBy: string;
+  avatar?: string;
 }) {
   if (!isSupabaseConfigured) return null;
 
@@ -1040,7 +1161,7 @@ export async function saveWorkspaceToSupabase(ws: {
       id: ws.id,
       name: ws.name,
       slug: ws.slug,
-      icon: ws.icon || '⚡',
+      icon: ws.avatar || ws.icon || '⚡',
       icon_bg: ws.iconBg || '#4F8CFF',
       plan: ws.plan || 'Enterprise',
       created_by: ws.createdBy,
@@ -1119,12 +1240,15 @@ export async function deleteConversationFromSupabase(conversationId: string): Pr
  */
 export async function updateWorkspaceInSupabase(
   workspaceId: string,
-  updates: { name?: string; iconBg?: string }
+  updates: { name?: string; iconBg?: string; avatar?: string }
 ) {
   if (!isSupabaseConfigured) return;
   const payload: any = {};
   if (updates.name !== undefined) payload.name = updates.name;
   if (updates.iconBg !== undefined) payload.icon_bg = updates.iconBg;
+  if (updates.avatar !== undefined) {
+    payload.icon = updates.avatar || (updates.name ? updates.name[0].toUpperCase() : '⚡');
+  }
   await supabase.from('workspaces').update(payload).eq('id', workspaceId);
 }
 
@@ -1133,13 +1257,52 @@ export async function updateWorkspaceInSupabase(
  */
 export async function updateChannelInSupabase(
   channelId: string,
-  updates: { name?: string; topic?: string; description?: string; memberIds?: string[] }
+  updates: {
+    name?: string;
+    topic?: string;
+    description?: string;
+    avatar?: string;
+    allowMemberEdits?: boolean;
+    memberIds?: string[];
+  }
 ) {
   if (!isSupabaseConfigured) return;
   const payload: any = {};
   if (updates.name !== undefined) payload.name = updates.name;
   if (updates.topic !== undefined) payload.topic = updates.topic;
-  if (updates.description !== undefined) payload.description = updates.description;
+  if (updates.description !== undefined || updates.avatar !== undefined || updates.allowMemberEdits !== undefined) {
+    let rawDesc = updates.description;
+    let existingAvatar: string | undefined = undefined;
+    let existingAllowEdits: boolean | undefined = undefined;
+
+    try {
+      const { data: currentCh } = await supabase.from('channels').select('description').eq('id', channelId).single();
+      const currentRaw = currentCh?.description || '';
+      if (rawDesc === undefined) {
+        rawDesc = currentRaw;
+      }
+      const avMatch = currentRaw.match(/<!--pulse_avatar:(.*?)-->/);
+      if (avMatch) existingAvatar = avMatch[1];
+      const edMatch = currentRaw.match(/<!--pulse_allow_edits:(true|false)-->/);
+      if (edMatch) existingAllowEdits = edMatch[1] === 'true';
+    } catch {
+      if (rawDesc === undefined) rawDesc = '';
+    }
+
+    let cleanDesc = (rawDesc || '').replace(/<!--pulse_avatar:.*?-->/, '').replace(/<!--pulse_allow_edits:.*?-->/, '').trim();
+
+    const finalAvatar = updates.avatar !== undefined ? updates.avatar : existingAvatar;
+    if (finalAvatar) {
+      cleanDesc += `<!--pulse_avatar:${finalAvatar}-->`;
+    }
+
+    const finalAllowEdits = updates.allowMemberEdits !== undefined ? updates.allowMemberEdits : existingAllowEdits;
+    if (finalAllowEdits) {
+      cleanDesc += `<!--pulse_allow_edits:true-->`;
+    }
+
+    payload.description = cleanDesc;
+  }
   if (Object.keys(payload).length > 0) {
     await supabase.from('channels').update(payload).eq('id', channelId);
   }

@@ -364,7 +364,7 @@ export const TopNavigation: React.FC = () => {
       <div className="p-3 space-y-3 overflow-y-auto max-h-80 text-xs">
         <div className="flex items-center justify-between text-[11px] text-[#929BAA] px-1 pb-1 border-b border-slate-200 dark:border-[#252B36]">
           <span className="font-semibold text-slate-900 dark:text-[#F5F7FA]">Quick Search & Jump</span>
-          <span className="font-mono text-[10px] bg-slate-100 dark:bg-[#12151C] px-1.5 py-0.5 rounded border border-slate-200 dark:border-[#252B36]">ESC to close</span>
+          <span className="hidden md:inline font-mono text-[10px] bg-slate-100 dark:bg-[#12151C] px-1.5 py-0.5 rounded border border-slate-200 dark:border-[#252B36]">ESC to close</span>
         </div>
         <div>
           <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider px-2 py-1">
@@ -589,11 +589,12 @@ export const TopNavigation: React.FC = () => {
         {/* Google Meet Trigger Button (The green icon) */}
         <button
           onClick={startGoogleMeet}
-          className="flex items-center space-x-1.5 px-2.5 py-1 bg-[#32C48D]/15 hover:bg-[#32C48D]/25 border border-[#32C48D]/30 text-[#32C48D] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+          className="p-1.5 md:px-2.5 md:py-1 flex items-center justify-center md:space-x-1.5 bg-[#32C48D]/15 hover:bg-[#32C48D]/25 border border-[#32C48D]/30 text-[#32C48D] text-xs font-semibold rounded-lg transition-colors cursor-pointer"
           title="Start Google Meet"
+          aria-label="Start Google Meet"
         >
-          <Video className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{t('meet')}</span>
+          <Video className="w-4 h-4 md:w-3.5 md:h-3.5" />
+          <span className="hidden md:inline">{t('meet')}</span>
         </button>
 
         {/* Real-time Notification Icon in Top Right Corner */}

@@ -216,14 +216,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
     return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   };
 
-  // Real-time Delivery Status Ticks (distinguishable high-contrast styling)
+  // Real-time Delivery Status Ticks (clean, flat, native palette styling)
   const renderDeliveryTick = () => {
-    const status = message.deliveryStatus || 'delivered';
+    const status = message.deliveryStatus || 'sent';
 
     if (status === 'sending') {
       return (
-        <span title="Sending..." className="inline-flex items-center text-white/70">
-          <Clock className="w-3.5 h-3.5 animate-pulse" />
+        <span title="Sending..." className="inline-flex items-center text-white/50">
+          <Clock className="w-3.5 h-3.5 animate-pulse" strokeWidth={2} />
         </span>
       );
     }
@@ -231,7 +231,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
     if (status === 'sent') {
       return (
         <span title="Sent to server" className="inline-flex items-center">
-          <Check className="w-3.5 h-3.5 text-white/80 drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)]" strokeWidth={2.5} />
+          <Check className="w-3.5 h-3.5 text-blue-200/65" strokeWidth={2} />
         </span>
       );
     }
@@ -239,15 +239,15 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
     if (status === 'delivered') {
       return (
         <span title="Delivered to device" className="inline-flex items-center">
-          <CheckCheck className="w-4 h-4 text-white drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)]" strokeWidth={2.5} />
+          <CheckCheck className="w-3.5 h-3.5 text-blue-100/90" strokeWidth={2} />
         </span>
       );
     }
 
-    // 'read' / viewed: WhatsApp Signature Electric Sky Cyan (#53BDEB)
+    // 'read' / viewed: Crisp, luminous sky-cyan (#38BDF8) - flat and harmonious with theme
     return (
       <span title="Read / Viewed" className="inline-flex items-center">
-        <CheckCheck className="w-4 h-4 text-[#53BDEB] drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]" strokeWidth={2.5} />
+        <CheckCheck className="w-3.5 h-3.5 text-[#38BDF8]" strokeWidth={2} />
       </span>
     );
   };

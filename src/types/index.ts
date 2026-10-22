@@ -44,6 +44,7 @@ export interface Channel {
   unreadCount: number;
   isStarred: boolean;
   isMuted?: boolean;
+  allowMemberEdits?: boolean;
 }
 
 export interface DirectMessageConversation {

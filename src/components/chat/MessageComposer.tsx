@@ -53,6 +53,7 @@ export const MessageComposer: React.FC = () => {
   const [activeFormats, setActiveFormats] = useState<Record<string, boolean>>({});
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const mobileTextareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeChannel = activeView.type === 'channel'
@@ -97,6 +98,9 @@ export const MessageComposer: React.FC = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
+    if (mobileTextareaRef.current) {
+      mobileTextareaRef.current.style.height = 'auto';
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -118,10 +122,12 @@ export const MessageComposer: React.FC = () => {
 
   // Auto-resize textarea
   useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
-    }
+    [textareaRef.current, mobileTextareaRef.current].forEach((el) => {
+      if (el) {
+        el.style.height = 'auto';
+        el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
+      }
+    });
   }, [content]);
 
   // Insert markdown helper with active toggle feedback
@@ -280,7 +286,7 @@ export const MessageComposer: React.FC = () => {
   const insertEmoji = (emoji: string) => {
     setContent((prev) => prev + emoji);
     setShowEmojiPicker(false);
-    textareaRef.current?.focus();
+    (mobileTextareaRef.current || textareaRef.current)?.focus();
   };
 
   if (!currentChannel && !activeDM) {
@@ -456,196 +462,301 @@ export const MessageComposer: React.FC = () => {
           </button>
         </div>
       ) : (
-      <div className="bg-[#12151C] border border-[#252B36] focus-within:border-[#4F8CFF] rounded-xl overflow-hidden shadow-subtle transition-colors">
-        {/* Formatting Toolbar (Highlighted in Image 2 - 100% Functional with active feedback) */}
-        <div className="px-2.5 py-1 bg-[#181C25] border-b border-[#252B36] flex items-center justify-between text-[#929BAA] overflow-x-auto no-scrollbar">
-          <div className="flex items-center space-x-0.5 sm:space-x-1">
-            {/* Bold */}
-            <button
-              type="button"
-              onClick={() => insertFormat('**', '**', 'bold')}
-              className={`w-6 h-6 flex items-center justify-center rounded text-xs font-bold font-serif transition-colors ${
-                activeFormats.bold ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
-              }`}
-              title="Bold (**text**)"
-            >
-              B
-            </button>
+      <>
+        {/* File Upload Input (Shared between desktop & mobile) */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.zip,.json,.js,.ts"
+          onChange={handleFileUpload}
+          className="hidden"
+        />
 
-            {/* Italic */}
-            <button
-              type="button"
-              onClick={() => insertFormat('*', '*', 'italic')}
-              className={`w-6 h-6 flex items-center justify-center rounded text-xs italic font-serif transition-colors ${
-                activeFormats.italic ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
-              }`}
-              title="Italic (*text*)"
-            >
-              I
-            </button>
-
-            {/* Strikethrough */}
-            <button
-              type="button"
-              onClick={() => insertFormat('~~', '~~', 'strike')}
-              className={`w-6 h-6 flex items-center justify-center rounded text-xs line-through transition-colors ${
-                activeFormats.strike ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
-              }`}
-              title="Strikethrough (~~text~~)"
-            >
-              S
-            </button>
-
-            <div className="w-[1px] h-3 bg-[#252B36] mx-0.5 sm:mx-1" />
-
-            {/* Inline Code */}
-            <button
-              type="button"
-              onClick={() => insertFormat('`', '`', 'inline-code')}
-              className={`w-6 h-6 flex items-center justify-center rounded text-xs font-mono transition-colors ${
-                activeFormats['inline-code'] ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
-              }`}
-              title="Inline Code (`code`)"
-            >
-              &lt;&gt;
-            </button>
-
-            {/* Code Block */}
-            <button
-              type="button"
-              onClick={() => insertFormat('```typescript\n', '\n```', 'codeblock')}
-              className="px-1.5 h-6 flex items-center space-x-1 rounded text-xs font-mono hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
-              title="Code Snippet Block"
-            >
-              <span className="text-[10px] font-bold">Code</span>
-            </button>
-
-            {/* Blockquote */}
-            <button
-              type="button"
-              onClick={() => insertFormat('> ', '', 'quote')}
-              className="w-6 h-6 flex items-center justify-center rounded text-xs font-serif font-bold hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
-              title="Quote (> quote)"
-            >
-              &ldquo;&rdquo;
-            </button>
-
-            {/* Bullet List */}
-            <button
-              type="button"
-              onClick={() => insertFormat('- ', '', 'list')}
-              className="w-6 h-6 flex items-center justify-center rounded text-xs font-mono hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
-              title="Bulleted List (- item)"
-            >
-              &bull;&equiv;
-            </button>
-          </div>
-        </div>
-
-        {/* Draft Attachments Preview */}
-        {attachments.length > 0 && (
-          <div className="p-2 bg-[#181C25]/40 border-b border-[#252B36] flex flex-wrap gap-1.5">
-            {attachments.map((att) => (
-              <div
-                key={att.id}
-                className="flex items-center space-x-2 bg-[#181C25] border border-[#252B36] px-2 py-0.5 rounded-lg text-xs"
+        {/* DESKTOP / TABLET COMPOSER (md:block) - UNCHANGED FOR LAPTOP, DESKTOP, AND TAB VIEW */}
+        <div className="hidden md:block bg-[#12151C] border border-[#252B36] focus-within:border-[#4F8CFF] rounded-xl overflow-hidden shadow-subtle transition-colors">
+          {/* Formatting Toolbar (Highlighted in Image 2 - 100% Functional with active feedback) */}
+          <div className="px-2.5 py-1 bg-[#181C25] border-b border-[#252B36] flex items-center justify-between text-[#929BAA] overflow-x-auto no-scrollbar">
+            <div className="flex items-center space-x-0.5 sm:space-x-1">
+              {/* Bold */}
+              <button
+                type="button"
+                onClick={() => insertFormat('**', '**', 'bold')}
+                className={`w-6 h-6 flex items-center justify-center rounded text-xs font-bold font-serif transition-colors ${
+                  activeFormats.bold ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
+                }`}
+                title="Bold (**text**)"
               >
-                {att.type === 'image' ? (
-                  <ImageIcon className="w-3.5 h-3.5 text-[#4F8CFF]" />
-                ) : att.type === 'video' ? (
-                  <Video className="w-3.5 h-3.5 text-[#A78BFA]" />
-                ) : (
-                  <Paperclip className="w-3.5 h-3.5 text-[#4F8CFF]" />
-                )}
-                <span className="text-[#F5F7FA] max-w-[140px] truncate">{att.name}</span>
-                <span className="text-[10px] text-[#929BAA]">{att.size}</span>
-                <button
-                  onClick={() => removeAttachment(att.id)}
-                  className="p-0.5 hover:bg-[#252B36] rounded text-[#929BAA] hover:text-[#F05D6C]"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
+                B
+              </button>
+
+              {/* Italic */}
+              <button
+                type="button"
+                onClick={() => insertFormat('*', '*', 'italic')}
+                className={`w-6 h-6 flex items-center justify-center rounded text-xs italic font-serif transition-colors ${
+                  activeFormats.italic ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
+                }`}
+                title="Italic (*text*)"
+              >
+                I
+              </button>
+
+              {/* Strikethrough */}
+              <button
+                type="button"
+                onClick={() => insertFormat('~~', '~~', 'strike')}
+                className={`w-6 h-6 flex items-center justify-center rounded text-xs line-through transition-colors ${
+                  activeFormats.strike ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
+                }`}
+                title="Strikethrough (~~text~~)"
+              >
+                S
+              </button>
+
+              <div className="w-[1px] h-3 bg-[#252B36] mx-0.5 sm:mx-1" />
+
+              {/* Inline Code */}
+              <button
+                type="button"
+                onClick={() => insertFormat('`', '`', 'inline-code')}
+                className={`w-6 h-6 flex items-center justify-center rounded text-xs font-mono transition-colors ${
+                  activeFormats['inline-code'] ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
+                }`}
+                title="Inline Code (`code`)"
+              >
+                &lt;&gt;
+              </button>
+
+              {/* Code Block */}
+              <button
+                type="button"
+                onClick={() => insertFormat('```typescript\n', '\n```', 'codeblock')}
+                className="px-1.5 h-6 flex items-center space-x-1 rounded text-xs font-mono hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
+                title="Code Snippet Block"
+              >
+                <span className="text-[10px] font-bold">Code</span>
+              </button>
+
+              {/* Blockquote */}
+              <button
+                type="button"
+                onClick={() => insertFormat('> ', '', 'quote')}
+                className="w-6 h-6 flex items-center justify-center rounded text-xs font-serif font-bold hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
+                title="Quote (> quote)"
+              >
+                &ldquo;&rdquo;
+              </button>
+
+              {/* Bullet List */}
+              <button
+                type="button"
+                onClick={() => insertFormat('- ', '', 'list')}
+                className="w-6 h-6 flex items-center justify-center rounded text-xs font-mono hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
+                title="Bulleted List (- item)"
+              >
+                &bull;&equiv;
+              </button>
+            </div>
           </div>
-        )}
 
-        {/* Text Input Area */}
-        <div className="px-3 py-2">
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholderText}
-            className="w-full bg-transparent text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none resize-none leading-normal font-sans max-h-48 min-h-[20px]"
-          />
-        </div>
+          {/* Draft Attachments Preview */}
+          {attachments.length > 0 && (
+            <div className="p-2 bg-[#181C25]/40 border-b border-[#252B36] flex flex-wrap gap-1.5">
+              {attachments.map((att) => (
+                <div
+                  key={att.id}
+                  className="flex items-center space-x-2 bg-[#181C25] border border-[#252B36] px-2 py-0.5 rounded-lg text-xs"
+                >
+                  {att.type === 'image' ? (
+                    <ImageIcon className="w-3.5 h-3.5 text-[#4F8CFF]" />
+                  ) : att.type === 'video' ? (
+                    <Video className="w-3.5 h-3.5 text-[#A78BFA]" />
+                  ) : (
+                    <Paperclip className="w-3.5 h-3.5 text-[#4F8CFF]" />
+                  )}
+                  <span className="text-[#F5F7FA] max-w-[140px] truncate">{att.name}</span>
+                  <span className="text-[10px] text-[#929BAA]">{att.size}</span>
+                  <button
+                    onClick={() => removeAttachment(att.id)}
+                    className="p-0.5 hover:bg-[#252B36] rounded text-[#929BAA] hover:text-[#F05D6C]"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
 
-        {/* Composer Bottom Bar (Attachments, Emoji, Voice, Send) */}
-        <div className="h-9 px-2.5 flex items-center justify-between border-t border-[#252B36]/40">
-          <div className="flex items-center space-x-1">
-            {/* File Upload Input */}
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt,.zip,.json,.js,.ts"
-              onChange={handleFileUpload}
-              className="hidden"
+          {/* Text Input Area */}
+          <div className="px-3 py-2">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholderText}
+              className="w-full bg-transparent text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none resize-none leading-normal font-sans max-h-48 min-h-[20px]"
             />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors"
-              title="Add attachment"
-            >
-              <Paperclip className="w-4 h-4" />
-            </button>
+          </div>
 
-            {/* Emoji Picker Button */}
-            <button
-              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              className="p-1 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors relative"
-              title="Add emoji"
-            >
-              <Smile className="w-4 h-4" />
-            </button>
+          {/* Composer Bottom Bar (Attachments, Emoji, Voice, Send) */}
+          <div className="h-9 px-2.5 flex items-center justify-between border-t border-[#252B36]/40">
+            <div className="flex items-center space-x-1">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-1 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors"
+                title="Add attachment"
+              >
+                <Paperclip className="w-4 h-4" />
+              </button>
 
-            {/* Voice Memo Button (WhatsApp-style) */}
+              {/* Emoji Picker Button */}
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className="p-1 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors relative"
+                title="Add emoji"
+              >
+                <Smile className="w-4 h-4" />
+              </button>
+
+              {/* Voice Memo Button (WhatsApp-style) */}
+              <button
+                type="button"
+                onClick={startVoiceRecording}
+                className="p-1 rounded-md transition-colors text-[#929BAA] hover:text-[#32C48D] hover:bg-[#181C25] cursor-pointer"
+                title="Record voice note (WhatsApp style)"
+              >
+                <Mic className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Send Button */}
             <button
               type="button"
-              onClick={startVoiceRecording}
-              className="p-1 rounded-md transition-colors text-[#929BAA] hover:text-[#32C48D] hover:bg-[#181C25] cursor-pointer"
-              title="Record voice note (WhatsApp style)"
+              onClick={handleSend}
+              disabled={!content.trim() && attachments.length === 0}
+              className={`h-7 px-2.5 rounded-lg font-medium text-xs flex items-center space-x-1 transition-all ${
+                content.trim() || attachments.length > 0
+                  ? 'bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white shadow-accent-glow cursor-pointer'
+                  : 'bg-[#181C25] text-[#929BAA]/50 cursor-not-allowed'
+              }`}
+              title="Send message (Enter)"
             >
-              <Mic className="w-4 h-4" />
+              <Send className="w-3.5 h-3.5" />
             </button>
           </div>
-
-          {/* Send Button */}
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!content.trim() && attachments.length === 0}
-            className={`h-7 px-2.5 rounded-lg font-medium text-xs flex items-center space-x-1 transition-all ${
-              content.trim() || attachments.length > 0
-                ? 'bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white shadow-accent-glow cursor-pointer'
-                : 'bg-[#181C25] text-[#929BAA]/50 cursor-not-allowed'
-            }`}
-            title="Send message (Enter)"
-          >
-            <Send className="w-3.5 h-3.5" />
-          </button>
         </div>
-      </div>
+
+        {/* MOBILE VIEW COMPOSER (STRICTLY FOR MOBILE VIEW ONLY < md) */}
+        <div className="md:hidden flex flex-col w-full">
+          {/* Draft Attachments Preview on Mobile */}
+          {attachments.length > 0 && (
+            <div className="mb-2 p-2 bg-[#12151C] border border-[#252B36] rounded-2xl flex flex-wrap gap-1.5 shadow-subtle">
+              {attachments.map((att) => (
+                <div
+                  key={att.id}
+                  className="flex items-center space-x-1.5 bg-[#181C25] border border-[#252B36] px-2 py-1 rounded-lg text-xs"
+                >
+                  {att.type === 'image' ? (
+                    <ImageIcon className="w-3.5 h-3.5 text-[#4F8CFF] flex-shrink-0" />
+                  ) : att.type === 'video' ? (
+                    <Video className="w-3.5 h-3.5 text-[#A78BFA] flex-shrink-0" />
+                  ) : (
+                    <Paperclip className="w-3.5 h-3.5 text-[#4F8CFF] flex-shrink-0" />
+                  )}
+                  <span className="text-[#F5F7FA] max-w-[120px] truncate">{att.name}</span>
+                  <span className="text-[10px] text-[#929BAA]">{att.size}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeAttachment(att.id)}
+                    className="p-0.5 hover:bg-[#252B36] rounded text-[#929BAA] hover:text-[#F05D6C]"
+                    title="Remove file"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* WhatsApp-Style Input Capsule + Action Button Row */}
+          <div className="flex items-end space-x-1.5 sm:space-x-2 w-full">
+            {/* Main Text Capsule Pill */}
+            <div className="flex-1 min-w-0 bg-[#12151C] border border-[#252B36] focus-within:border-[#4F8CFF] rounded-[24px] px-2 py-1 flex items-center space-x-0.5 shadow-subtle transition-colors min-h-[44px]">
+              {/* 1. Emoji Picker Button (in blue colored marked section) */}
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] active:text-[#4F8CFF] rounded-full transition-colors flex-shrink-0 cursor-pointer"
+                title="Add emoji"
+                aria-label="Add emoji"
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+
+              {/* 2. Text Input Area ("Message" placeholder) */}
+              <textarea
+                ref={mobileTextareaRef}
+                rows={1}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={placeholderText}
+                className="flex-1 bg-transparent text-sm text-[#F5F7FA] placeholder-[#929BAA] outline-none resize-none leading-relaxed font-sans max-h-32 min-h-[24px] py-1 px-1.5"
+              />
+
+              {/* 3. Attachment Button (green colored marked attachment moved to arrow location) */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] active:text-[#4F8CFF] rounded-full transition-colors flex-shrink-0 cursor-pointer"
+                title="Add attachment"
+                aria-label="Add attachment"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
+
+              {/* 4. Mic (Voice Message) Button (moved to color arrow location) */}
+              <button
+                type="button"
+                onClick={startVoiceRecording}
+                className="p-1.5 text-[#929BAA] hover:text-[#32C48D] active:text-[#32C48D] rounded-full transition-colors flex-shrink-0 cursor-pointer"
+                title="Record voice note"
+                aria-label="Record voice note"
+              >
+                <Mic className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 5. Send Message Button (placed in area of mic where marked in yellow color) */}
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!content.trim() && attachments.length === 0}
+              className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-full flex items-center justify-center flex-shrink-0 transition-all cursor-pointer ${
+                content.trim() || attachments.length > 0
+                  ? 'bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white shadow-accent-glow active:scale-95'
+                  : 'bg-[#181C25] text-[#929BAA]/40 border border-[#252B36] cursor-not-allowed'
+              }`}
+              title="Send message"
+              aria-label="Send message"
+            >
+              <Send className="w-4 h-4 ml-0.5" />
+            </button>
+          </div>
+        </div>
+      </>
       )}
 
       {/* Popover Emoji Picker with outside click backdrop */}
       {showEmojiPicker && (
         <>
           <div className="fixed inset-0 z-30 bg-transparent" onClick={() => setShowEmojiPicker(false)} />
-          <div className="absolute bottom-28 left-4 w-72 bg-[#181C25] border border-[#252B36] rounded-xl shadow-modal p-3 z-40 animate-slide-down">
+          <div className="absolute bottom-16 left-2 right-2 max-w-sm sm:max-w-none md:right-auto md:bottom-28 md:left-4 md:w-72 bg-[#181C25] border border-[#252B36] rounded-xl shadow-modal p-3 z-40 animate-slide-down">
             <div className="flex items-center justify-between pb-2 border-b border-[#252B36] mb-2">
               <span className="text-xs font-semibold text-[#F5F7FA]">{t('reactions_emojis')}</span>
               <button

@@ -7,8 +7,6 @@ import {
   Copy,
   Check,
   Share2,
-  Users,
-  Sparkles,
 } from 'lucide-react';
 
 export const GoogleMeetModal: React.FC = () => {

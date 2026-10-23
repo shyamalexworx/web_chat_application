@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useChat } from '../../context/ChatContext';
 import { X, Search, Check, Users, User, ArrowRight, Send, Mail } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
+import { translateText } from '../../utils/translation';
 
 export const NewDirectMessageModal: React.FC = () => {
   const {
@@ -11,6 +12,8 @@ export const NewDirectMessageModal: React.FC = () => {
     currentUser,
     createOrOpenDM,
     inviteToDMByEmail,
+    selectedLanguage,
+    t,
   } = useChat();
 
   const [search, setSearch] = useState('');
@@ -68,9 +71,9 @@ export const NewDirectMessageModal: React.FC = () => {
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#252B36] flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-bold text-[#F5F7FA]">Start Direct Message</h2>
+            <h2 className="text-sm font-bold text-[#F5F7FA]">{t('start_dm')}</h2>
             <p className="text-[11px] text-[#929BAA]">
-              Chat directly with a coworker or start messaging immediately by email.
+              {t('start_dm_desc')}
             </p>
           </div>
 
@@ -113,7 +116,7 @@ export const NewDirectMessageModal: React.FC = () => {
             <div className="pt-1">
               <input
                 type="text"
-                placeholder="Give this group a name (e.g. Mobile Core Sprint)"
+                placeholder={t('group_name_placeholder')}
                 value={groupName}
                 onChange={(e) => setGroupName(e.target.value)}
                 className="w-full bg-[#181C25] border border-[#252B36] rounded-lg px-3 py-1.5 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none focus:border-[#4F8CFF]"
@@ -128,7 +131,7 @@ export const NewDirectMessageModal: React.FC = () => {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search coworkers by name or title..."
+              placeholder={t('search_coworkers_placeholder')}
               className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl pl-8 pr-3 py-1.5 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none"
               autoFocus
             />
@@ -142,7 +145,7 @@ export const NewDirectMessageModal: React.FC = () => {
                 type="email"
                 value={customEmail}
                 onChange={(e) => setCustomEmail(e.target.value)}
-                placeholder="Or enter coworker's email address..."
+                placeholder={t('enter_email_placeholder')}
                 className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl pl-8 pr-20 py-1.5 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -157,7 +160,7 @@ export const NewDirectMessageModal: React.FC = () => {
                   onClick={handleStart}
                   className="absolute right-1.5 top-1 px-2.5 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-[11px] font-semibold rounded-lg transition-colors cursor-pointer"
                 >
-                  Start Chat
+                  {t('start_chat')}
                 </button>
               )}
             </div>
@@ -168,7 +171,7 @@ export const NewDirectMessageModal: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-3 divide-y divide-[#252B36]/50">
           {filteredUsers.length === 0 ? (
             <div className="p-6 text-center text-xs text-[#929BAA]">
-              No coworkers matched "{search}".
+              {t('no_matching_coworkers')}
             </div>
           ) : (
             filteredUsers.map((u) => {
@@ -185,7 +188,7 @@ export const NewDirectMessageModal: React.FC = () => {
                     <div className="relative flex-shrink-0">
                       <img
                         src={resolveUserAvatar(u.avatar, u.name)}
-                        alt={u.name}
+                        alt={translateText(u.name, selectedLanguage)}
                         className="w-8 h-8 rounded-lg object-cover"
                       />
                       <span
@@ -195,9 +198,9 @@ export const NewDirectMessageModal: React.FC = () => {
                       />
                     </div>
                     <div className="truncate">
-                      <div className="text-xs font-semibold text-[#F5F7FA]">{u.name}</div>
+                      <div className="text-xs font-semibold text-[#F5F7FA]">{translateText(u.name, selectedLanguage)}</div>
                       <div className="text-[11px] text-[#929BAA] truncate">
-                        {u.title} &bull; @{u.username}
+                        {u.title ? translateText(u.title, selectedLanguage) : ''} &bull; @{u.username}
                       </div>
                     </div>
                   </div>
@@ -223,8 +226,8 @@ export const NewDirectMessageModal: React.FC = () => {
             {customEmail.trim()
               ? `Chat with: ${customEmail.trim()}`
               : selectedUserIds.length === 0
-              ? 'Select coworker or enter email'
-              : `${selectedUserIds.length} participant${selectedUserIds.length > 1 ? 's' : ''} selected`}
+              ? t('select_coworker_or_email')
+              : `${selectedUserIds.length} ${t('participants_selected')}`}
           </div>
 
           <div className="flex items-center space-x-2">
@@ -232,7 +235,7 @@ export const NewDirectMessageModal: React.FC = () => {
               onClick={() => setIsNewDMOpen(false)}
               className="px-4 py-2 bg-[#12151C] hover:bg-[#252B36] text-xs font-medium text-[#929BAA] hover:text-[#F5F7FA] rounded-xl border border-[#252B36] transition-colors cursor-pointer"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               onClick={handleStart}
@@ -243,7 +246,7 @@ export const NewDirectMessageModal: React.FC = () => {
                   : 'bg-[#12151C] text-[#929BAA]/50 cursor-not-allowed'
               }`}
             >
-              <span>{selectedUserIds.length > 1 ? 'Start Group Discussion' : 'Start Chat'}</span>
+              <span>{selectedUserIds.length > 1 ? t('start_group_discussion') : t('start_chat')}</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

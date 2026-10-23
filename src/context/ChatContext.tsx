@@ -22,7 +22,13 @@ import {
   INITIAL_NOTIFICATIONS,
 } from '../data/initialData';
 import { soundFX } from '../utils/audio';
-import { translateText, getTranslation } from '../utils/translation';
+import {
+  translateText,
+  getTranslation,
+  subscribeToTranslations,
+  batchTranslate,
+  hasTranslation,
+} from '../utils/translation';
 import { encryptMessage } from '../utils/crypto';
 import { sanitizeInput, rateLimiter } from '../utils/security';
 import { generateLetterAvatar, resolveUserAvatar } from '../utils/avatar';
@@ -626,7 +632,29 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Translation State
   const [isTranslationOpen, setIsTranslationOpen] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState('en');
+  const [selectedLanguage, setSelectedLanguageState] = useState<string>(() => {
+    try {
+      return localStorage.getItem('pulsechat_selected_language') || 'en';
+    } catch {
+      return 'en';
+    }
+  });
+  const [translationTick, setTranslationTick] = useState(0);
+
+  const setSelectedLanguage = useCallback((lang: string) => {
+    setSelectedLanguageState(lang);
+    try {
+      localStorage.setItem('pulsechat_selected_language', lang);
+    } catch {}
+  }, []);
+
+  // Subscribe to reactive translation updates from Google Translate API
+  useEffect(() => {
+    return subscribeToTranslations(() => {
+      setTranslationTick((prev) => prev + 1);
+    });
+  }, []);
+
   const [autoTranslateEnabled, setAutoTranslateEnabled] = useState(false);
 
   // AI Assistant State
@@ -3409,8 +3437,38 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (key: string) => {
       return getTranslation(key, selectedLanguage);
     },
-    [selectedLanguage]
+    [selectedLanguage, translationTick]
   );
+
+  // Proactively batch translate messages, topics, channel descriptions, names, workspaces, and users when language changes
+  useEffect(() => {
+    if (selectedLanguage === 'en') return;
+    const texts: string[] = [];
+    messages.forEach((m) => {
+      if (m.content) texts.push(m.content);
+      if (m.originalContent) texts.push(m.originalContent);
+    });
+    channels.forEach((c) => {
+      if (c.name) texts.push(c.name);
+      if (c.description) texts.push(c.description);
+      if (c.topic) texts.push(c.topic);
+    });
+    workspaces.forEach((w) => {
+      if (w.name) texts.push(w.name);
+      if (w.description) texts.push(w.description);
+    });
+    users.forEach((u) => {
+      if (u.name) texts.push(u.name);
+      if (u.title) texts.push(u.title);
+      if (u.statusText) texts.push(u.statusText);
+    });
+    dms.forEach((d) => {
+      if (d.groupName) texts.push(d.groupName);
+    });
+    if (texts.length > 0) {
+      batchTranslate(texts, selectedLanguage);
+    }
+  }, [messages, channels, workspaces, users, dms, selectedLanguage]);
 
   // Filter messages for active conversation and dynamically translate whole screen to selected language
   const activeConversationMessages = React.useMemo(() => {
@@ -3455,24 +3513,36 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (selectedLanguage === 'en') return raw;
 
-    return raw.map((m) => ({
-      ...m,
-      content: translateText(m.content, selectedLanguage),
-      isTranslated: true,
-    }));
-  }, [messages, activeView, dms, selectedLanguage, currentUserId]);
+    return raw.map((m) => {
+      const original = m.originalContent || m.content;
+      const translated = translateText(original, selectedLanguage);
+      const isDone = hasTranslation(original, selectedLanguage);
+      return {
+        ...m,
+        originalContent: original,
+        content: translated,
+        isTranslated: isDone,
+        translatedLanguage: selectedLanguage,
+      };
+    });
+  }, [messages, activeView, dms, selectedLanguage, currentUserId, translationTick]);
 
   const activeThreadMessage = React.useMemo(() => {
     if (!activeThreadMessageId) return null;
     const msg = messages.find((m) => m.id === activeThreadMessageId);
     if (!msg || msg.hiddenForUserIds?.includes(currentUserId)) return null;
     if (selectedLanguage === 'en') return msg;
+    const original = msg.originalContent || msg.content;
+    const translated = translateText(original, selectedLanguage);
+    const isDone = hasTranslation(original, selectedLanguage);
     return {
       ...msg,
-      content: translateText(msg.content, selectedLanguage),
-      isTranslated: true,
+      originalContent: original,
+      content: translated,
+      isTranslated: isDone,
+      translatedLanguage: selectedLanguage,
     };
-  }, [messages, activeThreadMessageId, selectedLanguage, currentUserId]);
+  }, [messages, activeThreadMessageId, selectedLanguage, currentUserId, translationTick]);
 
   const threadReplies = React.useMemo(() => {
     if (!activeThreadMessageId) return [];
@@ -3480,12 +3550,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       (m) => m.parentId === activeThreadMessageId && !m.hiddenForUserIds?.includes(currentUserId)
     );
     if (selectedLanguage === 'en') return replies;
-    return replies.map((m) => ({
-      ...m,
-      content: translateText(m.content, selectedLanguage),
-      isTranslated: true,
-    }));
-  }, [messages, activeThreadMessageId, selectedLanguage, currentUserId]);
+    return replies.map((m) => {
+      const original = m.originalContent || m.content;
+      const translated = translateText(original, selectedLanguage);
+      const isDone = hasTranslation(original, selectedLanguage);
+      return {
+        ...m,
+        originalContent: original,
+        content: translated,
+        isTranslated: isDone,
+        translatedLanguage: selectedLanguage,
+      };
+    });
+  }, [messages, activeThreadMessageId, selectedLanguage, currentUserId, translationTick]);
 
   // Real-time Notification Dispatcher
   const triggerLiveNotification = useCallback((customTitle?: string, customBody?: string) => {
@@ -3958,19 +4035,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Translation helpers
   const translateActiveConversation = useCallback((lang: string) => {
-    setMessages((prev) =>
-      prev.map((m) => {
-        const original = m.originalContent || m.content;
-        return {
-          ...m,
-          originalContent: original,
-          content: translateText(original, lang),
-          isTranslated: true,
-          translatedLanguage: lang,
-        };
-      })
-    );
-  }, []);
+    setSelectedLanguage(lang);
+    if (lang === 'en') return;
+    const allContents = messages.map((m) => m.originalContent || m.content).filter(Boolean);
+    batchTranslate(allContents, lang);
+  }, [messages, setSelectedLanguage]);
 
   const translateSingleMessage = useCallback((messageId: string, lang: string) => {
     setMessages((prev) =>

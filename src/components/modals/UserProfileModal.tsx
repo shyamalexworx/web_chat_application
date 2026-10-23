@@ -114,9 +114,9 @@ export const UserProfileModal: React.FC = () => {
               <Settings className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-xs font-bold text-slate-900 dark:text-[#F5F7FA]">Profile & Settings</h2>
+              <h2 className="text-xs font-bold text-slate-900 dark:text-[#F5F7FA]">{t('profile_and_settings')}</h2>
               <p className="text-[10px] text-slate-500 dark:text-[#929BAA]">
-                Manage your identity and preferences.
+                {t('manage_profile_desc')}
               </p>
             </div>
           </div>
@@ -141,7 +141,7 @@ export const UserProfileModal: React.FC = () => {
             }`}
           >
             <UserCheck className="w-3.5 h-3.5" />
-            <span>Profile & Presence</span>
+            <span>{t('profile_and_presence')}</span>
           </button>
 
           <button
@@ -154,7 +154,7 @@ export const UserProfileModal: React.FC = () => {
             }`}
           >
             <Settings className="w-3.5 h-3.5" />
-            <span>Preferences</span>
+            <span>{t('preferences')}</span>
           </button>
         </div>
 
@@ -166,7 +166,7 @@ export const UserProfileModal: React.FC = () => {
               {/* Avatar Selection */}
               <div>
                 <label className="block text-[11px] font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1.5">
-                  Profile Photo
+                  {t('profile_photo')}
                 </label>
                 <div className="flex items-center space-x-3">
                   <div className="relative">
@@ -222,7 +222,7 @@ export const UserProfileModal: React.FC = () => {
                       className="px-2.5 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
                     >
                       <Upload className="w-3.5 h-3.5" />
-                      <span>Choose Custom Photo</span>
+                      <span>{t('choose_photo')}</span>
                     </button>
                   </div>
                 </div>
@@ -232,7 +232,7 @@ export const UserProfileModal: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1">
-                    Display Name
+                    {t('display_name')}
                   </label>
                   <input
                     type="text"
@@ -244,7 +244,7 @@ export const UserProfileModal: React.FC = () => {
 
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1">
-                    Title / Role
+                    {t('title_role')}
                   </label>
                   <input
                     type="text"
@@ -258,7 +258,7 @@ export const UserProfileModal: React.FC = () => {
               {/* Custom Status */}
               <div>
                 <label className="block text-[11px] font-semibold text-slate-800 dark:text-[#F5F7FA] mb-1">
-                  Custom Status & Emoji
+                  {t('custom_status_emoji')}
                 </label>
                 <div className="flex items-center space-x-1.5">
                   <input
@@ -271,7 +271,7 @@ export const UserProfileModal: React.FC = () => {
                     type="text"
                     value={statusText}
                     onChange={(e) => setStatusText(e.target.value)}
-                    placeholder="What are you working on right now?"
+                    placeholder={t('status_placeholder')}
                     className="flex-1 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] focus:border-[#4F8CFF] rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-[#F5F7FA] placeholder-slate-400 dark:placeholder-[#929BAA] outline-none"
                   />
                 </div>
@@ -289,7 +289,7 @@ export const UserProfileModal: React.FC = () => {
                       className="px-1.5 py-0.5 bg-slate-100 dark:bg-[#12151C] hover:bg-slate-200 dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] rounded-md text-[10.5px] text-slate-600 hover:text-slate-900 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] flex items-center space-x-1 transition-colors cursor-pointer"
                     >
                       <span>{preset.emoji}</span>
-                      <span>{preset.text}</span>
+                      <span>{t(preset.text)}</span>
                     </button>
                   ))}
                 </div>
@@ -305,12 +305,12 @@ export const UserProfileModal: React.FC = () => {
                   />
                   <div>
                     <div className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">
-                      {isOnline ? 'Active Online Presence' : 'Away / Offline Mode'}
+                      {isOnline ? t('active_online_presence') : t('away_offline_mode')}
                     </div>
                     <div className="text-[10px] text-slate-500 dark:text-[#929BAA]">
                       {isOnline
-                        ? 'Teammates can see that you are active.'
-                        : 'Show as offline to colleagues.'}
+                        ? t('teammates_can_see_active')
+                        : t('show_offline_colleagues')}
                     </div>
                   </div>
                 </div>
@@ -336,7 +336,7 @@ export const UserProfileModal: React.FC = () => {
                   type="submit"
                   className="px-3.5 py-1.5 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white font-semibold rounded-lg text-xs transition-all shadow-accent-glow cursor-pointer"
                 >
-                  Save Profile Changes
+                  {t('save_profile_changes')}
                 </button>
               </div>
             </form>
@@ -349,7 +349,7 @@ export const UserProfileModal: React.FC = () => {
               <div className="p-2.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-lg space-y-2">
                 <div className="flex items-center space-x-1.5">
                   <Sun className="w-3.5 h-3.5 text-[#4F8CFF]" />
-                  <span className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">Interface Theme</span>
+                  <span className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">{t('interface_theme')}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <button
@@ -365,7 +365,7 @@ export const UserProfileModal: React.FC = () => {
                     }`}
                   >
                     <Moon className="w-3.5 h-3.5" />
-                    <span>Dark</span>
+                    <span>{t('dark')}</span>
                   </button>
                   <button
                     type="button"
@@ -380,7 +380,7 @@ export const UserProfileModal: React.FC = () => {
                     }`}
                   >
                     <Sun className="w-3.5 h-3.5" />
-                    <span>Light</span>
+                    <span>{t('light')}</span>
                   </button>
                   <button
                     type="button"
@@ -395,7 +395,7 @@ export const UserProfileModal: React.FC = () => {
                     }`}
                   >
                     <Laptop className="w-3.5 h-3.5" />
-                    <span>System</span>
+                    <span>{t('system')}</span>
                   </button>
                 </div>
               </div>
@@ -407,9 +407,9 @@ export const UserProfileModal: React.FC = () => {
                     {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#32C48D]" /> : <VolumeX className="w-3.5 h-3.5 text-[#F05D6C]" />}
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">Sound Chimes & Audio FX</div>
+                    <div className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">{t('sound_chimes')}</div>
                     <div className="text-[10px] text-slate-500 dark:text-[#929BAA] leading-normal">
-                      Subtle procedural workplace tones for sent messages and notifications.
+                      {t('sound_chimes_desc')}
                     </div>
                   </div>
                 </div>
@@ -436,7 +436,7 @@ export const UserProfileModal: React.FC = () => {
               <div className="p-2.5 bg-slate-50 dark:bg-[#12151C] border border-slate-200 dark:border-[#252B36] rounded-lg space-y-2">
                 <div className="flex items-center space-x-1.5">
                   <Languages className="w-3.5 h-3.5 text-[#4F8CFF]" />
-                  <span className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">Screen Language</span>
+                  <span className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA]">{t('screen_language')}</span>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                   {SUPPORTED_LANGUAGES.map((lang) => (

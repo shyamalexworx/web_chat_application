@@ -32,6 +32,7 @@ import {
 import { resolveUserAvatar } from '../../utils/avatar';
 import { compressImageFile } from '../../utils/imageCompressor';
 import { uploadChatMedia, isSupabaseConfigured } from '../../lib/supabase';
+import { translateText } from '../../utils/translation';
 
 export const RightInfoPanel: React.FC = () => {
   const {
@@ -61,6 +62,7 @@ export const RightInfoPanel: React.FC = () => {
     unblockChannel,
     isChannelBlocked,
     addToast,
+    selectedLanguage,
     t,
   } = useChat();
 
@@ -227,12 +229,12 @@ export const RightInfoPanel: React.FC = () => {
           <Info className="w-4 h-4 text-[#4F8CFF]" />
           <h2 className="text-xs font-bold text-[#F5F7FA]">
             {activeChannel
-              ? `#${activeChannel.name}`
+              ? `#${translateText(activeChannel.name, selectedLanguage)}`
               : activeDM?.isGroup
-              ? `${activeDM.groupName || 'Group'} Details`
+              ? `${translateText(activeDM.groupName || 'Group', selectedLanguage)} ${t('details')}`
               : otherUser
-              ? `${otherUser.name} Details`
-              : 'Conversation Info'}
+              ? `${translateText(otherUser.name, selectedLanguage)} ${t('details')}`
+              : t('channel_details')}
           </h2>
         </div>
 
@@ -306,7 +308,7 @@ export const RightInfoPanel: React.FC = () => {
                 {/* Channel Profile Picture / Avatar */}
                 <div className="p-2.5 bg-[#181C25] rounded-lg border border-[#252B36] space-y-1.5">
                   <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider">
-                    Channel Profile Picture
+                    {t('channel_profile_picture')}
                   </div>
                   <div className="flex items-center space-x-2.5">
                     <div className="w-10 h-10 rounded-lg border border-[#252B36] flex items-center justify-center overflow-hidden bg-[#12151C] flex-shrink-0">
@@ -326,7 +328,7 @@ export const RightInfoPanel: React.FC = () => {
                           <div className="flex items-center space-x-2">
                             <label className="px-2 py-0.5 bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 border border-[#4F8CFF]/30 text-[#4F8CFF] text-xs font-medium rounded cursor-pointer transition-colors flex items-center gap-1.5">
                               <Upload className="w-3 h-3" />
-                              <span>Change Picture</span>
+                              <span>{t('change_picture')}</span>
                               <input
                                 type="file"
                                 accept="image/*"
@@ -340,15 +342,15 @@ export const RightInfoPanel: React.FC = () => {
                                 onClick={() => updateChannelDetails(activeChannel.id, { avatar: undefined })}
                                 className="px-1.5 py-0.5 text-xs text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#12151C] rounded transition-colors cursor-pointer"
                               >
-                                Remove
+                                {t('remove')}
                               </button>
                             )}
                           </div>
-                          <p className="text-[10px] text-[#929BAA]">Square image, PNG or JPG, max 5MB.</p>
+                          <p className="text-[10px] text-[#929BAA]">{t('image_hint')}</p>
                         </>
                       ) : (
                         <p className="text-[11px] text-[#929BAA]">
-                          Only channel creator or admins can update this picture.
+                          {t('only_admin_can_update_picture')}
                         </p>
                       )}
                     </div>
@@ -359,17 +361,17 @@ export const RightInfoPanel: React.FC = () => {
                 <div className="p-2.5 bg-[#181C25] rounded-lg border border-[#252B36] space-y-1.5">
                   <div className="flex items-center justify-between">
                     <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider">
-                      Description
+                      {t('description')}
                     </div>
                     {canEditChannel && !isEditingDescription && (
                       <button
                         type="button"
                         onClick={handleStartEditDescription}
                         className="text-[11px] text-[#4F8CFF] hover:text-[#70A3FF] flex items-center gap-1 font-medium transition-colors cursor-pointer"
-                        title="Edit channel description"
+                        title={t('edit')}
                       >
                         <Edit2 className="w-3 h-3" />
-                        <span>Edit</span>
+                        <span>{t('edit')}</span>
                       </button>
                     )}
                   </div>
@@ -378,7 +380,7 @@ export const RightInfoPanel: React.FC = () => {
                       <textarea
                         value={descriptionDraft}
                         onChange={(e) => setDescriptionDraft(e.target.value)}
-                        placeholder="Add a description for this channel..."
+                        placeholder={t('add_description')}
                         rows={3}
                         className="w-full px-2.5 py-1.5 bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded text-xs text-[#F5F7FA] placeholder-[#929BAA] resize-none outline-none focus:ring-1 focus:ring-[#4F8CFF]"
                         autoFocus
@@ -389,20 +391,22 @@ export const RightInfoPanel: React.FC = () => {
                           onClick={handleSaveDescription}
                           className="px-2.5 py-1 bg-[#4F8CFF] hover:bg-[#3D7BF0] text-white text-xs font-medium rounded transition-colors cursor-pointer"
                         >
-                          Save
+                          {t('save')}
                         </button>
                         <button
                           type="button"
                           onClick={() => setIsEditingDescription(false)}
                           className="px-2 py-1 bg-[#252B36] hover:bg-[#323A4A] text-[#929BAA] hover:text-[#F5F7FA] text-xs rounded transition-colors cursor-pointer"
                         >
-                          Cancel
+                          {t('cancel')}
                         </button>
                       </div>
                     </div>
                   ) : (
                     <p className="text-[#F5F7FA] leading-snug whitespace-pre-wrap break-words">
-                      {activeChannel.description || 'No description provided.'}
+                      {activeChannel.description
+                        ? translateText(activeChannel.description, selectedLanguage)
+                        : t('no_description_provided')}
                     </p>
                   )}
                 </div>
@@ -413,13 +417,13 @@ export const RightInfoPanel: React.FC = () => {
                     <div className="flex items-center justify-between gap-3">
                       <div className="space-y-0.5">
                         <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider">
-                          Member Permissions
+                          {t('member_permissions')}
                         </div>
                         <p className="text-xs font-medium text-[#F5F7FA]">
-                          Allow members to edit picture & description
+                          {t('allow_member_edits')}
                         </p>
                         <p className="text-[10px] text-[#929BAA] leading-snug">
-                          When enabled, all members in this channel can edit the channel profile picture and description.
+                          {t('allow_member_edits_desc')}
                         </p>
                       </div>
                       <button
@@ -453,22 +457,22 @@ export const RightInfoPanel: React.FC = () => {
 
                 <div className="p-2.5 bg-[#181C25] rounded-lg border border-[#252B36] space-y-1.5">
                   <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider">
-                    Channel Metadata
+                    {t('channel_metadata')}
                   </div>
                   <div className="flex items-center justify-between text-[#929BAA]">
                     <span className="flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-[#4F8CFF]" /> Visibility
+                      <Lock className="w-3.5 h-3.5 text-[#4F8CFF]" /> {t('visibility')}
                     </span>
                     <span className="font-medium text-[#F5F7FA]">
-                      {activeChannel.isPrivate ? 'Private Channel' : 'Public Channel'}
+                      {activeChannel.isPrivate ? t('private_channel') : t('public_channel')}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-[#929BAA]">
                     <span className="flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-[#4F8CFF]" /> Created
+                      <Calendar className="w-3.5 h-3.5 text-[#4F8CFF]" /> {t('created')}
                     </span>
                     <span className="font-medium text-[#F5F7FA]">
-                      {new Date(activeChannel.createdAt).toLocaleDateString()}
+                      {new Date(activeChannel.createdAt).toLocaleDateString(selectedLanguage)}
                     </span>
                   </div>
                 </div>
@@ -476,12 +480,12 @@ export const RightInfoPanel: React.FC = () => {
                 {/* Block Channel Option */}
                 <div className="p-2.5 bg-[#181C25] border border-[#252B36] rounded-lg space-y-1.5">
                   <div className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                    <ShieldAlert className="w-3.5 h-3.5 text-amber-400" /> Channel Safety & Restrictions
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-400" /> {t('safety_restrictions')}
                   </div>
                   <p className="text-[#929BAA] text-xs leading-snug">
                     {isChannelBlocked(activeChannel.id)
-                      ? `#${activeChannel.name} is currently blocked. Messages cannot be sent and incoming notifications are muted.`
-                      : `Block #${activeChannel.name} to mute sound alerts, stop incoming channel notifications, and restrict messaging.`}
+                      ? t('channel_blocked_prompt').replace('#{name}', '#' + translateText(activeChannel.name, selectedLanguage))
+                      : t('block_channel_prompt').replace('#{name}', '#' + translateText(activeChannel.name, selectedLanguage))}
                   </p>
                   {isChannelBlocked(activeChannel.id) ? (
                     <button
@@ -490,7 +494,7 @@ export const RightInfoPanel: React.FC = () => {
                       className="px-2.5 py-1 bg-[#32C48D]/15 hover:bg-[#32C48D]/25 border border-[#32C48D]/40 text-[#32C48D] text-xs font-semibold rounded transition-colors cursor-pointer flex items-center gap-1.5"
                     >
                       <UserCheck className="w-3.5 h-3.5" />
-                      <span>Unblock #${activeChannel.name}</span>
+                      <span>{t('unblock_channel').replace('#{name}', '#' + translateText(activeChannel.name, selectedLanguage))}</span>
                     </button>
                   ) : (
                     <button
@@ -499,7 +503,7 @@ export const RightInfoPanel: React.FC = () => {
                       className="px-2.5 py-1 bg-[#F05D6C]/15 hover:bg-[#F05D6C]/25 border border-[#F05D6C]/40 text-[#F05D6C] text-xs font-semibold rounded transition-colors cursor-pointer flex items-center gap-1.5"
                     >
                       <Ban className="w-3.5 h-3.5" />
-                      <span>Block #${activeChannel.name}</span>
+                      <span>{t('block_channel').replace('#{name}', '#' + translateText(activeChannel.name, selectedLanguage))}</span>
                     </button>
                   )}
                 </div>
@@ -507,10 +511,10 @@ export const RightInfoPanel: React.FC = () => {
                 {/* Delete Channel Option */}
                 <div className="p-2.5 bg-[#F05D6C]/10 border border-[#F05D6C]/30 rounded-lg space-y-1.5">
                   <div className="text-[10px] font-semibold text-[#F05D6C] uppercase tracking-wider flex items-center gap-1.5">
-                    <Trash2 className="w-3.5 h-3.5" /> Delete Channel
+                    <Trash2 className="w-3.5 h-3.5" /> {t('delete_channel')}
                   </div>
                   <p className="text-[#929BAA] text-xs">
-                    Permanently delete #{activeChannel.name} and all associated messages. This cannot be undone.
+                    {t('delete_channel_warning')}
                   </p>
                   {confirmDeleteChannel ? (
                     <div className="flex items-center space-x-2 pt-0.5">
@@ -519,14 +523,14 @@ export const RightInfoPanel: React.FC = () => {
                         onClick={() => deleteChannel(activeChannel.id)}
                         className="px-2.5 py-1 bg-[#F05D6C] hover:bg-[#D94554] text-white text-xs font-semibold rounded transition-colors cursor-pointer shadow-sm"
                       >
-                        Confirm Delete
+                        {t('confirm_delete')}
                       </button>
                       <button
                         type="button"
                         onClick={() => setConfirmDeleteChannel(false)}
                         className="px-2 py-1 bg-[#181C25] hover:bg-[#252B36] text-[#929BAA] hover:text-[#F5F7FA] text-xs rounded transition-colors cursor-pointer"
                       >
-                        Cancel
+                        {t('cancel')}
                       </button>
                     </div>
                   ) : (
@@ -536,7 +540,7 @@ export const RightInfoPanel: React.FC = () => {
                       className="px-2.5 py-1 bg-[#F05D6C]/15 hover:bg-[#F05D6C]/25 border border-[#F05D6C]/40 text-[#F05D6C] text-xs font-semibold rounded transition-colors cursor-pointer flex items-center gap-1.5"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      <span>Delete #{activeChannel.name}</span>
+                      <span>{t('delete_channel')} #{activeChannel.name}</span>
                     </button>
                   )}
                 </div>
@@ -701,7 +705,7 @@ export const RightInfoPanel: React.FC = () => {
             {/* Audit log / activity */}
             <div className="pt-1">
               <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-[#32C48D]" /> Recent Activity
+                <Activity className="w-3.5 h-3.5 text-[#32C48D]" /> {t('recent_activity')}
               </div>
               <div className="space-y-1.5">
                 {realActivities.length > 0 ? (
@@ -716,7 +720,7 @@ export const RightInfoPanel: React.FC = () => {
                   ))
                 ) : (
                   <div className="p-2.5 bg-[#12151C] border border-[#252B36] rounded-md text-center text-[#929BAA] text-xs">
-                    No recent activity recorded in this conversation yet.
+                    {t('no_recent_activity')}
                   </div>
                 )}
               </div>
@@ -732,7 +736,7 @@ export const RightInfoPanel: React.FC = () => {
               <Search className="w-3.5 h-3.5 text-[#929BAA] absolute left-3 top-2.5" />
               <input
                 type="text"
-                placeholder="Search channel members..."
+                placeholder={t('search_members')}
                 value={memberSearch}
                 onChange={(e) => setMemberSearch(e.target.value)}
                 className="w-full bg-[#12151C] border border-[#252B36] rounded-lg pl-8 pr-3 py-1.5 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none focus:border-[#4F8CFF]"
@@ -744,7 +748,7 @@ export const RightInfoPanel: React.FC = () => {
               className="w-full py-2 bg-[#181C25] hover:bg-[#252B36] border border-[#252B36] rounded-lg text-xs font-medium text-[#4F8CFF] flex items-center justify-center space-x-1.5 transition-colors cursor-pointer"
             >
               <UserPlus className="w-3.5 h-3.5" />
-              <span>Invite New Teammates</span>
+              <span>{t('add_people_to_channel')}</span>
             </button>
 
             <div className="divide-y divide-[#252B36]/60 space-y-1">
@@ -779,24 +783,26 @@ export const RightInfoPanel: React.FC = () => {
                         </div>
                         <div className="truncate">
                           <div className="text-xs font-semibold text-[#F5F7FA] truncate flex items-center gap-1.5">
-                            {member.name}
+                            {translateText(member.name, selectedLanguage)}
                             {isSelf && (
                               <span className="text-[10px] text-[#929BAA] font-normal">(you)</span>
                             )}
                           </div>
-                          <div className="text-[11px] text-[#929BAA] truncate">{member.title}</div>
+                          <div className="text-[11px] text-[#929BAA] truncate">
+                            {member.title ? translateText(member.title, selectedLanguage) : ''}
+                          </div>
                         </div>
                       </div>
 
                       <div className="flex items-center space-x-1.5 flex-shrink-0">
                         {isCreator && (
                           <span className="text-[10px] bg-[#4F8CFF]/20 text-[#4F8CFF] px-1.5 py-0.5 rounded font-medium">
-                            Creator
+                            {t('creator')}
                           </span>
                         )}
                         {!isCreator && isChannelAdmin && (
                           <span className="text-[10px] bg-[#32C48D]/20 text-[#32C48D] px-1.5 py-0.5 rounded font-medium">
-                            Admin
+                            {t('admin')}
                           </span>
                         )}
 

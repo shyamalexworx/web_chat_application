@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { soundFX } from '../../utils/audio';
+import { translateText } from '../../utils/translation';
 
 export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile }) => {
   const {
@@ -30,6 +31,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
     updateCurrentUserProfile,
     setIsUserProfileOpen,
     logout,
+    selectedLanguage,
     addToast,
     t,
   } = useChat();
@@ -110,10 +112,10 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
                   style={{
                     backgroundColor: ws.iconBg || '#181C25',
                   }}
-                  title={!isMobile && isActive ? (isSidebarCollapsed ? `Expand ${ws.name} Sidebar` : `Collapse ${ws.name} Sidebar`) : ws.name}
+                  title={!isMobile && isActive ? (isSidebarCollapsed ? `Expand ${translateText(ws.name, selectedLanguage)} Sidebar` : `Collapse ${translateText(ws.name, selectedLanguage)} Sidebar`) : translateText(ws.name, selectedLanguage)}
                 >
                   {ws.avatar ? (
-                    <img src={ws.avatar} alt={ws.name} className="w-full h-full rounded-lg object-cover" />
+                    <img src={ws.avatar} alt={translateText(ws.name, selectedLanguage)} className="w-full h-full rounded-lg object-cover" />
                   ) : (
                     <span className="text-white drop-shadow-sm">{ws.icon}</span>
                   )}
@@ -126,7 +128,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
 
                 {/* Tooltip on hover */}
                 <div className="absolute left-14 px-2.5 py-1.5 bg-[#181C25] text-xs font-medium text-[#F5F7FA] rounded-md shadow-modal border border-[#252B36] whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-                {ws.name}
+                {translateText(ws.name, selectedLanguage)}
               </div>
             </div>
           );
@@ -191,12 +193,12 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
             <div className="absolute bottom-2 left-14 w-64 bg-white dark:bg-[#181C25] border border-slate-200 dark:border-[#252B36] rounded-2xl shadow-xl p-2 z-50 animate-slide-down space-y-1">
             <div className="px-3 py-2 border-b border-slate-200 dark:border-[#252B36]">
               <div className="text-xs font-semibold text-slate-800 dark:text-[#F5F7FA] flex items-center gap-1.5">
-                {currentUser.name}
+                {translateText(currentUser.name, selectedLanguage)}
                 {currentUser.statusEmoji && <span>{currentUser.statusEmoji}</span>}
               </div>
               <div className="text-[11px] text-slate-500 dark:text-[#929BAA]">{currentUser.email}</div>
               <div className="text-[10px] text-[#4F8CFF] font-medium mt-0.5 uppercase tracking-wider">
-                {currentUser.role} &bull; {currentUser.title}
+                {t(currentUser.role)} &bull; {currentUser.title ? translateText(currentUser.title, selectedLanguage) : ''}
               </div>
             </div>
 
@@ -230,7 +232,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
                     : 'text-slate-400 bg-slate-100 dark:bg-[#12151C] border-slate-200 dark:border-[#252B36]'
                 }`}
               >
-                {currentUser.isOnline ? 'Active' : 'Away'}
+                {currentUser.isOnline ? t('active') : t('away')}
               </span>
             </button>
 
@@ -243,7 +245,7 @@ export const WorkspaceRailInner: React.FC<{ isMobile?: boolean }> = ({ isMobile 
               className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs rounded-xl hover:bg-slate-100 dark:hover:bg-[#1E2330] transition-colors cursor-pointer group"
             >
               <Settings className="w-4 h-4 text-[#4F8CFF]" />
-              <span className="font-semibold text-slate-800 dark:text-[#F5F7FA]">Profile & Settings</span>
+              <span className="font-semibold text-slate-800 dark:text-[#F5F7FA]">{t('profile_and_settings')}</span>
             </button>
 
             {/* Toggle Sound */}

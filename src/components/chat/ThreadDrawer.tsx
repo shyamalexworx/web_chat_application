@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useChat } from '../../context/ChatContext';
 import { X, Send, MessageSquare, Smile, Paperclip } from 'lucide-react';
 import { MessageItem } from './MessageItem';
+import { translateText } from '../../utils/translation';
 
 export const ThreadDrawer: React.FC = () => {
   const {
@@ -13,6 +14,8 @@ export const ThreadDrawer: React.FC = () => {
     activeView,
     users,
     currentUser,
+    selectedLanguage,
+    t,
   } = useChat();
 
   const [replyText, setReplyText] = useState('');
@@ -55,9 +58,9 @@ export const ThreadDrawer: React.FC = () => {
         <div className="flex items-center space-x-2">
           <MessageSquare className="w-4 h-4 text-[#4F8CFF]" />
           <div>
-            <h3 className="text-xs font-bold text-[#F5F7FA]">Thread</h3>
+            <h3 className="text-xs font-bold text-[#F5F7FA]">{t('thread')}</h3>
             <span className="text-[11px] text-[#929BAA]">
-              #{activeChannel?.name || 'discussion'}
+              #{activeChannel?.name ? translateText(activeChannel.name, selectedLanguage) : 'discussion'}
             </span>
           </div>
         </div>
@@ -65,7 +68,7 @@ export const ThreadDrawer: React.FC = () => {
         <button
           onClick={() => setActiveThreadMessageId(null)}
           className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors"
-          title="Close thread"
+          title={t('close')}
         >
           <X className="w-4 h-4" />
         </button>
@@ -76,7 +79,7 @@ export const ThreadDrawer: React.FC = () => {
         {/* Original Root Message */}
         <div className="py-3 bg-[#12151C]/60">
           <div className="px-3 pb-1 text-[10px] font-semibold text-[#4F8CFF] uppercase tracking-wider">
-            Original Post
+            {t('original_post')}
           </div>
           <MessageItem message={activeThreadMessage} />
         </div>
@@ -84,7 +87,7 @@ export const ThreadDrawer: React.FC = () => {
         {/* Replies List */}
         <div className="py-2">
           <div className="px-4 py-2 text-xs font-semibold text-[#929BAA]">
-            {threadReplies.length} {threadReplies.length === 1 ? 'reply' : 'replies'}
+            {threadReplies.length} {threadReplies.length === 1 ? t('reply') : t('replies')}
           </div>
 
           {threadReplies.map((reply, idx) => (
@@ -107,11 +110,11 @@ export const ThreadDrawer: React.FC = () => {
             value={replyText}
             onChange={(e) => setReplyText(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={`Reply to ${parentSender?.name || 'thread'}...`}
+            placeholder={t('reply_in_thread')}
             className="w-full bg-transparent text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none resize-none leading-relaxed"
           />
           <div className="flex items-center justify-between pt-1 border-t border-[#252B36]/40">
-            <span className="text-[10px] text-[#929BAA] font-mono">Enter to reply</span>
+            <span className="text-[10px] text-[#929BAA] font-mono">{t('shift_enter')}</span>
             <button
               onClick={handleSend}
               disabled={!replyText.trim()}

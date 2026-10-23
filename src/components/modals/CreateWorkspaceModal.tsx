@@ -11,7 +11,7 @@ const ACCENT_COLORS = [
 ];
 
 export const CreateWorkspaceModal: React.FC = () => {
-  const { isCreateWorkspaceOpen, setIsCreateWorkspaceOpen, createWorkspace } = useChat();
+  const { isCreateWorkspaceOpen, setIsCreateWorkspaceOpen, createWorkspace, t } = useChat();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -54,9 +54,9 @@ export const CreateWorkspaceModal: React.FC = () => {
               <Building2 className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-[#F5F7FA]">Create New Workspace</h2>
+              <h2 className="text-sm font-bold text-[#F5F7FA]">{t('create_workspace')}</h2>
               <p className="text-[11px] text-[#929BAA]">
-                Spin up a dedicated organization space for your company or team.
+                {t('create_workspace_desc')}
               </p>
             </div>
           </div>
@@ -80,7 +80,7 @@ export const CreateWorkspaceModal: React.FC = () => {
           {/* Workspace Name */}
           <div>
             <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
-              Workspace Name
+              {t('workspace_name')}
             </label>
             <input
               type="text"
@@ -98,7 +98,7 @@ export const CreateWorkspaceModal: React.FC = () => {
           {/* Workspace Slug */}
           <div>
             <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
-              Workspace URL
+              {t('workspace_url')}
             </label>
             <div className="flex items-center bg-[#12151C] border border-[#252B36] rounded-xl px-3 py-2 text-xs text-[#929BAA]">
               <span>pulsechat.app/</span>
@@ -111,7 +111,7 @@ export const CreateWorkspaceModal: React.FC = () => {
           {/* Description */}
           <div>
             <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
-              Team Mission & Description
+              {t('team_mission_desc')}
             </label>
             <textarea
               rows={2}
@@ -125,7 +125,7 @@ export const CreateWorkspaceModal: React.FC = () => {
           {/* Accent Color */}
           <div>
             <label className="block text-xs font-semibold text-[#F5F7FA] mb-2">
-              Workspace Brand Color
+              {t('workspace_brand_color')}
             </label>
             <div className="flex items-center space-x-2">
               {ACCENT_COLORS.map((col) => (
@@ -148,7 +148,7 @@ export const CreateWorkspaceModal: React.FC = () => {
           {/* Team Size */}
           <div>
             <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
-              Estimated Team Size
+              {t('estimated_team_size')}
             </label>
             <div className="grid grid-cols-4 gap-2">
               {['1-10', '10-50', '50-250', '250+'].map((size) => (
@@ -175,14 +175,14 @@ export const CreateWorkspaceModal: React.FC = () => {
               onClick={() => setIsCreateWorkspaceOpen(false)}
               className="px-4 py-2 bg-[#12151C] hover:bg-[#252B36] text-xs font-medium text-[#929BAA] hover:text-[#F5F7FA] rounded-xl border border-[#252B36] transition-colors"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               type="submit"
               className="px-4 py-2 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-xs font-semibold text-white rounded-xl shadow-accent-glow flex items-center space-x-1.5 transition-all"
             >
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Launch Workspace</span>
+              <span>{t('launch_workspace')}</span>
             </button>
           </div>
         </form>

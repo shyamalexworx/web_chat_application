@@ -3,6 +3,7 @@ import { useChat } from '../../context/ChatContext';
 import { MessageItem } from './MessageItem';
 import { Hash, Lock, Users, Sparkles, ArrowDown } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
+import { translateText } from '../../utils/translation';
 
 export const MessageList: React.FC = () => {
   const {
@@ -16,6 +17,7 @@ export const MessageList: React.FC = () => {
     setRightPanelTab,
     setIsCreateWorkspaceOpen,
     setIsNewDMOpen,
+    selectedLanguage,
     t,
   } = useChat();
 
@@ -69,7 +71,7 @@ export const MessageList: React.FC = () => {
     } else if (date.toDateString() === yesterday.toDateString()) {
       return t('yesterday');
     } else {
-      return date.toLocaleDateString(undefined, {
+      return date.toLocaleDateString(selectedLanguage, {
         weekday: 'long',
         month: 'short',
         day: 'numeric',
@@ -98,7 +100,9 @@ export const MessageList: React.FC = () => {
                 {t('welcome_to')} #{activeChannel.name}!
               </h1>
               <p className="text-xs text-[#929BAA] mt-1.5 max-w-xl leading-relaxed">
-                {activeChannel.description || t('this_channel_is_for')}
+                {activeChannel.description
+                  ? translateText(activeChannel.description, selectedLanguage)
+                  : t('this_channel_is_for')}
               </p>
               <div className="mt-3 flex items-center space-x-2">
                 <button
@@ -132,7 +136,9 @@ export const MessageList: React.FC = () => {
               <p className="text-xs text-[#929BAA] mt-1 max-w-xl">
                 {activeDM.isGroup
                   ? `${t('group_conversation_with')} (${(activeDM.participantIds || []).length} ${t('members')})`
-                  : `${t('dm_beginning')} ${dmPartner?.name || 'chat'} (${dmPartner?.title || 'Member'}).`}
+                  : `${t('dm_beginning')} ${dmPartner?.name || 'chat'} (${
+                      dmPartner?.title ? translateText(dmPartner.title, selectedLanguage) : t('team_members')
+                    }).`}
               </p>
             </div>
           ) : (
@@ -140,22 +146,24 @@ export const MessageList: React.FC = () => {
               <div className="w-16 h-16 rounded-3xl bg-[#181C25] border border-[#252B36] flex items-center justify-center text-[#4F8CFF] mx-auto mb-4 shadow-subtle">
                 <Sparkles className="w-8 h-8" />
               </div>
-              <h1 className="text-xl font-bold text-[#F5F7FA]">Welcome to PulseChat</h1>
+              <h1 className="text-xl font-bold text-[#F5F7FA]">
+                {t('welcome_to')} PulseChat
+              </h1>
               <p className="text-xs text-[#929BAA] mt-2 leading-relaxed">
-                Start by creating your own workspace or send a chat invitation to connect with your coworkers.
+                {t('welcome_intro_desc')}
               </p>
               <div className="mt-5 flex items-center justify-center gap-3">
                 <button
                   onClick={() => setIsCreateWorkspaceOpen(true)}
                   className="px-4 py-2 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-xs font-semibold rounded-xl shadow-accent-glow transition-all cursor-pointer"
                 >
-                  + Create Workspace
+                  + {t('create_workspace')}
                 </button>
                 <button
                   onClick={() => setIsNewDMOpen(true)}
                   className="px-4 py-2 bg-[#181C25] hover:bg-[#252B36] text-[#F5F7FA] border border-[#252B36] text-xs font-medium rounded-xl transition-colors cursor-pointer"
                 >
-                  New Message
+                  {t('start_dm')}
                 </button>
               </div>
             </div>

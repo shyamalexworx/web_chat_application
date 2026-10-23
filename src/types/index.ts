@@ -151,6 +151,14 @@ export interface HuddleState {
   startedAt?: string;
 }
 
+export interface AIPendingMessageAction {
+  type: 'channel' | 'dm';
+  targetId: string;
+  targetName: string;
+  content: string;
+  status: 'pending' | 'confirmed' | 'cancelled';
+}
+
 export interface AIMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -158,6 +166,7 @@ export interface AIMessage {
   timestamp: string;
   feedback?: 'like' | 'dislike' | null;
   error?: boolean;
+  pendingAction?: AIPendingMessageAction;
 }
 
 export interface AIConversation {

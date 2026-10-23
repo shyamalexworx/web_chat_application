@@ -177,6 +177,60 @@ export const WORKSPACE_TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'start_personal_chat',
+      description: 'Create or open a personal direct message conversation with a user/teammate',
+      parameters: {
+        type: 'object',
+        properties: {
+          userName: {
+            type: 'string',
+            description: 'The name or email of the teammate to open personal chat with',
+          },
+        },
+        required: ['userName'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'summarize_channel',
+      description: 'Summarize discussions, updates, and messages from a channel',
+      parameters: {
+        type: 'object',
+        properties: {
+          channelName: {
+            type: 'string',
+            description: 'Optional name of the channel to summarize. If omitted, the currently open channel is summarized.',
+          },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'translate_message',
+      description: 'Translate a message or statement into a specified target language',
+      parameters: {
+        type: 'object',
+        properties: {
+          content: {
+            type: 'string',
+            description: 'The text content to translate',
+          },
+          targetLanguage: {
+            type: 'string',
+            description: 'The target language (e.g. Spanish, Tamil, Japanese, French, German, Chinese, Hindi)',
+          },
+        },
+        required: ['content', 'targetLanguage'],
+      },
+    },
+  },
 ];
 
 const STORAGE_KEY_GROQ_API = 'pulsechat_groq_api_key';

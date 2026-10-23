@@ -15,6 +15,7 @@ import {
 import { compressImageFile } from '../../utils/imageCompressor';
 import { resolveUserAvatar } from '../../utils/avatar';
 import { uploadChatMedia, isSupabaseConfigured } from '../../lib/supabase';
+import { translateText } from '../../utils/translation';
 
 export const WorkspaceSettingsModal: React.FC = () => {
   const {
@@ -31,7 +32,9 @@ export const WorkspaceSettingsModal: React.FC = () => {
     blockWorkspace,
     unblockWorkspace,
     isWorkspaceBlocked,
+    selectedLanguage,
     addToast,
+    t,
   } = useChat();
 
   const [activeTab, setActiveTab] = useState<'general' | 'members' | 'danger'>('general');
@@ -112,9 +115,11 @@ export const WorkspaceSettingsModal: React.FC = () => {
               </div>
             )}
             <div>
-              <h2 className="text-sm font-bold text-[#F5F7FA] leading-tight">{activeWorkspace.name} Settings</h2>
+              <h2 className="text-sm font-bold text-[#F5F7FA] leading-tight">
+                {translateText(activeWorkspace.name, selectedLanguage)} {t('details')}
+              </h2>
               <p className="text-[10px] text-[#929BAA] leading-tight mt-0.5">
-                Manage workspace permissions, team members, and preferences.
+                {translateText('Manage workspace permissions, team members, and preferences.', selectedLanguage)}
               </p>
             </div>
           </div>
@@ -137,7 +142,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 : 'border-transparent text-[#929BAA] hover:text-[#F5F7FA]'
             }`}
           >
-            General
+            {t('about')}
           </button>
           <button
             onClick={() => setActiveTab('members')}
@@ -147,7 +152,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 : 'border-transparent text-[#929BAA] hover:text-[#F5F7FA]'
             }`}
           >
-            Members & Roles ({workspaceMembers.length})
+            {t('members_tab')} ({workspaceMembers.length})
           </button>
           <button
             onClick={() => setActiveTab('danger')}
@@ -157,7 +162,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                 : 'border-transparent text-[#929BAA] hover:text-[#F05D6C]'
             }`}
           >
-            Data & Danger Zone
+            {translateText('Danger Zone', selectedLanguage)}
           </button>
         </div>
 
@@ -168,14 +173,14 @@ export const WorkspaceSettingsModal: React.FC = () => {
               {/* Workspace Profile Picture Upload */}
               <div>
                 <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
-                  Workspace Profile Picture
+                  {translateText('Workspace Profile Picture', selectedLanguage)}
                 </label>
                 <div className="flex items-center space-x-3">
                   <div className="relative group flex-shrink-0">
                     {activeWorkspace.avatar ? (
                       <img
                         src={activeWorkspace.avatar}
-                        alt={activeWorkspace.name}
+                        alt={translateText(activeWorkspace.name, selectedLanguage)}
                         className="w-11 h-11 rounded-xl object-cover border border-[#252B36] shadow-sm"
                       />
                     ) : (
@@ -192,7 +197,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                     <div className="flex items-center space-x-2">
                       <label className="px-2.5 py-1 bg-[#4F8CFF]/15 hover:bg-[#4F8CFF]/25 border border-[#4F8CFF]/30 text-[#4F8CFF] text-[11px] font-medium rounded-lg cursor-pointer transition-colors flex items-center gap-1.5">
                         <Upload className="w-3.5 h-3.5" />
-                        <span>Change Workspace Picture</span>
+                        <span>{t('change_picture')}</span>
                         <input
                           type="file"
                           accept="image/*"
@@ -206,12 +211,12 @@ export const WorkspaceSettingsModal: React.FC = () => {
                           onClick={() => updateWorkspace(activeWorkspace.id, { avatar: undefined })}
                           className="px-2 py-1 text-[11px] text-[#929BAA] hover:text-[#F05D6C] hover:bg-[#12151C] rounded-lg transition-colors cursor-pointer"
                         >
-                          Remove
+                          {t('remove')}
                         </button>
                       )}
                     </div>
                     <p className="text-[10px] text-[#929BAA]">
-                      Recommended: square image, PNG or JPG, max 5MB.
+                      {t('image_hint')}
                     </p>
                   </div>
                 </div>
@@ -219,7 +224,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-[#F5F7FA] mb-1">
-                  Workspace Name
+                  {t('workspace_name')}
                 </label>
                 <input
                   type="text"
@@ -231,7 +236,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-[#F5F7FA] mb-1">
-                  Workspace Description
+                  {t('description')}
                 </label>
                 <textarea
                   rows={2}
@@ -244,7 +249,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
               {/* Invite Link */}
               <div className="p-2.5 bg-[#12151C] border border-[#252B36] rounded-xl space-y-1.5">
                 <div className="text-[11px] font-semibold text-[#F5F7FA] flex items-center gap-1.5">
-                  <Link className="w-3.5 h-3.5 text-[#4F8CFF]" /> Team Invite Link
+                  <Link className="w-3.5 h-3.5 text-[#4F8CFF]" /> {translateText('Team Invite Link', selectedLanguage)}
                 </div>
                 <div className="flex items-center space-x-1.5">
                   <input
@@ -259,7 +264,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                     className="px-2.5 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-xs font-medium rounded-lg flex items-center space-x-1 transition-colors cursor-pointer"
                   >
                     {copiedLink ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedLink ? 'Copied' : 'Copy'}</span>
+                    <span>{copiedLink ? translateText('Copied', selectedLanguage) : translateText('Copy', selectedLanguage)}</span>
                   </button>
                 </div>
               </div>
@@ -269,7 +274,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                   type="submit"
                   className="px-3.5 py-1.5 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-xs font-semibold rounded-lg shadow-accent-glow transition-all cursor-pointer"
                 >
-                  Save Settings
+                  {t('save')}
                 </button>
               </div>
             </form>
@@ -278,12 +283,12 @@ export const WorkspaceSettingsModal: React.FC = () => {
           {activeTab === 'members' && (
             <div className="space-y-3">
               <div className="text-xs text-[#929BAA] pb-2">
-                Assign administrator roles, manage member access, and monitor team presence.
+                {translateText('Assign administrator roles, manage member access, and monitor team presence.', selectedLanguage)}
               </div>
 
               {workspaceMembers.length === 0 ? (
                 <div className="p-6 text-center text-xs text-[#929BAA]">
-                  No members currently in this workspace.
+                  {translateText('No members currently in this workspace.', selectedLanguage)}
                 </div>
               ) : (
                 <div className="divide-y divide-[#252B36]/50">
@@ -296,7 +301,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                         <div className="relative">
                           <img
                             src={resolveUserAvatar(member.avatar, member.name)}
-                            alt={member.name}
+                            alt={translateText(member.name, selectedLanguage)}
                             className="w-8 h-8 rounded-lg object-cover"
                           />
                           <span
@@ -307,20 +312,20 @@ export const WorkspaceSettingsModal: React.FC = () => {
                         </div>
                         <div className="truncate">
                           <div className="text-xs font-semibold text-[#F5F7FA] flex items-center gap-1.5">
-                            {member.name}
+                            {translateText(member.name, selectedLanguage)}
                             {member.id === currentUser.id && (
                               <span className="text-[10px] text-[#4F8CFF] font-medium">(you)</span>
                             )}
                           </div>
                           <div className="text-[11px] text-[#929BAA] truncate">
-                            {member.title} &bull; {member.email}
+                            {member.title ? translateText(member.title, selectedLanguage) : ''} &bull; {member.email}
                           </div>
                         </div>
                       </div>
 
                       <div className="flex items-center space-x-2">
                         <span className="text-xs font-medium text-[#929BAA] bg-[#12151C] border border-[#252B36] px-2.5 py-1 rounded-lg capitalize">
-                          {member.role}
+                          {t(member.role)}
                         </span>
                         {member.id !== currentUser.id && (
                           isUserBlocked(member.id) ? (
@@ -329,7 +334,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                               onClick={() => unblockUser(member.id)}
                               className="px-2 py-1 bg-[#32C48D]/15 hover:bg-[#32C48D]/25 border border-[#32C48D]/40 text-[#32C48D] text-[11px] font-semibold rounded-lg transition-colors cursor-pointer"
                             >
-                              Unblock
+                              {translateText('Unblock', selectedLanguage)}
                             </button>
                           ) : (
                             <button
@@ -337,7 +342,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                               onClick={() => blockUser(member.id)}
                               className="px-2 py-1 bg-[#F05D6C]/10 hover:bg-[#F05D6C]/20 border border-[#F05D6C]/30 text-[#F05D6C] text-[11px] font-semibold rounded-lg transition-colors cursor-pointer"
                             >
-                              Block
+                              {translateText('Block', selectedLanguage)}
                             </button>
                           )
                         )}
@@ -355,12 +360,12 @@ export const WorkspaceSettingsModal: React.FC = () => {
               <div className="p-4 bg-[#181C25] border border-[#252B36] rounded-xl space-y-2">
                 <div className="flex items-center space-x-2 text-xs font-semibold text-amber-400">
                   <ShieldAlert className="w-4 h-4" />
-                  <span>Block Workspace Access & Notifications</span>
+                  <span>{translateText('Block Workspace Access & Notifications', selectedLanguage)}</span>
                 </div>
                 <p className="text-[11px] text-[#929BAA] leading-relaxed">
                   {isWorkspaceBlocked(activeWorkspace.id)
-                    ? `"${activeWorkspace.name}" is currently blocked. All incoming notifications, sound chimes, and channel alerts from this workspace are silenced.`
-                    : `Block "${activeWorkspace.name}" to silence all incoming notifications, sound chimes, and activity alerts across all its channels and chats.`}
+                    ? `"${translateText(activeWorkspace.name, selectedLanguage)}" ` + translateText('is currently blocked. All incoming notifications, sound chimes, and channel alerts from this workspace are silenced.', selectedLanguage)
+                    : translateText('Block', selectedLanguage) + ` "${translateText(activeWorkspace.name, selectedLanguage)}" ` + translateText('to silence all incoming notifications, sound chimes, and activity alerts across all its channels and chats.', selectedLanguage)}
                 </p>
                 {isWorkspaceBlocked(activeWorkspace.id) ? (
                   <button
@@ -369,7 +374,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                     className="px-3 py-1.5 bg-[#32C48D]/15 hover:bg-[#32C48D]/25 border border-[#32C48D]/40 text-[#32C48D] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                   >
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Unblock Workspace</span>
+                    <span>{translateText('Unblock Workspace', selectedLanguage)}</span>
                   </button>
                 ) : (
                   <button
@@ -378,7 +383,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                     className="px-3 py-1.5 bg-[#F05D6C]/15 hover:bg-[#F05D6C]/25 border border-[#F05D6C]/40 text-[#F05D6C] text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
                   >
                     <Ban className="w-4 h-4" />
-                    <span>Block Workspace</span>
+                    <span>{translateText('Block Workspace', selectedLanguage)}</span>
                   </button>
                 )}
               </div>
@@ -386,10 +391,10 @@ export const WorkspaceSettingsModal: React.FC = () => {
               <div className="p-4 bg-[#F05D6C]/10 border border-[#F05D6C]/30 rounded-xl space-y-2">
                 <div className="flex items-center space-x-2 text-xs font-semibold text-[#F05D6C]">
                   <Trash2 className="w-4 h-4" />
-                  <span>Delete Workspace</span>
+                  <span>{translateText('Delete Workspace', selectedLanguage)}</span>
                 </div>
                 <p className="text-[11px] text-[#929BAA]">
-                  Deleting this workspace removes all channels, direct messages, files, and memberships permanently.
+                  {translateText('Deleting this workspace removes all channels, direct messages, files, and memberships permanently.', selectedLanguage)}
                 </p>
                 <button
                   type="button"
@@ -405,7 +410,7 @@ export const WorkspaceSettingsModal: React.FC = () => {
                   }}
                   className="px-3 py-1.5 bg-[#F05D6C] hover:bg-[#D94554] text-white text-xs font-medium rounded-lg transition-colors cursor-pointer"
                 >
-                  Delete Workspace
+                  {translateText('Delete Workspace', selectedLanguage)}
                 </button>
               </div>
             </div>

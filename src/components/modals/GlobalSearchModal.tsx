@@ -1,6 +1,7 @@
 import { resolveUserAvatar } from '../../utils/avatar';
 import React, { useState, useMemo } from 'react';
 import { useChat } from '../../context/ChatContext';
+import { translateText } from '../../utils/translation';
 import {
   X,
   Search,
@@ -26,7 +27,9 @@ export const GlobalSearchModal: React.FC = () => {
     activeWorkspace,
     setActiveWorkspaceId,
     setActiveView,
+    selectedLanguage,
     addToast,
+    t,
   } = useChat();
 
   const [query, setQuery] = useState('');
@@ -162,7 +165,7 @@ export const GlobalSearchModal: React.FC = () => {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search everything: messages, channels, team members, or files..."
+            placeholder={t('search_placeholder')}
             className="flex-1 bg-transparent text-sm text-[#F5F7FA] placeholder-[#929BAA] outline-none"
             autoFocus
           />
@@ -180,11 +183,11 @@ export const GlobalSearchModal: React.FC = () => {
         {/* Filter Pills Strip */}
         <div className="px-4 py-2 border-b border-[#252B36] flex items-center space-x-1 text-xs bg-[#12151C]/30 overflow-x-auto">
           {[
-            { id: 'all', label: `All Results (${totalResultsCount})` },
-            { id: 'channels', label: `Channels (${results.channels.length})` },
-            { id: 'messages', label: `Messages (${results.messages.length})` },
-            { id: 'people', label: `People (${results.users.length})` },
-            { id: 'files', label: `Files (${results.files.length})` },
+            { id: 'all', label: `${t('all')} (${totalResultsCount})` },
+            { id: 'channels', label: `${t('channels')} (${results.channels.length})` },
+            { id: 'messages', label: `${t('messages')} (${results.messages.length})` },
+            { id: 'people', label: `${t('people')} (${results.users.length})` },
+            { id: 'files', label: `${t('files')} (${results.files.length})` },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -222,7 +225,7 @@ export const GlobalSearchModal: React.FC = () => {
               {(filterType === 'all' || filterType === 'channels') && results.channels.length > 0 && (
                 <div className="pt-2 first:pt-0">
                   <div className="text-[11px] font-semibold text-[#929BAA] uppercase tracking-wider mb-2">
-                    Channels
+                    {t('channels')}
                   </div>
                   <div className="space-y-1">
                     {results.channels.map((ch) => (
@@ -238,9 +241,9 @@ export const GlobalSearchModal: React.FC = () => {
                             <Hash className="w-4 h-4 text-[#4F8CFF]" />
                           )}
                           <div className="truncate">
-                            <span className="text-xs font-semibold text-[#F5F7FA]">#{ch.name}</span>
+                            <span className="text-xs font-semibold text-[#F5F7FA]">#{translateText(ch.name, selectedLanguage)}</span>
                             <span className="text-[11px] text-[#929BAA] ml-2 truncate">
-                              {ch.topic}
+                              {ch.description || ch.topic ? translateText(ch.description || ch.topic, selectedLanguage) : ''}
                             </span>
                           </div>
                         </div>
@@ -255,7 +258,7 @@ export const GlobalSearchModal: React.FC = () => {
               {(filterType === 'all' || filterType === 'people') && results.users.length > 0 && (
                 <div className="pt-3">
                   <div className="text-[11px] font-semibold text-[#929BAA] uppercase tracking-wider mb-2">
-                    Team Members
+                    {t('team_members')}
                   </div>
                   <div className="space-y-1">
                     {results.users.map((u) => (
@@ -270,9 +273,9 @@ export const GlobalSearchModal: React.FC = () => {
                             className="w-7 h-7 rounded-lg object-cover"
                           />
                           <div>
-                            <div className="text-xs font-semibold text-[#F5F7FA]">{u.name}</div>
+                            <div className="text-xs font-semibold text-[#F5F7FA]">{translateText(u.name, selectedLanguage)}</div>
                             <div className="text-[11px] text-[#929BAA]">
-                              {u.title} &bull; @{u.username}
+                              {u.title ? translateText(u.title, selectedLanguage) : ''} &bull; @{u.username}
                             </div>
                           </div>
                         </div>

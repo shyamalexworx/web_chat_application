@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
 import { WorkspaceRailInner } from './WorkspaceRail';
+import { translateText } from '../../utils/translation';
 
 export const ChannelSidebar: React.FC = () => {
   const {
@@ -44,6 +45,7 @@ export const ChannelSidebar: React.FC = () => {
     setIsUserProfileOpen,
     deleteChannel,
     deleteDM,
+    selectedLanguage,
     t,
   } = useChat();
 
@@ -173,7 +175,7 @@ export const ChannelSidebar: React.FC = () => {
               )}
               <div className="truncate flex-1 min-w-0">
                 <span className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA] tracking-tight truncate block leading-none group-hover:text-[#4F8CFF] transition-colors">
-                  {activeWorkspace.name}
+                  {translateText(activeWorkspace.name, selectedLanguage)}
                 </span>
                 <p className="text-[10px] font-medium text-slate-500 dark:text-[#929BAA] truncate leading-tight mt-0.5">
                   {activeWorkspace.membersCount} {t('members')}
@@ -189,7 +191,7 @@ export const ChannelSidebar: React.FC = () => {
           <div className="bg-[#12151C] border border-[#4F8CFF]/40 rounded-xl p-2.5 mx-0.5 shadow-md">
             <div className="flex items-center space-x-1.5 text-xs font-bold text-[#4F8CFF] mb-2">
               <Mail className="w-3.5 h-3.5" />
-              <span>Invitations ({pendingReceivedInvites.length})</span>
+              <span>{t('invitations')} ({pendingReceivedInvites.length})</span>
             </div>
             <div className="space-y-1.5">
               {pendingReceivedInvites.map((inv) => {
@@ -207,8 +209,8 @@ export const ChannelSidebar: React.FC = () => {
                         <p className="text-xs font-semibold text-[#F5F7FA] truncate">{senderName}</p>
                         <p className="text-[10px] text-[#929BAA] truncate">
                           {inv.inviteType === 'channel'
-                            ? `Channel: #${channels.find((c) => c.id === inv.conversationId)?.name || 'channel'}`
-                            : 'Direct chat invite'}
+                            ? `${t('channel')}: #${channels.find((c) => c.id === inv.conversationId)?.name || 'channel'}`
+                            : t('direct_chat_invite')}
                         </p>
                       </div>
                     </div>
@@ -219,7 +221,7 @@ export const ChannelSidebar: React.FC = () => {
                           acceptInvite(inv.id);
                         }}
                         className="p-1 bg-[#10B981]/20 hover:bg-[#10B981] text-[#10B981] hover:text-white rounded transition-colors cursor-pointer"
-                        title="Accept Invitation"
+                        title={t('accept')}
                       >
                         <Check className="w-3.5 h-3.5" />
                       </button>
@@ -229,7 +231,7 @@ export const ChannelSidebar: React.FC = () => {
                           declineInvite(inv.id);
                         }}
                         className="p-1 bg-[#F05D6C]/20 hover:bg-[#F05D6C] text-[#F05D6C] hover:text-white rounded transition-colors cursor-pointer"
-                        title="Decline Invitation"
+                        title={t('decline')}
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -244,13 +246,13 @@ export const ChannelSidebar: React.FC = () => {
         {/* Empty workspaces call-to-action */}
         {workspaces.length === 0 && (
           <div className="p-3 bg-[#12151C] border border-[#252B36] rounded-xl text-center space-y-2">
-            <p className="text-xs font-semibold text-[#F5F7FA]">No Workspaces Yet</p>
-            <p className="text-[11px] text-[#929BAA]">Create your workspace to start channels and collaborate.</p>
+            <p className="text-xs font-semibold text-[#F5F7FA]">{t('no_workspaces_yet')}</p>
+            <p className="text-[11px] text-[#929BAA]">{t('create_workspace_desc')}</p>
             <button
               onClick={() => setIsCreateWorkspaceOpen(true)}
               className="w-full py-1.5 px-3 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-sm"
             >
-              + Create Workspace
+              + {t('create_workspace')}
             </button>
           </div>
         )}
@@ -296,7 +298,7 @@ export const ChannelSidebar: React.FC = () => {
                         ) : (
                           <Hash className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-[#929BAA]'}`} />
                         )}
-                        <span className="truncate">{ch.name}</span>
+                        <span className="truncate">{translateText(ch.name, selectedLanguage)}</span>
                       </div>
                       <div className="flex items-center space-x-1 flex-shrink-0 ml-1">
                         {ch.unreadCount > 0 && (
@@ -339,7 +341,7 @@ export const ChannelSidebar: React.FC = () => {
                             />
                           </div>
                         )}
-                        <span className="truncate">{getDMName(dm)}</span>
+                        <span className="truncate">{translateText(getDMName(dm), selectedLanguage)}</span>
                         {dm.status === 'pending' && (
                           <span className="px-1.5 py-0.2 text-[9px] font-semibold bg-[#F5A623]/20 text-[#F5A623] border border-[#F5A623]/30 rounded">
                             Pending
@@ -410,7 +412,7 @@ export const ChannelSidebar: React.FC = () => {
                       ) : (
                         <Hash className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-[#929BAA] group-hover:text-[#F5F7FA]'}`} />
                       )}
-                      <span className="truncate">{ch.name}</span>
+                      <span className="truncate">{translateText(ch.name, selectedLanguage)}</span>
                     </div>
 
                     <div className="flex items-center space-x-1 flex-shrink-0 ml-1">
@@ -496,7 +498,7 @@ export const ChannelSidebar: React.FC = () => {
                           />
                         </div>
                       )}
-                      <span className="truncate">{getDMName(dm)}</span>
+                      <span className="truncate">{translateText(getDMName(dm), selectedLanguage)}</span>
                       {dm.status === 'pending' && (
                         <span className="ml-1 px-1.5 py-0.2 text-[9px] font-semibold bg-[#F5A623]/20 text-[#F5A623] border border-[#F5A623]/30 rounded">
                           Pending
@@ -575,9 +577,11 @@ export const ChannelSidebar: React.FC = () => {
               <Trash2 className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-bold text-[#F5F7FA]">Delete #{channelToDelete.name}?</h3>
+              <h3 className="text-sm font-bold text-[#F5F7FA]">
+                {t('delete_channel')} #{channelToDelete.name}?
+              </h3>
               <p className="text-xs text-[#929BAA] mt-1 leading-relaxed">
-                Permanently delete <span className="font-semibold text-white">#{channelToDelete.name}</span> and all its message history. This cannot be undone.
+                {t('delete_channel_warning')}
               </p>
             </div>
           </div>
@@ -588,7 +592,7 @@ export const ChannelSidebar: React.FC = () => {
               onClick={() => setChannelToDelete(null)}
               className="px-3 py-1.5 bg-[#12151C] hover:bg-[#252B36] text-[#929BAA] hover:text-[#F5F7FA] text-xs font-medium rounded-lg transition-colors cursor-pointer"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               type="button"
@@ -599,7 +603,7 @@ export const ChannelSidebar: React.FC = () => {
               }}
               className="px-3.5 py-1.5 bg-[#F05D6C] hover:bg-[#D94554] text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
             >
-              Delete Channel
+              {t('delete_channel')}
             </button>
           </div>
         </div>
@@ -621,9 +625,9 @@ export const ChannelSidebar: React.FC = () => {
               <Trash2 className="w-5 h-5" />
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-bold text-[#F5F7FA]">Delete Conversation?</h3>
+              <h3 className="text-sm font-bold text-[#F5F7FA]">{t('delete_conversation')}?</h3>
               <p className="text-xs text-[#929BAA] mt-1 leading-relaxed">
-                Permanently delete your conversation with <span className="font-semibold text-white">{getDMName(dmToDelete)}</span> and all its message history.
+                {t('delete_channel_warning')}
               </p>
             </div>
           </div>
@@ -634,7 +638,7 @@ export const ChannelSidebar: React.FC = () => {
               onClick={() => setDMToDelete(null)}
               className="px-3 py-1.5 bg-[#12151C] hover:bg-[#252B36] text-[#929BAA] hover:text-[#F5F7FA] text-xs font-medium rounded-lg transition-colors cursor-pointer"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               type="button"
@@ -645,7 +649,7 @@ export const ChannelSidebar: React.FC = () => {
               }}
               className="px-3.5 py-1.5 bg-[#F05D6C] hover:bg-[#D94554] text-white text-xs font-semibold rounded-lg shadow-sm transition-colors cursor-pointer"
             >
-              Delete Conversation
+              {t('delete_conversation')}
             </button>
           </div>
         </div>

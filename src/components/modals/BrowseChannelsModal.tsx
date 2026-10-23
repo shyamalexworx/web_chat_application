@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useChat } from '../../context/ChatContext';
 import { X, Search, Hash, Lock, Users, Plus, Check } from 'lucide-react';
+import { translateText } from '../../utils/translation';
 
 export const BrowseChannelsModal: React.FC = () => {
   const {
@@ -13,6 +14,8 @@ export const BrowseChannelsModal: React.FC = () => {
     updateChannelDetails,
     setIsCreateChannelOpen,
     addToast,
+    selectedLanguage,
+    t,
   } = useChat();
 
   const [query, setQuery] = useState('');
@@ -54,9 +57,9 @@ export const BrowseChannelsModal: React.FC = () => {
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#252B36] flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-bold text-[#F5F7FA]">All Channels</h2>
+            <h2 className="text-sm font-bold text-[#F5F7FA]">{t('channel_directory')}</h2>
             <p className="text-[11px] text-[#929BAA]">
-              Explore channels in {activeWorkspace.name} and join discussions.
+              {t('channel_directory_desc').replace('{workspace}', activeWorkspace.name)}
             </p>
           </div>
 
@@ -69,7 +72,7 @@ export const BrowseChannelsModal: React.FC = () => {
               className="px-3 py-1.5 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white text-xs font-medium rounded-lg flex items-center space-x-1.5 transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Create Channel</span>
+              <span>{t('create_channel')}</span>
             </button>
             <button
               onClick={() => setIsBrowseChannelsOpen(false)}
@@ -88,7 +91,7 @@ export const BrowseChannelsModal: React.FC = () => {
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by channel name, description, or topic..."
+              placeholder={t('search_channels_placeholder')}
               className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl pl-9 pr-3 py-2 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none"
               autoFocus
             />
@@ -99,7 +102,7 @@ export const BrowseChannelsModal: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 divide-y divide-[#252B36]/50">
           {filtered.length === 0 ? (
             <div className="p-8 text-center text-xs text-[#929BAA]">
-              No channels matched "{query}".
+              {t('no_matching_results').replace('{query}', query)}
             </div>
           ) : (
             filtered.map((ch) => {
@@ -120,15 +123,15 @@ export const BrowseChannelsModal: React.FC = () => {
                       <span className="text-xs font-semibold text-[#F5F7FA]">{ch.name}</span>
                       {isMember && (
                         <span className="text-[10px] bg-[#32C48D]/20 text-[#32C48D] px-1.5 py-0.2 rounded font-medium flex items-center gap-0.5">
-                          <Check className="w-2.5 h-2.5" /> Joined
+                          <Check className="w-2.5 h-2.5" /> {t('joined')}
                         </span>
                       )}
                     </div>
                     <p className="text-[11px] text-[#929BAA] truncate max-w-md">
-                      {ch.topic || ch.description}
+                      {ch.topic ? translateText(ch.topic, selectedLanguage) : (ch.description ? translateText(ch.description, selectedLanguage) : '')}
                     </p>
                     <div className="text-[10px] text-[#636D7E] flex items-center gap-1 font-mono">
-                      <Users className="w-3 h-3" /> {chMembers.length} members
+                      <Users className="w-3 h-3" /> {chMembers.length} {t('members')}
                     </div>
                   </div>
 
@@ -140,7 +143,7 @@ export const BrowseChannelsModal: React.FC = () => {
                         : 'bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white shadow-sm'
                     }`}
                   >
-                    {isMember ? 'Open Channel' : 'Join Channel'}
+                    {isMember ? t('open_channel') : t('join_channel')}
                   </button>
                 </div>
               );

@@ -16,7 +16,7 @@ import {
   RefreshCw,
   StopCircle,
 } from 'lucide-react';
-import type { AIMessage, AIConversation, Message } from '../../types';
+import type { AIMessage, AIConversation, Message, AIPendingMessageAction } from '../../types';
 import {
   sendGroqChat,
   getGroqApiKey,
@@ -60,6 +60,7 @@ export const AIAssistantDrawer: React.FC = () => {
     createWorkspace,
     setActiveWorkspaceId,
     users,
+    t,
   } = useChat();
 
   const userId = currentUser?.id || 'guest';
@@ -142,6 +143,7 @@ export const AIAssistantDrawer: React.FC = () => {
 
   /**
    * Executes AI-requested workspace actions (create workspace, create channel, send message, send DM)
+   * Note: For sending messages to channels or DMs, a pendingAction confirmation is required from user.
    */
   const executeAIAction = (actionJson: {
     action: string;
@@ -153,7 +155,8 @@ export const AIAssistantDrawer: React.FC = () => {
     userName?: string;
     workspaceName?: string;
     content?: string;
-  }): string => {
+    targetLanguage?: string;
+  }): { text: string; pendingAction?: AIPendingMessageAction } => {
     try {
       // 1. Create a Workspace
       if (actionJson.action === 'create_workspace') {
@@ -164,7 +167,7 @@ export const AIAssistantDrawer: React.FC = () => {
           setActiveWorkspaceId(newWs.id);
         }
         addToast(`Workspace "${wsName}" created by AI!`, 'success');
-        return `✅ **Action executed**: Created and switched to new workspace **${wsName}**.`;
+        return { text: `✅ **Action executed**: Created and switched to new workspace **${wsName}**.` };
       }
 
       // 2. Create a Channel
@@ -178,35 +181,44 @@ export const AIAssistantDrawer: React.FC = () => {
           setActiveView({ type: 'channel', id: newCh.id });
         }
         addToast(`Channel #${rawName} created by AI!`, 'success');
-        return `✅ **Action executed**: Created and navigated to channel **#${rawName}**.`;
+        return { text: `✅ **Action executed**: Created and navigated to channel **#${rawName}**.` };
       }
 
-      // 3. Send a Message to a Channel
+      // 3. Prepare Send Message to a Channel (REQUIRES USER CONFIRMATION)
       if (actionJson.action === 'send_message') {
         const msgText = actionJson.content?.trim();
-        if (!msgText) return '⚠️ No message content specified.';
+        if (!msgText) return { text: '⚠️ No message content specified.' };
 
+        let targetCh = null;
         if (actionJson.channelName) {
           const chName = actionJson.channelName.replace(/^#/, '').toLowerCase().trim();
-          const targetCh = channels.find((c) => c.name.toLowerCase() === chName);
-          if (targetCh) {
-            setActiveView({ type: 'channel', id: targetCh.id });
-          }
+          targetCh = channels.find((c) => c.name.toLowerCase() === chName);
+        }
+        if (!targetCh && activeView.type === 'channel') {
+          targetCh = channels.find((c) => c.id === activeView.id);
+        }
+        if (!targetCh) {
+          targetCh = channels[0];
         }
 
-        setTimeout(() => {
-          sendMessage(msgText);
-        }, 200);
-
-        addToast('Message posted to channel by AI!', 'success');
-        return `✅ **Action executed**: Posted your message to the channel:\n> "${msgText}"`;
+        const chNameStr = targetCh ? `#${targetCh.name}` : '#channel';
+        return {
+          text: `I have prepared your message for **${chNameStr}**. Please confirm below before I send it to the channel:`,
+          pendingAction: {
+            type: 'channel',
+            targetId: targetCh ? targetCh.id : '',
+            targetName: chNameStr,
+            content: msgText,
+            status: 'pending',
+          },
+        };
       }
 
-      // 4. Send a Direct Message to a Person
+      // 4. Prepare Send Direct Message to a Person (REQUIRES USER CONFIRMATION)
       if (actionJson.action === 'send_dm') {
         const targetUserName = actionJson.userName?.replace(/^@/, '').toLowerCase().trim();
         const msgText = actionJson.content?.trim();
-        if (!targetUserName || !msgText) return '⚠️ Missing user or message content.';
+        if (!targetUserName || !msgText) return { text: '⚠️ Missing recipient name or message content.' };
 
         const targetUser = users.find(
           (u) =>
@@ -216,21 +228,50 @@ export const AIAssistantDrawer: React.FC = () => {
 
         if (!targetUser) {
           const availableList = users.map((u) => u.name).join(', ');
-          return `⚠️ Could not find team member matching "${actionJson.userName}". Available members: ${availableList}`;
+          return { text: `⚠️ Could not find team member matching "${actionJson.userName}". Available members: ${availableList}` };
+        }
+
+        return {
+          text: `I have prepared your direct message for **@${targetUser.name}**. Please confirm below before I send it:`,
+          pendingAction: {
+            type: 'dm',
+            targetId: targetUser.id,
+            targetName: `@${targetUser.name}`,
+            content: msgText,
+            status: 'pending',
+          },
+        };
+      }
+
+      // 5. Start / Open Personal Chat with a User
+      if (
+        actionJson.action === 'start_personal_chat' ||
+        actionJson.action === 'create_dm' ||
+        actionJson.action === 'open_dm'
+      ) {
+        const targetUserName = (actionJson.userName || actionJson.name || '').replace(/^@/, '').toLowerCase().trim();
+        if (!targetUserName) return { text: '⚠️ Missing team member name.' };
+
+        const targetUser = users.find(
+          (u) =>
+            u.name.toLowerCase().includes(targetUserName) ||
+            u.email.toLowerCase().includes(targetUserName)
+        );
+
+        if (!targetUser) {
+          const availableList = users.map((u) => u.name).join(', ');
+          return { text: `⚠️ Could not find team member matching "${targetUserName}". Available members: ${availableList}` };
         }
 
         const dmId = createOrOpenDM([targetUser.id]);
         if (dmId) {
           setActiveView({ type: 'dm', id: dmId });
-          setTimeout(() => {
-            sendMessage(msgText);
-          }, 200);
-          addToast(`Direct message sent to @${targetUser.name}!`, 'success');
-          return `✅ **Action executed**: Sent direct message to **@${targetUser.name}**:\n> "${msgText}"`;
+          addToast(`Opened personal chat with @${targetUser.name}!`, 'success');
+          return { text: `✅ **Action executed**: Opened personal chat with **@${targetUser.name}**.` };
         }
       }
 
-      // 5. Navigate / Switch to a Workspace, Channel, or DM
+      // 6. Navigate / Switch to a Workspace, Channel, or DM
       if (actionJson.action === 'switch_workspace' || actionJson.action === 'change_workspace' || (actionJson.action === 'navigate' && actionJson.workspaceName)) {
         const rawWs = (actionJson.workspaceName || actionJson.name || '').replace(/workspace$/i, '').trim().toLowerCase();
         const targetWs = workspaces.find((w) =>
@@ -241,10 +282,10 @@ export const AIAssistantDrawer: React.FC = () => {
         if (targetWs) {
           setActiveWorkspaceId(targetWs.id);
           addToast(`Switched to workspace "${targetWs.name}"`, 'success');
-          return `✅ Switched to workspace **${targetWs.name}**.`;
+          return { text: `✅ Switched to workspace **${targetWs.name}**.` };
         }
         const available = workspaces.map((w) => `"${w.name}"`).join(', ');
-        return `⚠️ Workspace "${actionJson.workspaceName || actionJson.name}" not found. Available workspaces: ${available}`;
+        return { text: `⚠️ Workspace "${actionJson.workspaceName || actionJson.name}" not found. Available workspaces: ${available}` };
       }
 
       if (actionJson.action === 'navigate') {
@@ -253,7 +294,7 @@ export const AIAssistantDrawer: React.FC = () => {
           const targetCh = channels.find((c) => c.name.toLowerCase() === chName);
           if (targetCh) {
             setActiveView({ type: 'channel', id: targetCh.id });
-            return `✅ Switched to channel **#${targetCh.name}**.`;
+            return { text: `✅ Switched to channel **#${targetCh.name}**.` };
           }
         }
         if (actionJson.userName) {
@@ -262,35 +303,40 @@ export const AIAssistantDrawer: React.FC = () => {
           if (targetUser) {
             const dmId = createOrOpenDM([targetUser.id]);
             setActiveView({ type: 'dm', id: dmId });
-            return `✅ Opened direct message with **@${targetUser.name}**.`;
+            return { text: `✅ Opened direct message with **@${targetUser.name}**.` };
           }
         }
       }
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : 'Action failed';
-      return `⚠️ Could not execute action: ${errMsg}`;
+      return { text: `⚠️ Could not execute action: ${errMsg}` };
     }
-    return '';
+    return { text: '' };
   };
 
   /**
    * Processes the raw AI response, extracts and executes any pulse-action blocks
    */
-  const processAIResponseWithActions = (rawResponse: string): string => {
+  const processAIResponseWithActions = (
+    rawResponse: string
+  ): { text: string; pendingAction?: AIPendingMessageAction } => {
     const actionRegex = /```(?:pulse-action|json-action)\s*([\s\S]*?)\s*```/;
     const match = actionRegex.exec(rawResponse);
 
     if (match) {
       try {
         const actionJson = JSON.parse(match[1].trim());
-        const actionResultText = executeAIAction(actionJson);
+        const actionRes = executeAIAction(actionJson);
         const cleanContent = rawResponse.replace(actionRegex, '').trim();
-        return cleanContent ? `${cleanContent}\n\n${actionResultText}` : actionResultText;
+        const combinedText = cleanContent
+          ? `${cleanContent}\n\n${actionRes.text}`
+          : actionRes.text;
+        return { text: combinedText, pendingAction: actionRes.pendingAction };
       } catch (parseErr) {
         console.warn('Failed to parse AI action JSON:', parseErr);
       }
     }
-    return rawResponse;
+    return { text: rawResponse };
   };
 
   /**
@@ -315,30 +361,14 @@ export const AIAssistantDrawer: React.FC = () => {
         promptLower.includes(`#${c.name.toLowerCase()}`)
     );
 
-    let extraChannelContext = '';
-    if (mentionedChannel && mentionedChannel.id !== activeView.id) {
-      const channelMsgs = messages
-        .filter((m) => m.conversationId === mentionedChannel.id)
-        .slice(-35);
+    // Identify target channel/chat for summarization or discussion
+    const targetChannel = mentionedChannel || (activeView.type === 'channel' ? channels.find((c) => c.id === activeView.id) : null);
+    const targetMsgs = targetChannel
+      ? messages.filter((m) => m.conversationId === targetChannel.id && !m.hiddenForUserIds?.includes(currentUser?.id || ''))
+      : activeConversationMessages;
 
-      const formattedOther = channelMsgs
-        .map((m) => {
-          const sender = users.find((u) => u.id === m.senderId)?.name || 'Member';
-          const time = new Date(m.timestamp).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          });
-          return `[${time}] ${sender}: ${m.content}`;
-        })
-        .join('\n');
-
-      extraChannelContext = `\nMESSAGES IN #${mentionedChannel.name}:\n${
-        formattedOther || '(No messages in this channel yet)'
-      }\n`;
-    }
-
-    const formattedActive = activeConversationMessages
-      .slice(-45)
+    const formattedTarget = targetMsgs
+      .slice(-50)
       .map((m: Message) => {
         const sender =
           users.find((u) => u.id === m.senderId)?.name ||
@@ -350,6 +380,11 @@ export const AIAssistantDrawer: React.FC = () => {
         return `[${time}] ${sender}: ${m.content}`;
       })
       .join('\n');
+
+    let extraChannelContext = '';
+    if (mentionedChannel && mentionedChannel.id !== activeView.id) {
+      extraChannelContext = `\nFOCUSED CHANNEL: #${mentionedChannel.name} (${targetMsgs.length} messages)\n`;
+    }
 
     const channelNamesList = channels.map((c) => `#${c.name}`).join(', ');
     const memberNamesList = users.map((u) => `@${u.name}`).join(', ');
@@ -364,24 +399,31 @@ CURRENT WORKSPACE CONTEXT:
 - Logged-in User: ${currentUser?.name || 'User'}
 - Channels Available: ${channelNamesList || '#general'}
 - Workspace Members: ${memberNamesList}
-- Currently Active Channel/Chat: ${currentTargetName}
-
-RECENT CONVERSATION MESSAGES IN CURRENT VIEW (${currentTargetName}):
-${formattedActive || '(No messages yet in this conversation)'}
+- Currently Focused Channel/Chat: ${targetChannel ? '#' + targetChannel.name : currentTargetName}
 ${extraChannelContext}
+================================================================================
+WORKSPACE CONVERSATION MESSAGES TO ANALYZE / SUMMARIZE (${targetChannel ? '#' + targetChannel.name : currentTargetName}):
+${formattedTarget || '(No messages in this channel/conversation yet)'}
+================================================================================
 
 CAPABILITIES & REAL-TIME ACTIONS:
 You have native tools available to perform real workspace actions:
-- switch_workspace: Switch or change active workspace to an existing workspace (e.g. { "action": "switch_workspace", "workspaceName": "rabil" })
+- switch_workspace: Switch or change active workspace to an existing workspace
 - create_channel: Create a new channel and navigate to it
 - create_workspace: Create a new workspace and switch to it
-- send_message: Send a message to a channel or current conversation
-- send_dm: Send a direct message to a team member
-- navigate: Switch to a workspace, channel or direct message
+- start_personal_chat: Open/create a personal direct message conversation with a team member
+- send_message: Post a message to a channel (NOTE: this requires user confirmation before sending)
+- send_dm: Send a direct message to a team member (NOTE: this requires user confirmation before sending)
+- summarize_channel: Summarize discussion in a channel
+- translate_message: Translate a message to another language
 
-IMPORTANT OPERATING RULES:
-1. NEVER claim that you cannot create workspaces, channels, or send messages. You have native tools to execute them directly.
-2. NEVER claim you cannot access workspace messages or discussions. You have full access to the messages provided above.
+CRITICAL OPERATING RULES:
+1. SUMMARIZATION RULE: When the user asks to summarize a channel, recap discussions, or explain what happened in a channel:
+   - You MUST summarize ONLY the messages listed under "WORKSPACE CONVERSATION MESSAGES TO ANALYZE / SUMMARIZE" above.
+   - You must NEVER summarize this assistant conversation history or your own past answers.
+   - If the channel has 0 messages, state clearly: "The channel #${targetChannel?.name || 'selected'} does not have any messages yet to summarize."
+   - Structure summaries clearly: Main Topics Discussed, Key Decisions, and Action Items.
+2. MESSAGE SENDING RULE: When the user asks to send a message to a channel or personal chat, inform the user you have prepared the message and require their confirmation before posting.
 3. Keep all responses focused, helpful, and directly relevant to PulseChat and team discussions. Use clean Markdown formatting.`;
   };
 
@@ -415,9 +457,149 @@ IMPORTANT OPERATING RULES:
     addToast('AI conversation reset', 'info');
   };
 
+  const handleConfirmPendingMessage = (msgId: string) => {
+    const msg = aiMessages.find((m) => m.id === msgId);
+    if (!msg || !msg.pendingAction || msg.pendingAction.status !== 'pending') return;
+
+    const { type, targetId, targetName, content } = msg.pendingAction;
+    if (type === 'channel') {
+      if (targetId && (activeView.type !== 'channel' || activeView.id !== targetId)) {
+        setActiveView({ type: 'channel', id: targetId });
+      }
+      setTimeout(() => {
+        sendMessage(content);
+      }, 150);
+    } else {
+      if (targetId) {
+        const dmId = createOrOpenDM([targetId]);
+        if (dmId) {
+          setActiveView({ type: 'dm', id: dmId });
+        }
+      }
+      setTimeout(() => {
+        sendMessage(content);
+      }, 150);
+    }
+
+    updateCurrentConversationMessages((prev) =>
+      prev.map((m) => {
+        if (m.id === msgId && m.pendingAction) {
+          return {
+            ...m,
+            pendingAction: { ...m.pendingAction, status: 'confirmed' },
+          };
+        }
+        return m;
+      })
+    );
+    addToast(`Message sent to ${targetName}!`, 'success');
+  };
+
+  const handleCancelPendingMessage = (msgId: string) => {
+    updateCurrentConversationMessages((prev) =>
+      prev.map((m) => {
+        if (m.id === msgId && m.pendingAction) {
+          return {
+            ...m,
+            pendingAction: { ...m.pendingAction, status: 'cancelled' },
+          };
+        }
+        return m;
+      })
+    );
+    addToast('Message sending cancelled', 'info');
+  };
+
   const handleSendPrompt = async (promptText: string) => {
     const trimmed = promptText.trim();
     if (!trimmed || isThinking) return;
+
+    // Check conversational confirmation/cancellation for pending action
+    const lastAssistantMsg = [...aiMessages].reverse().find((m) => m.role === 'assistant');
+    if (
+      lastAssistantMsg &&
+      lastAssistantMsg.pendingAction &&
+      lastAssistantMsg.pendingAction.status === 'pending'
+    ) {
+      const isAffirmative = /^(yes|confirm|send|send it|sure|do it|ok|okay|yep|proceed|go ahead)/i.test(trimmed);
+      const isNegative = /^(no|cancel|stop|dont send|don't send|nevermind|abort)/i.test(trimmed);
+
+      if (isAffirmative) {
+        handleConfirmPendingMessage(lastAssistantMsg.id);
+        const userMsg: AIMessage = {
+          id: 'ai-user-' + Date.now(),
+          role: 'user',
+          content: trimmed,
+          timestamp: new Date().toISOString(),
+        };
+        const confirmedAssistantMsg: AIMessage = {
+          id: 'ai-resp-' + (Date.now() + 1),
+          role: 'assistant',
+          content: `✅ Sent your message to **${lastAssistantMsg.pendingAction.targetName}**:\n> "${lastAssistantMsg.pendingAction.content}"`,
+          timestamp: new Date().toISOString(),
+        };
+        updateCurrentConversationMessages((prev) => [...prev, userMsg, confirmedAssistantMsg]);
+        setInput('');
+        return;
+      }
+
+      if (isNegative) {
+        handleCancelPendingMessage(lastAssistantMsg.id);
+        const userMsg: AIMessage = {
+          id: 'ai-user-' + Date.now(),
+          role: 'user',
+          content: trimmed,
+          timestamp: new Date().toISOString(),
+        };
+        const cancelledAssistantMsg: AIMessage = {
+          id: 'ai-resp-' + (Date.now() + 1),
+          role: 'assistant',
+          content: `❌ Cancelled. The message was not sent to **${lastAssistantMsg.pendingAction.targetName}**.`,
+          timestamp: new Date().toISOString(),
+        };
+        updateCurrentConversationMessages((prev) => [...prev, userMsg, cancelledAssistantMsg]);
+        setInput('');
+        return;
+      }
+    }
+
+    // Summarization request interceptor: ensures ONLY channel messages are summarized
+    const isSummaryRequest = /(?:summariz|summary|recap|overview|what happened|catch up)/i.test(trimmed);
+    if (isSummaryRequest) {
+      const promptLower = trimmed.toLowerCase();
+      const mentionedChannel = channels.find(
+        (c) =>
+          promptLower.includes(c.name.toLowerCase()) ||
+          promptLower.includes(`#${c.name.toLowerCase()}`)
+      );
+      const targetChannel =
+        mentionedChannel ||
+        (activeView.type === 'channel' ? channels.find((c) => c.id === activeView.id) : null);
+
+      if (targetChannel) {
+        const channelMsgs = messages.filter(
+          (m) => m.conversationId === targetChannel.id && !m.hiddenForUserIds?.includes(currentUser?.id || '')
+        );
+
+        if (channelMsgs.length === 0) {
+          const userMsg: AIMessage = {
+            id: 'ai-user-' + Date.now(),
+            role: 'user',
+            content: trimmed,
+            timestamp: new Date().toISOString(),
+          };
+          const emptyAssistantMsg: AIMessage = {
+            id: 'ai-resp-' + Date.now(),
+            role: 'assistant',
+            content: `ℹ️ The channel **#${targetChannel.name}** has no messages yet to summarize.\n\nOnce team members chat in this channel, ask me again and I will provide a structured summary of topics and decisions!`,
+            timestamp: new Date().toISOString(),
+          };
+          updateCurrentConversationMessages((prev) => [...prev, userMsg, emptyAssistantMsg]);
+          setInput('');
+          return;
+        }
+      }
+    }
 
     const activeKey = getGroqApiKey();
     if (!activeKey) {
@@ -484,20 +666,29 @@ IMPORTANT OPERATING RULES:
 
       // 1. Process native tool calls
       const toolActionResults: string[] = [];
+      let pendingActionToAttach: AIPendingMessageAction | undefined = undefined;
+
       if (chatResult.toolCalls && chatResult.toolCalls.length > 0) {
         for (const call of chatResult.toolCalls) {
-          const resText = executeAIAction({
+          const actionRes = executeAIAction({
             action: call.name,
             ...call.arguments,
           });
-          if (resText) {
-            toolActionResults.push(resText);
+          if (actionRes.text) {
+            toolActionResults.push(actionRes.text);
+          }
+          if (actionRes.pendingAction) {
+            pendingActionToAttach = actionRes.pendingAction;
           }
         }
       }
 
       // 2. Also process any fallback pulse-action blocks in text content
-      let textContent = processAIResponseWithActions(chatResult.content);
+      const fallbackResult = processAIResponseWithActions(chatResult.content);
+      let textContent = fallbackResult.text;
+      if (fallbackResult.pendingAction && !pendingActionToAttach) {
+        pendingActionToAttach = fallbackResult.pendingAction;
+      }
 
       if (toolActionResults.length > 0) {
         const actionSummary = toolActionResults.join('\n\n');
@@ -513,6 +704,7 @@ IMPORTANT OPERATING RULES:
         role: 'assistant',
         content: textContent,
         timestamp: new Date().toISOString(),
+        pendingAction: pendingActionToAttach,
       };
 
       updateCurrentConversationMessages((prev) => [...prev, assistantMsg]);
@@ -573,19 +765,29 @@ IMPORTANT OPERATING RULES:
       });
 
       const toolActionResults: string[] = [];
+      let pendingActionToAttach: AIPendingMessageAction | undefined = undefined;
+
       if (chatResult.toolCalls && chatResult.toolCalls.length > 0) {
         for (const call of chatResult.toolCalls) {
-          const resText = executeAIAction({
+          const actionRes = executeAIAction({
             action: call.name,
             ...call.arguments,
           });
-          if (resText) {
-            toolActionResults.push(resText);
+          if (actionRes.text) {
+            toolActionResults.push(actionRes.text);
+          }
+          if (actionRes.pendingAction) {
+            pendingActionToAttach = actionRes.pendingAction;
           }
         }
       }
 
-      let textContent = processAIResponseWithActions(chatResult.content);
+      const fallbackResult = processAIResponseWithActions(chatResult.content);
+      let textContent = fallbackResult.text;
+      if (fallbackResult.pendingAction && !pendingActionToAttach) {
+        pendingActionToAttach = fallbackResult.pendingAction;
+      }
+
       if (toolActionResults.length > 0) {
         const actionSummary = toolActionResults.join('\n\n');
         textContent = textContent ? `${textContent}\n\n${actionSummary}` : actionSummary;
@@ -599,6 +801,7 @@ IMPORTANT OPERATING RULES:
         role: 'assistant',
         content: textContent,
         timestamp: new Date().toISOString(),
+        pendingAction: pendingActionToAttach,
       };
 
       updateCurrentConversationMessages((prev) => [...prev, assistantMsg]);
@@ -688,28 +891,28 @@ IMPORTANT OPERATING RULES:
                 ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]'
                 : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] dark:hover:bg-[#181C25]'
             }`}
-            title="Conversation history"
+            title={t('conversation_history')}
           >
             <History className="w-4 h-4" />
           </button>
           <button
             onClick={handleStartNewChat}
             className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] dark:hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
-            title="Start new conversation"
+            title={t('start_new_conversation')}
           >
             <Plus className="w-4 h-4" />
           </button>
           <button
             onClick={handleResetCurrentChat}
             className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] dark:hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
-            title="Reset current conversation"
+            title={t('reset_current_conversation')}
           >
             <RotateCcw className="w-4 h-4" />
           </button>
           <button
             onClick={() => setIsAIAssistantOpen(false)}
             className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-[#929BAA] dark:hover:text-[#F5F7FA] dark:hover:bg-[#181C25] rounded-lg transition-colors cursor-pointer"
-            title="Close AI Assistant"
+            title={t('cancel')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -720,12 +923,12 @@ IMPORTANT OPERATING RULES:
       {showHistory && (
         <div className="border-b border-slate-200 dark:border-[#252B36] bg-white dark:bg-[#12151C] p-3 text-xs space-y-2.5 animate-fade-in shadow-xl flex-shrink-0">
           <div className="flex items-center justify-between">
-            <span className="font-bold text-slate-800 dark:text-[#F5F7FA] text-xs">Conversations</span>
+            <span className="font-bold text-slate-800 dark:text-[#F5F7FA] text-xs">{t('conversations')}</span>
             <button
               onClick={handleStartNewChat}
               className="px-2 py-1 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white rounded text-[11px] font-medium flex items-center gap-1 transition-colors cursor-pointer"
             >
-              <Plus className="w-3 h-3" /> New Chat
+              <Plus className="w-3 h-3" /> {t('new_chat')}
             </button>
           </div>
           <div className="space-y-1 max-h-48 overflow-y-auto no-scrollbar">
@@ -846,7 +1049,71 @@ IMPORTANT OPERATING RULES:
                     {msg.content}
                   </div>
                 ) : (
-                  <AIMarkdown content={msg.content} />
+                  <>
+                    <AIMarkdown content={msg.content} />
+
+                    {/* Pending Message Confirmation Card (requires user confirmation before sending) */}
+                    {msg.pendingAction && (
+                      <div className="mt-2.5 p-2.5 rounded-lg border border-amber-500/40 bg-amber-500/10 dark:bg-amber-500/5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-600 dark:text-amber-400">
+                            <Send className="w-3.5 h-3.5" />
+                            <span>{t('confirm_send_message')}</span>
+                          </div>
+                          <span
+                            className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                              msg.pendingAction.status === 'confirmed'
+                                ? 'bg-[#32C48D]/20 text-[#32C48D]'
+                                : msg.pendingAction.status === 'cancelled'
+                                ? 'bg-slate-500/20 text-slate-400'
+                                : 'bg-amber-500/20 text-amber-500'
+                            }`}
+                          >
+                            {msg.pendingAction.status}
+                          </span>
+                        </div>
+
+                        <div className="text-xs text-slate-700 dark:text-slate-300">
+                          <span className="text-slate-500 dark:text-[#929BAA] font-medium">{t('recipient')}:</span>{' '}
+                          <strong className="text-slate-900 dark:text-[#F5F7FA]">{msg.pendingAction.targetName}</strong>
+                        </div>
+
+                        <div className="p-2 bg-white/80 dark:bg-[#12151C] rounded border border-slate-200 dark:border-[#252B36] text-xs text-slate-800 dark:text-[#F5F7FA] italic break-words">
+                          "{msg.pendingAction.content}"
+                        </div>
+
+                        {msg.pendingAction.status === 'pending' ? (
+                          <div className="flex items-center space-x-2 pt-0.5">
+                            <button
+                              type="button"
+                              onClick={() => handleConfirmPendingMessage(msg.id)}
+                              className="px-2.5 py-1 bg-[#32C48D] hover:bg-[#28A775] text-white text-xs font-semibold rounded flex items-center space-x-1.5 transition-all shadow-sm cursor-pointer"
+                            >
+                              <Check className="w-3 h-3" />
+                              <span>{t('confirm_and_send')}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleCancelPendingMessage(msg.id)}
+                              className="px-2.5 py-1 bg-slate-200 dark:bg-[#181C25] hover:bg-slate-300 dark:hover:bg-[#252B36] text-slate-700 dark:text-[#929BAA] hover:text-slate-900 dark:hover:text-[#F5F7FA] border border-slate-300 dark:border-[#252B36] text-xs font-semibold rounded flex items-center space-x-1.5 transition-all cursor-pointer"
+                            >
+                              <X className="w-3 h-3" />
+                              <span>{t('cancel')}</span>
+                            </button>
+                          </div>
+                        ) : msg.pendingAction.status === 'confirmed' ? (
+                          <div className="text-xs text-[#32C48D] font-medium flex items-center space-x-1.5 pt-0.5">
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Message sent to {msg.pendingAction.targetName}!</span>
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-500 dark:text-[#929BAA] italic pt-0.5">
+                            {t('send_cancelled')}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {/* Assistant Action Strip */}
@@ -935,13 +1202,13 @@ IMPORTANT OPERATING RULES:
               <span className="w-2 h-2 rounded-full bg-[#4F8CFF] animate-bounce [animation-delay:-0.15s]" />
               <span className="w-2 h-2 rounded-full bg-[#4F8CFF] animate-bounce" />
               <span className="text-xs text-slate-500 dark:text-[#929BAA] font-mono ml-1.5">
-                Thinking...
+                {t('thinking')}
               </span>
             </div>
             <button
               onClick={handleStopGeneration}
               className="text-slate-400 hover:text-red-500 dark:text-[#929BAA] dark:hover:text-red-400 p-1 rounded hover:bg-slate-100 dark:hover:bg-[#12151C] transition-colors cursor-pointer"
-              title="Stop generating"
+              title={t('stop_generation')}
             >
               <StopCircle className="w-4 h-4" />
             </button>
@@ -972,7 +1239,7 @@ IMPORTANT OPERATING RULES:
               }
             }}
             onKeyDown={handleKeyDown}
-            placeholder="Ask AI anything..."
+            placeholder={t('ask_ai_placeholder')}
             className="flex-1 bg-transparent text-sm sm:text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-[#929BAA] outline-none resize-none p-0 m-0 leading-normal block"
             style={{ minHeight: '18px', maxHeight: '100px' }}
           />
@@ -981,7 +1248,7 @@ IMPORTANT OPERATING RULES:
               type="button"
               onClick={handleStopGeneration}
               className="p-1 rounded-md text-xs bg-red-500/10 text-red-600 hover:bg-red-500/20 dark:bg-red-500/20 dark:text-red-300 transition-all cursor-pointer flex-shrink-0"
-              title="Stop generation"
+              title={t('stop_generation')}
             >
               <StopCircle className="w-3.5 h-3.5" />
             </button>
@@ -994,7 +1261,7 @@ IMPORTANT OPERATING RULES:
                   ? 'bg-gradient-to-r from-[#4F8CFF] to-[#A855F7] text-white hover:opacity-90 shadow-accent-glow'
                   : 'bg-slate-200 text-slate-400 dark:bg-[#12151C] dark:text-[#929BAA]/30 cursor-not-allowed'
               }`}
-              title="Send message"
+              title={t('send')}
             >
               <Send className="w-3.5 h-3.5" />
             </button>

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useChat } from '../../context/ChatContext';
 import { X, Hash, Lock, Globe, UserPlus, Check, Search, Mail } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
+import { translateText } from '../../utils/translation';
 
 export const CreateChannelModal: React.FC = () => {
   const {
@@ -16,6 +17,8 @@ export const CreateChannelModal: React.FC = () => {
     currentUser,
     inviteUsersToChannel,
     addToast,
+    selectedLanguage,
+    t,
   } = useChat();
 
   const [name, setName] = useState('');
@@ -124,9 +127,9 @@ export const CreateChannelModal: React.FC = () => {
               {isPrivate ? <Lock className="w-4 h-4" /> : <Hash className="w-4 h-4" />}
             </div>
             <div>
-              <h2 className="text-sm font-bold text-[#F5F7FA]">Create a Channel</h2>
+              <h2 className="text-sm font-bold text-[#F5F7FA]">{t('create_channel')}</h2>
               <p className="text-[11px] text-[#929BAA]">
-                Channels are where team discussions happen around projects and topics.
+                {t('create_channel_desc')}
               </p>
             </div>
           </div>
@@ -150,7 +153,7 @@ export const CreateChannelModal: React.FC = () => {
           {/* Channel Name */}
           <div>
             <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
-              Channel Name
+              {t('channel_name')}
             </label>
             <div className="relative">
               <span className="absolute left-3.5 top-2.5 text-xs font-mono text-[#929BAA]">#</span>
@@ -171,7 +174,7 @@ export const CreateChannelModal: React.FC = () => {
           {/* Topic */}
           <div>
             <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
-              Topic <span className="text-[#929BAA] font-normal">(optional)</span>
+              {t('topic')} <span className="text-[#929BAA] font-normal">({t('optional')})</span>
             </label>
             <input
               type="text"
@@ -185,13 +188,13 @@ export const CreateChannelModal: React.FC = () => {
           {/* Description */}
           <div>
             <label className="block text-xs font-semibold text-[#F5F7FA] mb-1.5">
-              Description <span className="text-[#929BAA] font-normal">(optional)</span>
+              {t('description')} <span className="text-[#929BAA] font-normal">({t('optional')})</span>
             </label>
             <textarea
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add more context or guidelines for this channel"
+              placeholder={t('add_description')}
               className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl px-3 py-2 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none resize-none"
             />
           </div>
@@ -201,7 +204,7 @@ export const CreateChannelModal: React.FC = () => {
             <div className="flex items-center space-x-2">
               <UserPlus className="w-4 h-4 text-[#4F8CFF]" />
               <label className="text-xs font-semibold text-[#F5F7FA]">
-                Add People to Channel
+                {t('add_people_to_channel')}
               </label>
             </div>
 
@@ -213,7 +216,7 @@ export const CreateChannelModal: React.FC = () => {
                   type="email"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="Invite coworker by email (optional)..."
+                  placeholder={t('invite_coworker_placeholder')}
                   className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl pl-9 pr-3 py-2 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none"
                 />
               </div>
@@ -228,7 +231,7 @@ export const CreateChannelModal: React.FC = () => {
                     type="text"
                     value={memberSearch}
                     onChange={(e) => setMemberSearch(e.target.value)}
-                    placeholder="Search connected teammates..."
+                    placeholder={t('search_teammates_placeholder')}
                     className="w-full bg-[#12151C] border border-[#252B36] focus:border-[#4F8CFF] rounded-xl pl-9 pr-3 py-1.5 text-xs text-[#F5F7FA] placeholder-[#929BAA] outline-none"
                   />
                 </div>
@@ -236,7 +239,7 @@ export const CreateChannelModal: React.FC = () => {
                 <div className="max-h-36 overflow-y-auto space-y-1 pr-1 divide-y divide-[#252B36]/30 bg-[#12151C]/60 p-2 rounded-xl border border-[#252B36]">
                   {filteredMembers.length === 0 ? (
                     <div className="p-2 text-center text-xs text-[#929BAA]">
-                      No matching connected teammates.
+                      {t('no_matching_teammates')}
                     </div>
                   ) : (
                     filteredMembers.map((member) => {
@@ -252,12 +255,12 @@ export const CreateChannelModal: React.FC = () => {
                           <div className="flex items-center space-x-2 min-w-0">
                             <img
                               src={resolveUserAvatar(member.avatar, member.name)}
-                              alt={member.name}
+                              alt={translateText(member.name, selectedLanguage)}
                               className="w-6 h-6 rounded-md object-cover border border-[#252B36]"
                             />
                             <div className="truncate">
                               <span className="text-xs font-medium text-[#F5F7FA] block truncate">
-                                {member.name}
+                                {translateText(member.name, selectedLanguage)}
                               </span>
                               <span className="text-[10px] text-[#929BAA] block truncate">
                                 @{member.username}
@@ -277,12 +280,12 @@ export const CreateChannelModal: React.FC = () => {
                   )}
                 </div>
                 <p className="text-[10px] text-[#929BAA]">
-                  {selectedUserIds.length} connected teammate{selectedUserIds.length === 1 ? '' : 's'} selected to join
+                  {selectedUserIds.length} {t('connected_teammates_selected')}
                 </p>
               </div>
             ) : (
               <p className="text-[11px] text-[#929BAA] bg-[#12151C]/40 p-2.5 rounded-xl border border-[#252B36]">
-                Only personally connected teammates can be added directly. Use the email field above to invite new coworkers!
+                {t('only_connected_teammates_desc')}
               </p>
             )}
           </div>
@@ -296,12 +299,12 @@ export const CreateChannelModal: React.FC = () => {
                 </div>
                 <div>
                   <div className="text-xs font-semibold text-[#F5F7FA]">
-                    Make Private Channel
+                    {t('make_private_channel')}
                   </div>
                   <div className="text-[11px] text-[#929BAA]">
                     {isPrivate
-                      ? 'Only invited members can view and access this channel.'
-                      : 'Anyone in your workspace can view and join this channel.'}
+                      ? t('private_channel_desc')
+                      : t('public_channel_desc')}
                   </div>
                 </div>
               </div>
@@ -329,13 +332,13 @@ export const CreateChannelModal: React.FC = () => {
               onClick={() => setIsCreateChannelOpen(false)}
               className="px-4 py-2 bg-[#12151C] hover:bg-[#252B36] text-xs font-medium text-[#929BAA] hover:text-[#F5F7FA] rounded-xl border border-[#252B36] transition-colors"
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               type="submit"
               className="px-4 py-2 bg-[#4F8CFF] hover:bg-[#3D7AE8] text-xs font-semibold text-white rounded-xl shadow-accent-glow transition-all"
             >
-              Create Channel
+              {t('create_channel')}
             </button>
           </div>
         </form>

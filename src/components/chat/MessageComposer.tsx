@@ -79,9 +79,9 @@ export const MessageComposer: React.FC = () => {
   const isCurrentChannelBlocked = currentChannel ? isChannelBlocked(currentChannel.id) : false;
 
   const placeholderText = currentChannel
-    ? `${t('message')} #${currentChannel.name}`
+    ? t('message_to_target').replace('{target}', `#${currentChannel.name}`)
     : activeDM
-    ? `${t('message')} ${activeDM.isGroup ? activeDM.groupName : dmPartner?.name || 'chat'}`
+    ? t('message_to_target').replace('{target}', activeDM.isGroup ? (activeDM.groupName || 'group') : (dmPartner?.name || 'chat'))
     : t('type_message');
 
   // Handle send
@@ -485,7 +485,7 @@ export const MessageComposer: React.FC = () => {
                 className={`w-6 h-6 flex items-center justify-center rounded text-xs font-bold font-serif transition-colors ${
                   activeFormats.bold ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
                 }`}
-                title="Bold (**text**)"
+                title={t('bold')}
               >
                 B
               </button>
@@ -497,7 +497,7 @@ export const MessageComposer: React.FC = () => {
                 className={`w-6 h-6 flex items-center justify-center rounded text-xs italic font-serif transition-colors ${
                   activeFormats.italic ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
                 }`}
-                title="Italic (*text*)"
+                title={t('italic')}
               >
                 I
               </button>
@@ -509,7 +509,7 @@ export const MessageComposer: React.FC = () => {
                 className={`w-6 h-6 flex items-center justify-center rounded text-xs line-through transition-colors ${
                   activeFormats.strike ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
                 }`}
-                title="Strikethrough (~~text~~)"
+                title={t('strikethrough')}
               >
                 S
               </button>
@@ -523,7 +523,7 @@ export const MessageComposer: React.FC = () => {
                 className={`w-6 h-6 flex items-center justify-center rounded text-xs font-mono transition-colors ${
                   activeFormats['inline-code'] ? 'bg-[#4F8CFF]/20 text-[#4F8CFF]' : 'hover:text-[#F5F7FA] hover:bg-[#252B36]'
                 }`}
-                title="Inline Code (`code`)"
+                title={t('code')}
               >
                 &lt;&gt;
               </button>
@@ -533,7 +533,7 @@ export const MessageComposer: React.FC = () => {
                 type="button"
                 onClick={() => insertFormat('```typescript\n', '\n```', 'codeblock')}
                 className="px-1.5 h-6 flex items-center space-x-1 rounded text-xs font-mono hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
-                title="Code Snippet Block"
+                title={t('code')}
               >
                 <span className="text-[10px] font-bold">Code</span>
               </button>
@@ -543,7 +543,7 @@ export const MessageComposer: React.FC = () => {
                 type="button"
                 onClick={() => insertFormat('> ', '', 'quote')}
                 className="w-6 h-6 flex items-center justify-center rounded text-xs font-serif font-bold hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
-                title="Quote (> quote)"
+                title={t('quote')}
               >
                 &ldquo;&rdquo;
               </button>
@@ -553,7 +553,7 @@ export const MessageComposer: React.FC = () => {
                 type="button"
                 onClick={() => insertFormat('- ', '', 'list')}
                 className="w-6 h-6 flex items-center justify-center rounded text-xs font-mono hover:text-[#F5F7FA] hover:bg-[#252B36] transition-colors"
-                title="Bulleted List (- item)"
+                title={t('bullet_list')}
               >
                 &bull;&equiv;
               </button>
@@ -608,7 +608,7 @@ export const MessageComposer: React.FC = () => {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="p-1 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors"
-                title="Add attachment"
+                title={t('attach_file')}
               >
                 <Paperclip className="w-4 h-4" />
               </button>
@@ -618,7 +618,7 @@ export const MessageComposer: React.FC = () => {
                 type="button"
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                 className="p-1 text-[#929BAA] hover:text-[#F5F7FA] hover:bg-[#181C25] rounded-md transition-colors relative"
-                title="Add emoji"
+                title={t('reactions_emojis')}
               >
                 <Smile className="w-4 h-4" />
               </button>
@@ -628,7 +628,7 @@ export const MessageComposer: React.FC = () => {
                 type="button"
                 onClick={startVoiceRecording}
                 className="p-1 rounded-md transition-colors text-[#929BAA] hover:text-[#32C48D] hover:bg-[#181C25] cursor-pointer"
-                title="Record voice note (WhatsApp style)"
+                title={t('record_voice')}
               >
                 <Mic className="w-4 h-4" />
               </button>
@@ -644,7 +644,7 @@ export const MessageComposer: React.FC = () => {
                   ? 'bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white shadow-accent-glow cursor-pointer'
                   : 'bg-[#181C25] text-[#929BAA]/50 cursor-not-allowed'
               }`}
-              title="Send message (Enter)"
+              title={t('send')}
             >
               <Send className="w-3.5 h-3.5" />
             </button>
@@ -692,8 +692,8 @@ export const MessageComposer: React.FC = () => {
                 type="button"
                 onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                 className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] active:text-[#4F8CFF] rounded-full transition-colors flex-shrink-0 cursor-pointer"
-                title="Add emoji"
-                aria-label="Add emoji"
+                title={t('reactions_emojis')}
+                aria-label={t('reactions_emojis')}
               >
                 <Smile className="w-5 h-5" />
               </button>
@@ -714,8 +714,8 @@ export const MessageComposer: React.FC = () => {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="p-1.5 text-[#929BAA] hover:text-[#F5F7FA] active:text-[#4F8CFF] rounded-full transition-colors flex-shrink-0 cursor-pointer"
-                title="Add attachment"
-                aria-label="Add attachment"
+                title={t('attach_file')}
+                aria-label={t('attach_file')}
               >
                 <Paperclip className="w-5 h-5" />
               </button>
@@ -725,8 +725,8 @@ export const MessageComposer: React.FC = () => {
                 type="button"
                 onClick={startVoiceRecording}
                 className="p-1.5 text-[#929BAA] hover:text-[#32C48D] active:text-[#32C48D] rounded-full transition-colors flex-shrink-0 cursor-pointer"
-                title="Record voice note"
-                aria-label="Record voice note"
+                title={t('record_voice')}
+                aria-label={t('record_voice')}
               >
                 <Mic className="w-5 h-5" />
               </button>
@@ -742,8 +742,8 @@ export const MessageComposer: React.FC = () => {
                   ? 'bg-[#4F8CFF] hover:bg-[#3D7AE8] text-white shadow-accent-glow active:scale-95'
                   : 'bg-[#181C25] text-[#929BAA]/40 border border-[#252B36] cursor-not-allowed'
               }`}
-              title="Send message"
-              aria-label="Send message"
+              title={t('send')}
+              aria-label={t('send')}
             >
               <Send className="w-4 h-4 ml-0.5" />
             </button>
@@ -770,7 +770,7 @@ export const MessageComposer: React.FC = () => {
               {EMOJI_CATEGORIES.map((cat) => (
                 <div key={cat.name}>
                   <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider mb-1">
-                    {cat.name}
+                    {t(cat.name)}
                   </div>
                   <div className="grid grid-cols-6 gap-1">
                     {cat.emojis.map((e) => (

@@ -11,6 +11,7 @@ import {
   Pin,
 } from 'lucide-react';
 import { resolveUserAvatar } from '../../utils/avatar';
+import { translateText } from '../../utils/translation';
 
 export const ChatHeader: React.FC = () => {
   const {
@@ -28,6 +29,7 @@ export const ChatHeader: React.FC = () => {
     setIsRightPanelOpen,
     setRightPanelTab,
     toggleSidebarCollapsed,
+    selectedLanguage,
     t,
   } = useChat();
 
@@ -92,7 +94,7 @@ export const ChatHeader: React.FC = () => {
               ) : (
                 <Hash className="w-4 h-4 text-[#929BAA]" />
               )}
-              <h2 className="text-sm font-bold text-[#F5F7FA]">{activeChannel.name}</h2>
+              <h2 className="text-sm font-bold text-[#F5F7FA]">{translateText(activeChannel.name, selectedLanguage)}</h2>
               <button
                 onClick={() => toggleStarChannel(activeChannel.id)}
                 className={`p-1 rounded hover:bg-[#181C25] transition-colors ${
@@ -118,7 +120,11 @@ export const ChatHeader: React.FC = () => {
               className="text-xs text-[#929BAA] truncate cursor-pointer hover:text-[#F5F7FA] flex items-center gap-1 group text-left max-w-xs sm:max-w-md transition-colors"
               title="Click to view channel description in details"
             >
-              <span className="truncate">{activeChannel.description || 'Add a description...'}</span>
+              <span className="truncate">
+                {activeChannel.description
+                  ? translateText(activeChannel.description, selectedLanguage)
+                  : t('add_description')}
+              </span>
             </button>
           </>
         ) : activeDM ? (
@@ -143,12 +149,14 @@ export const ChatHeader: React.FC = () => {
                 </div>
               )}
               <h2 className="text-sm font-bold text-[#F5F7FA]">
-                {activeDM.isGroup ? activeDM.groupName : dmPartner?.name}
+                {activeDM.isGroup
+                  ? (activeDM.groupName ? translateText(activeDM.groupName, selectedLanguage) : 'Group')
+                  : (dmPartner?.name ? translateText(dmPartner.name, selectedLanguage) : 'User')}
               </h2>
               {activeDM.status === 'pending' && (
                 <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold bg-[#F5A623]/20 text-[#F5A623] border border-[#F5A623]/30 rounded-md">
                   <Clock className="w-3 h-3" />
-                  <span>Pending Invite</span>
+                  <span>{t('pending_invite')}</span>
                 </span>
               )}
               <button
@@ -156,7 +164,7 @@ export const ChatHeader: React.FC = () => {
                 className={`p-1 rounded hover:bg-[#181C25] transition-colors ${
                   activeDM.isStarred ? 'text-[#F5A623]' : 'text-[#929BAA] hover:text-[#F5F7FA]'
                 }`}
-                title={activeDM.isStarred ? 'Unstar' : 'Star'}
+                title={activeDM.isStarred ? t('unstar_channel') : t('star_channel')}
               >
                 <Star className={`w-3.5 h-3.5 ${activeDM.isStarred ? 'fill-[#F5A623]' : ''}`} />
               </button>
@@ -167,7 +175,7 @@ export const ChatHeader: React.FC = () => {
             <div className="text-xs text-[#929BAA] truncate">
               {activeDM.isGroup
                 ? `${(activeDM.participantIds || []).length} ${t('members')}`
-                : `${dmPartner?.title || 'Team member'} • ${
+                : `${dmPartner?.title ? translateText(dmPartner.title, selectedLanguage) : t('team_members')} • ${
                     dmPartner?.isOnline ? t('online') : t('offline')
                   }`}
             </div>
@@ -175,7 +183,7 @@ export const ChatHeader: React.FC = () => {
         ) : (
           <div className="flex items-center space-x-2">
             <h2 className="text-sm font-bold text-[#F5F7FA]">PulseChat</h2>
-            <span className="text-xs text-[#929BAA]">Select or create a conversation to start</span>
+            <span className="text-xs text-[#929BAA]">{t('select_or_create_conv')}</span>
           </div>
         )}
       </div>

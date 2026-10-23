@@ -19,6 +19,7 @@ import {
 import { SquigglyText } from '../ui/squiggly-text';
 import { EncryptedText } from '../ui/encrypted-text';
 import { resolveUserAvatar } from '../../utils/avatar';
+import { translateText } from '../../utils/translation';
 
 export const TopNavigation: React.FC = () => {
   const {
@@ -48,6 +49,7 @@ export const TopNavigation: React.FC = () => {
     setActiveWorkspaceId,
     acceptInvite,
     declineInvite,
+    selectedLanguage,
     addToast,
     t,
   } = useChat();
@@ -200,7 +202,11 @@ export const TopNavigation: React.FC = () => {
       wsName = ws?.name || activeWorkspace?.name || 'Workspace';
     }
 
-    return `${wsName}->${channelOrDMName}->${authorName}`;
+    const wsTranslated = wsName ? translateText(wsName, selectedLanguage) : '';
+    const targetTranslated = channelOrDMName ? translateText(channelOrDMName, selectedLanguage) : '';
+    const authorTranslated = authorName ? translateText(authorName, selectedLanguage) : '';
+
+    return `${wsTranslated}->${targetTranslated}->${authorTranslated}`;
   };
 
   const handleJumpToMessage = (m: (typeof messages)[0]) => {
@@ -240,11 +246,11 @@ export const TopNavigation: React.FC = () => {
   const renderFilterTabs = () => (
     <div className="px-3 py-2 border-b border-slate-200 dark:border-[#252B36] bg-slate-50 dark:bg-[#12151C]/70 flex items-center space-x-1.5 text-xs overflow-x-auto flex-shrink-0">
       {[
-        { id: 'all', label: `All (${totalResultsCount})` },
-        { id: 'channels', label: `Channels (${searchResults.channels.length})` },
-        { id: 'people', label: `People (${searchResults.users.length})` },
-        { id: 'messages', label: `Messages (${searchResults.messages.length})` },
-        { id: 'files', label: `Files (${searchResults.files.length})` },
+        { id: 'all', label: `${t('all')} (${totalResultsCount})` },
+        { id: 'channels', label: `${t('channels')} (${searchResults.channels.length})` },
+        { id: 'people', label: `${t('people')} (${searchResults.users.length})` },
+        { id: 'messages', label: `${t('messages')} (${searchResults.messages.length})` },
+        { id: 'files', label: `${t('files')} (${searchResults.files.length})` },
       ].map((tab) => (
         <button
           key={tab.id}
@@ -268,7 +274,7 @@ export const TopNavigation: React.FC = () => {
         <div className="overflow-y-auto p-2 space-y-3 flex-1 text-xs">
           {totalResultsCount === 0 ? (
             <div className="p-6 text-center text-[#929BAA]">
-              No matching results for "{searchInput}"
+              {t('no_matching_results').replace('{query}', searchInput)}
             </div>
           ) : (
             <>
@@ -276,7 +282,7 @@ export const TopNavigation: React.FC = () => {
               {(searchFilter === 'all' || searchFilter === 'channels') && searchResults.channels.length > 0 && (
                 <div>
                   <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider px-2 py-1">
-                    Channels
+                    {t('channels')}
                   </div>
                   {searchResults.channels.map((ch) => (
                     <div
@@ -302,7 +308,7 @@ export const TopNavigation: React.FC = () => {
               {(searchFilter === 'all' || searchFilter === 'people') && searchResults.users.length > 0 && (
                 <div>
                   <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider px-2 py-1">
-                    Team Members
+                    {t('team_members')}
                   </div>
                   {searchResults.users.map((u) => (
                     <div
@@ -315,10 +321,10 @@ export const TopNavigation: React.FC = () => {
                     >
                       <div className="flex items-center space-x-2 truncate">
                         <img src={resolveUserAvatar(u.avatar, u.name)} alt="" className="w-5 h-5 rounded-md object-cover" />
-                        <span className="font-semibold text-slate-900 dark:text-[#F5F7FA]">{u.name}</span>
-                        <span className="text-[11px] text-[#929BAA]">@{u.username} &bull; {u.title}</span>
+                        <span className="font-semibold text-slate-900 dark:text-[#F5F7FA]">{translateText(u.name, selectedLanguage)}</span>
+                        <span className="text-[11px] text-[#929BAA]">@{u.username} &bull; {u.title ? translateText(u.title, selectedLanguage) : ''}</span>
                       </div>
-                      <span className="text-[10px] text-[#32C48D]">{u.isOnline ? 'Online' : 'Offline'}</span>
+                      <span className="text-[10px] text-[#32C48D]">{u.isOnline ? t('online') : t('offline')}</span>
                     </div>
                   ))}
                 </div>
@@ -328,7 +334,7 @@ export const TopNavigation: React.FC = () => {
               {(searchFilter === 'all' || searchFilter === 'messages') && searchResults.messages.length > 0 && (
                 <div>
                   <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider px-2 py-1">
-                    Messages
+                    {t('messages')}
                   </div>
                   {searchResults.messages.map((m) => {
                     const author = (users || []).find((u) => u.id === m.senderId);
@@ -363,12 +369,12 @@ export const TopNavigation: React.FC = () => {
     return (
       <div className="p-3 space-y-3 overflow-y-auto max-h-80 text-xs">
         <div className="flex items-center justify-between text-[11px] text-[#929BAA] px-1 pb-1 border-b border-slate-200 dark:border-[#252B36]">
-          <span className="font-semibold text-slate-900 dark:text-[#F5F7FA]">Quick Search & Jump</span>
-          <span className="hidden md:inline font-mono text-[10px] bg-slate-100 dark:bg-[#12151C] px-1.5 py-0.5 rounded border border-slate-200 dark:border-[#252B36]">ESC to close</span>
+          <span className="font-semibold text-slate-900 dark:text-[#F5F7FA]">{t('quick_search')}</span>
+          <span className="hidden md:inline font-mono text-[10px] bg-slate-100 dark:bg-[#12151C] px-1.5 py-0.5 rounded border border-slate-200 dark:border-[#252B36]">{t('esc_to_close')}</span>
         </div>
         <div>
           <div className="text-[10px] font-semibold text-[#929BAA] uppercase tracking-wider px-2 py-1">
-            Channels
+            {t('channels')}
           </div>
           {(channels || [])
             .filter((c) => c && c.workspaceId === (activeWorkspace?.id || ''))
@@ -384,8 +390,8 @@ export const TopNavigation: React.FC = () => {
             >
               <div className="flex items-center space-x-2 truncate">
                 {ch.isPrivate ? <Lock className="w-3.5 h-3.5 text-[#929BAA]" /> : <Hash className="w-3.5 h-3.5 text-[#4F8CFF]" />}
-                <span className="font-semibold text-slate-900 dark:text-[#F5F7FA]">#{ch.name}</span>
-                <span className="text-[11px] text-[#929BAA] truncate max-w-xs">{ch.topic}</span>
+                <span className="font-semibold text-slate-900 dark:text-[#F5F7FA]">#{translateText(ch.name, selectedLanguage)}</span>
+                <span className="text-[11px] text-[#929BAA] truncate max-w-xs">{ch.description || ch.topic ? translateText(ch.description || ch.topic, selectedLanguage) : ''}</span>
               </div>
               <ArrowRight className="w-3.5 h-3.5 text-[#929BAA] opacity-0 group-hover:opacity-100" />
             </div>
@@ -444,7 +450,7 @@ export const TopNavigation: React.FC = () => {
               <Hash className="w-3.5 h-3.5 text-[#4F8CFF] flex-shrink-0" />
             )}
             <h2 className="text-sm font-bold text-slate-900 dark:text-[#F5F7FA] truncate">
-              {activeChannel.name}
+              {translateText(activeChannel.name, selectedLanguage)}
             </h2>
             <button
               type="button"
@@ -470,7 +476,7 @@ export const TopNavigation: React.FC = () => {
           >
             {activeDM.isGroup ? (
               <h2 className="text-sm font-bold text-slate-900 dark:text-[#F5F7FA] truncate">
-                {activeDM.groupName || 'Group Chat'}
+                {activeDM.groupName ? translateText(activeDM.groupName, selectedLanguage) : t('group_conversation_with')}
               </h2>
             ) : dmPartner ? (
               <>
@@ -487,12 +493,12 @@ export const TopNavigation: React.FC = () => {
                   />
                 </div>
                 <h2 className="text-sm font-bold text-slate-900 dark:text-[#F5F7FA] truncate">
-                  {dmPartner.name}
+                  {translateText(dmPartner.name, selectedLanguage)}
                 </h2>
               </>
             ) : (
               <h2 className="text-sm font-bold text-slate-900 dark:text-[#F5F7FA] truncate">
-                Direct Message
+                {t('direct_message')}
               </h2>
             )}
             <button
@@ -634,7 +640,7 @@ export const TopNavigation: React.FC = () => {
                 <div className="px-4 py-3 border-b border-slate-200 dark:border-[#252B36] flex items-center justify-between bg-slate-50 dark:bg-[#12151C]/60">
                   <div className="flex items-center space-x-2">
                     <Bell className="w-4 h-4 text-[#4F8CFF]" />
-                    <span className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA]">Notifications</span>
+                    <span className="text-xs font-bold text-slate-800 dark:text-[#F5F7FA]">{t('notifications')}</span>
                     {notifications.length > 0 && (
                       <span className="text-[10px] bg-[#4F8CFF]/20 text-[#4F8CFF] font-semibold px-1.5 py-0.5 rounded-full">
                         {notifications.length}
@@ -645,10 +651,10 @@ export const TopNavigation: React.FC = () => {
                     <button
                       onClick={clearAllNotifications}
                       className="text-[11px] text-slate-500 hover:text-[#F05D6C] dark:text-[#929BAA] dark:hover:text-[#F05D6C] flex items-center space-x-1 transition-colors cursor-pointer"
-                      title="Clear all notifications"
+                      title={t('clear_all')}
                     >
                       <Trash2 className="w-3 h-3" />
-                      <span>Clear all</span>
+                      <span>{t('clear_all')}</span>
                     </button>
                   )}
                 </div>
@@ -657,7 +663,7 @@ export const TopNavigation: React.FC = () => {
                 <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-[#252B36]/40">
                   {notifications.length === 0 ? (
                     <div className="p-8 text-center text-xs text-slate-500 dark:text-[#929BAA]">
-                      No notifications yet
+                      {t('no_notifications')}
                     </div>
                   ) : (
                     notifications.map((n) => (
@@ -709,7 +715,7 @@ export const TopNavigation: React.FC = () => {
                                 }}
                                 className="px-2.5 py-1 bg-[#32C48D] hover:bg-[#28A775] text-white text-[11px] font-semibold rounded-md shadow-sm transition-colors cursor-pointer"
                               >
-                                Accept
+                                {t('accept')}
                               </button>
                               <button
                                 type="button"
@@ -721,7 +727,7 @@ export const TopNavigation: React.FC = () => {
                                 }}
                                 className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 dark:bg-[#252B36] dark:hover:bg-[#323946] text-slate-700 dark:text-[#929BAA] text-[11px] font-medium rounded-md transition-colors cursor-pointer"
                               >
-                                Decline
+                                {t('decline')}
                               </button>
                             </div>
                           )}

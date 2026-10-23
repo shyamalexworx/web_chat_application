@@ -992,7 +992,7 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
             <div className="relative flex-shrink-0 cursor-pointer pt-0.5">
               <img
                 src={senderAvatar}
-                alt={sender.name}
+                alt={translateText(sender.name, selectedLanguage)}
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsUserProfileOpen(true);
@@ -1020,17 +1020,17 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, previousMessa
                   }}
                   className="text-xs font-semibold text-[#F5F7FA] hover:text-[#4F8CFF] cursor-pointer transition-colors"
                 >
-                  {sender.name}
+                  {translateText(sender.name, selectedLanguage)}
                 </span>
 
                 {sender.role === 'owner' && (
                   <span className="text-[10px] bg-[#4F8CFF]/20 text-[#4F8CFF] font-semibold px-1.5 py-0.2 rounded border border-[#4F8CFF]/30 flex items-center gap-0.5">
-                    <Shield className="w-2.5 h-2.5" /> Lead
+                    <Shield className="w-2.5 h-2.5" /> {t('creator')}
                   </span>
                 )}
                 {sender.role === 'admin' && (
                   <span className="text-[10px] bg-[#32C48D]/20 text-[#32C48D] font-semibold px-1.5 py-0.2 rounded border border-[#32C48D]/30">
-                    Admin
+                    {t('admin')}
                   </span>
                 )}
               </div>

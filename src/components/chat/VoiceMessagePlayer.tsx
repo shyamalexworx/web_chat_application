@@ -103,6 +103,11 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
     }
 
     const audio = new Audio(audioUrl);
+    audio.preload = 'auto';
+    audio.volume = 1.0;
+    if (audioUrl.startsWith('http')) {
+      audio.crossOrigin = 'anonymous';
+    }
     audioRef.current = audio;
 
     const handleDuration = () => {
@@ -158,16 +163,49 @@ export const VoiceMessagePlayer: React.FC<VoiceMessagePlayerProps> = ({
       setIsPlaying(false);
     } else {
       audioRef.current.playbackRate = playbackSpeed;
+      audioRef.current.volume = 1.0;
       audioRef.current.play().then(() => {
         setIsPlaying(true);
       }).catch((err) => {
-        console.warn('Playback prevented or file unplayable, regenerating audio fallback:', err);
-        const durToUse = totalDurationRef.current > 0 ? totalDurationRef.current : 4;
-        const fallback = generateProceduralVoiceNote(durToUse);
-        setPlayableUrl(fallback.url);
-        if (audioRef.current) {
-          audioRef.current.src = fallback.url;
-          audioRef.current.play().then(() => setIsPlaying(true));
+        console.warn('HTMLAudio playback issue, attempting Web Audio API decoder fallback:', err);
+        const AudioCtxClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtxClass && playableUrl && playableUrl !== '#') {
+          fetch(playableUrl)
+            .then((r) => r.arrayBuffer())
+            .then((buf) => {
+              const ctx = new AudioCtxClass();
+              return ctx.decodeAudioData(buf).then((decoded) => {
+                const source = ctx.createBufferSource();
+                source.buffer = decoded;
+                source.playbackRate.value = playbackSpeed;
+                source.connect(ctx.destination);
+                source.onended = () => {
+                  setIsPlaying(false);
+                  setCurrentTime(0);
+                  try { ctx.close(); } catch (e) {}
+                };
+                source.start(0);
+                setIsPlaying(true);
+              });
+            })
+            .catch((decodeErr) => {
+              console.warn('Web Audio decode failed, using procedural audio fallback:', decodeErr);
+              const durToUse = totalDurationRef.current > 0 ? totalDurationRef.current : 4;
+              const fallback = generateProceduralVoiceNote(durToUse);
+              setPlayableUrl(fallback.url);
+              if (audioRef.current) {
+                audioRef.current.src = fallback.url;
+                audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+              }
+            });
+        } else {
+          const durToUse = totalDurationRef.current > 0 ? totalDurationRef.current : 4;
+          const fallback = generateProceduralVoiceNote(durToUse);
+          setPlayableUrl(fallback.url);
+          if (audioRef.current) {
+            audioRef.current.src = fallback.url;
+            audioRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+          }
         }
       });
     }

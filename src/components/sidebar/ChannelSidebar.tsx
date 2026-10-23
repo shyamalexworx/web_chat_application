@@ -45,6 +45,8 @@ export const ChannelSidebar: React.FC = () => {
     setIsUserProfileOpen,
     deleteChannel,
     deleteDM,
+    isUserBlocked,
+    isChannelBlocked,
     selectedLanguage,
     t,
   } = useChat();
@@ -152,13 +154,15 @@ export const ChannelSidebar: React.FC = () => {
 
         {/* CHANNELS & DMS MAIN SIDEBAR */}
         <div className="flex-1 flex flex-col h-full min-w-0 bg-white dark:bg-[#0F1117]">
-          {/* Workspace Header: Interactive & Functional */}
-          <div className="h-11 min-h-[44px] flex-shrink-0 border-b border-slate-200 dark:border-[#252B36] px-2.5 sm:px-3 flex items-center justify-between bg-white dark:bg-[#0F1117]">
-            <button
-              onClick={() => setIsWorkspaceSettingsOpen(true)}
-              className="flex items-center space-x-2 overflow-hidden flex-1 p-0.5 rounded-lg hover:bg-slate-200/70 dark:hover:bg-[#181C25] transition-colors text-left group"
-              title="Open Workspace Settings & Switcher"
-            >
+          {/* Workspace Header: Unified Interactive Header with Settings Icon Representation */}
+          <button
+            type="button"
+            onClick={() => setIsWorkspaceSettingsOpen(true)}
+            className="w-full h-11 min-h-[44px] flex-shrink-0 border-b border-slate-200 dark:border-[#252B36] px-3 flex items-center justify-between gap-2 bg-transparent hover:bg-slate-100/70 dark:hover:bg-[#181C25]/70 transition-colors text-left group cursor-pointer select-none"
+            title={translateText('Workspace Settings', selectedLanguage)}
+            aria-label={translateText('Workspace Settings', selectedLanguage)}
+          >
+            <div className="flex items-center space-x-2 overflow-hidden flex-1 min-w-0">
               {activeWorkspace.avatar ? (
                 <img
                   src={activeWorkspace.avatar}
@@ -181,8 +185,11 @@ export const ChannelSidebar: React.FC = () => {
                   {activeWorkspace.membersCount} {t('members')}
                 </p>
               </div>
-            </button>
-          </div>
+            </div>
+
+            {/* Visual representation of the settings function */}
+            <Settings className="w-4 h-4 text-slate-400 group-hover:text-slate-700 dark:text-[#929BAA] dark:group-hover:text-[#F5F7FA] transition-colors flex-shrink-0" />
+          </button>
 
       {/* Navigation List */}
       <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-4">
@@ -280,6 +287,7 @@ export const ChannelSidebar: React.FC = () => {
               <div className="mt-1 space-y-0.5">
                 {starredChannels.map((ch) => {
                   const isActive = activeView.type === 'channel' && activeView.id === ch.id;
+                  const isBlocked = isChannelBlocked(ch.id);
                   return (
                     <div
                       key={ch.id}
@@ -299,9 +307,14 @@ export const ChannelSidebar: React.FC = () => {
                           <Hash className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-[#929BAA]'}`} />
                         )}
                         <span className="truncate">{translateText(ch.name, selectedLanguage)}</span>
+                        {isBlocked && (
+                          <span className="ml-1 px-1.5 py-0.2 text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 rounded">
+                            Blocked
+                          </span>
+                        )}
                       </div>
                       <div className="flex items-center space-x-1 flex-shrink-0 ml-1">
-                        {ch.unreadCount > 0 && (
+                        {!isBlocked && ch.unreadCount > 0 && (
                           <span className="bg-[#4F8CFF] text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
                             {ch.unreadCount}
                           </span>
@@ -314,6 +327,9 @@ export const ChannelSidebar: React.FC = () => {
                 {starredDMs.map((dm) => {
                   const isActive = activeView.type === 'dm' && activeView.id === dm.id;
                   const partner = getDMParticipant(dm);
+                  const isBlockedDM = Boolean(
+                    (partner && isUserBlocked(partner.id)) || isChannelBlocked(dm.id)
+                  );
                   return (
                     <div
                       key={dm.id}
@@ -342,13 +358,18 @@ export const ChannelSidebar: React.FC = () => {
                           </div>
                         )}
                         <span className="truncate">{translateText(getDMName(dm), selectedLanguage)}</span>
-                        {dm.status === 'pending' && (
+                        {isBlockedDM && (
+                          <span className="ml-1 px-1.5 py-0.2 text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 rounded">
+                            Blocked
+                          </span>
+                        )}
+                        {dm.status === 'pending' && !isBlockedDM && (
                           <span className="px-1.5 py-0.2 text-[9px] font-semibold bg-[#F5A623]/20 text-[#F5A623] border border-[#F5A623]/30 rounded">
                             Pending
                           </span>
                         )}
                       </div>
-                      {dm.unreadCount > 0 && (
+                      {!isBlockedDM && dm.unreadCount > 0 && (
                         <div className="flex items-center space-x-1 flex-shrink-0 ml-1">
                           <span className="bg-[#4F8CFF] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                             {dm.unreadCount}
@@ -394,6 +415,7 @@ export const ChannelSidebar: React.FC = () => {
             <div className="mt-1 space-y-0.5">
               {regularChannels.map((ch) => {
                 const isActive = activeView.type === 'channel' && activeView.id === ch.id;
+                const isBlocked = isChannelBlocked(ch.id);
                 return (
                   <div
                     key={ch.id}
@@ -413,10 +435,15 @@ export const ChannelSidebar: React.FC = () => {
                         <Hash className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-white' : 'text-[#929BAA] group-hover:text-[#F5F7FA]'}`} />
                       )}
                       <span className="truncate">{translateText(ch.name, selectedLanguage)}</span>
+                      {isBlocked && (
+                        <span className="ml-1 px-1.5 py-0.2 text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 rounded">
+                          Blocked
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center space-x-1 flex-shrink-0 ml-1">
-                      {ch.unreadCount > 0 && (
+                      {!isBlocked && ch.unreadCount > 0 && (
                         <span className="bg-[#4F8CFF] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                           {ch.unreadCount}
                         </span>
@@ -469,6 +496,9 @@ export const ChannelSidebar: React.FC = () => {
               {regularDMs.map((dm) => {
                 const isActive = activeView.type === 'dm' && activeView.id === dm.id;
                 const partner = getDMParticipant(dm);
+                const isBlockedDM = Boolean(
+                  (partner && isUserBlocked(partner.id)) || isChannelBlocked(dm.id)
+                );
                 return (
                   <div
                     key={dm.id}
@@ -499,14 +529,19 @@ export const ChannelSidebar: React.FC = () => {
                         </div>
                       )}
                       <span className="truncate">{translateText(getDMName(dm), selectedLanguage)}</span>
-                      {dm.status === 'pending' && (
+                      {isBlockedDM && (
+                        <span className="ml-1 px-1.5 py-0.2 text-[9px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 rounded">
+                          Blocked
+                        </span>
+                      )}
+                      {dm.status === 'pending' && !isBlockedDM && (
                         <span className="ml-1 px-1.5 py-0.2 text-[9px] font-semibold bg-[#F5A623]/20 text-[#F5A623] border border-[#F5A623]/30 rounded">
                           Pending
                         </span>
                       )}
                     </div>
 
-                    {dm.unreadCount > 0 && (
+                    {!isBlockedDM && dm.unreadCount > 0 && (
                       <div className="flex items-center space-x-1 flex-shrink-0 ml-1">
                         <span className="bg-[#4F8CFF] text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
                           {dm.unreadCount}

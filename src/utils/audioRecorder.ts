@@ -60,11 +60,55 @@ export function generateProceduralVoiceNote(durationSeconds: number = 3): { blob
   return { blob, url, duration: durationSeconds };
 }
 
+// Helper to convert Blob to Base64 data URL for universal cross-device portability
+export function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+      } else {
+        reject(new Error('Failed to convert audio blob to base64'));
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Inspect browser-supported audio mime types in order of preference
+function getSupportedAudioMimeType(): string | undefined {
+  if (typeof window === 'undefined' || typeof MediaRecorder === 'undefined') return undefined;
+
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4;codecs=mp4a.40.2',
+    'audio/mp4',
+    'audio/aac',
+    'audio/ogg;codecs=opus',
+    'audio/wav',
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      if (MediaRecorder.isTypeSupported(candidate)) {
+        return candidate;
+      }
+    } catch (e) {
+      // Ignore exceptions from strict browser engines
+    }
+  }
+
+  return undefined; // Let the browser select its native supported default
+}
+
 export class VoiceRecorder {
   private mediaRecorder: MediaRecorder | null = null;
   private audioChunks: Blob[] = [];
   private stream: MediaStream | null = null;
   private startTime: number = 0;
+  private activeMimeType: string = 'audio/webm';
 
   public async start(): Promise<boolean> {
     this.audioChunks = [];
@@ -72,19 +116,40 @@ export class VoiceRecorder {
 
     if (typeof navigator !== 'undefined' && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
       try {
-        this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-          ? 'audio/webm;codecs=opus'
-          : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
-          ? 'audio/ogg;codecs=opus'
-          : 'audio/webm';
+        const audioConstraints: MediaTrackConstraints = {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        };
 
-        this.mediaRecorder = new MediaRecorder(this.stream, { mimeType });
+        this.stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints });
+        const supportedMime = getSupportedAudioMimeType();
+        
+        const recorderOptions: MediaRecorderOptions = {};
+        if (supportedMime) {
+          recorderOptions.mimeType = supportedMime;
+          this.activeMimeType = supportedMime;
+        }
+
+        try {
+          this.mediaRecorder = new MediaRecorder(this.stream, recorderOptions);
+        } catch (optionsErr) {
+          // Fallback without explicit mimeType if browser rejects specific options (e.g. mobile Safari)
+          console.warn('MediaRecorder rejected options, falling back to browser default recorder:', optionsErr);
+          this.mediaRecorder = new MediaRecorder(this.stream);
+        }
+
+        if (this.mediaRecorder.mimeType) {
+          this.activeMimeType = this.mediaRecorder.mimeType;
+        }
+
         this.mediaRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
+          if (event.data && event.data.size > 0) {
             this.audioChunks.push(event.data);
           }
         };
+
+        // Collect chunks in 100ms intervals
         this.mediaRecorder.start(100);
         return true;
       } catch (err) {
@@ -97,27 +162,53 @@ export class VoiceRecorder {
     return false;
   }
 
-  public async stop(): Promise<{ blob: Blob; url: string; duration: number }> {
+  public async stop(): Promise<{ blob: Blob; url: string; base64: string; duration: number; mimeType: string }> {
     const elapsedSeconds = Math.max(1, Math.round((Date.now() - this.startTime) / 1000));
 
     if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
       return new Promise((resolve) => {
-        this.mediaRecorder!.onstop = () => {
-          const mimeType = this.mediaRecorder?.mimeType || 'audio/webm';
-          const blob = new Blob(this.audioChunks, { type: mimeType });
+        this.mediaRecorder!.onstop = async () => {
+          const finalMime = this.mediaRecorder?.mimeType || this.activeMimeType || 'audio/webm';
+          const blob = new Blob(this.audioChunks, { type: finalMime });
           const url = URL.createObjectURL(blob);
+          let base64 = '';
+          try {
+            base64 = await blobToBase64(blob);
+          } catch (e) {
+            console.warn('Could not generate base64 representation of audio:', e);
+          }
+
           if (this.stream) {
             this.stream.getTracks().forEach((track) => track.stop());
             this.stream = null;
           }
-          resolve({ blob, url, duration: elapsedSeconds });
+
+          resolve({
+            blob,
+            url,
+            base64: base64 || url,
+            duration: elapsedSeconds,
+            mimeType: finalMime,
+          });
         };
         this.mediaRecorder!.stop();
       });
     }
 
     // Fallback procedural voice note generator with audible playback
-    return generateProceduralVoiceNote(Math.max(1, Math.min(elapsedSeconds, 300)));
+    const procedural = generateProceduralVoiceNote(Math.max(1, Math.min(elapsedSeconds, 300)));
+    let procBase64 = '';
+    try {
+      procBase64 = await blobToBase64(procedural.blob);
+    } catch (e) {}
+
+    return {
+      blob: procedural.blob,
+      url: procedural.url,
+      base64: procBase64 || procedural.url,
+      duration: procedural.duration,
+      mimeType: 'audio/wav',
+    };
   }
 
   public cancel() {

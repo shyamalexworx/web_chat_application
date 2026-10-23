@@ -367,17 +367,55 @@ export const AIAssistantDrawer: React.FC = () => {
       ? messages.filter((m) => m.conversationId === targetChannel.id && !m.hiddenForUserIds?.includes(currentUser?.id || ''))
       : activeConversationMessages;
 
-    const formattedTarget = targetMsgs
-      .slice(-50)
+    // Detect if user requested a specific message count (e.g. "past 10 messages", "last 20 messages", "5 messages")
+    const countMatch = userPrompt.match(/(?:past|last|previous|latest)\s+(\d+)\s+messages?/i) ||
+                       userPrompt.match(/(\d+)\s+messages?/i);
+    const requestedCount = countMatch ? parseInt(countMatch[1], 10) : null;
+
+    // Detect if user requested messages from "today", "yesterday"
+    const isTodayOnly = /\btoday\b/i.test(userPrompt);
+    const isYesterdayOnly = /\byesterday\b/i.test(userPrompt);
+
+    let filteredMsgs = [...targetMsgs];
+    const now = new Date();
+
+    if (isTodayOnly) {
+      filteredMsgs = filteredMsgs.filter((m) => new Date(m.timestamp).toDateString() === now.toDateString());
+    } else if (isYesterdayOnly) {
+      const yesterday = new Date(now);
+      yesterday.setDate(yesterday.getDate() - 1);
+      filteredMsgs = filteredMsgs.filter((m) => new Date(m.timestamp).toDateString() === yesterday.toDateString());
+    }
+
+    // Apply count slice if requested, otherwise expand default window up to 150 messages
+    let finalSlice = filteredMsgs;
+    let scopeLabel = '';
+    if (requestedCount && requestedCount > 0) {
+      finalSlice = filteredMsgs.slice(-requestedCount);
+      scopeLabel = ` (Last ${finalSlice.length} Messages)`;
+    } else if (isTodayOnly) {
+      finalSlice = filteredMsgs.slice(-150);
+      scopeLabel = ` (Today's Messages: ${finalSlice.length})`;
+    } else if (isYesterdayOnly) {
+      finalSlice = filteredMsgs.slice(-150);
+      scopeLabel = ` (Yesterday's Messages: ${finalSlice.length})`;
+    } else {
+      finalSlice = filteredMsgs.slice(-150);
+      scopeLabel = ` (Recent ${finalSlice.length} Messages)`;
+    }
+
+    const formattedTarget = finalSlice
       .map((m: Message) => {
         const sender =
           users.find((u) => u.id === m.senderId)?.name ||
           (m.senderId === currentUser?.id ? 'You' : 'Member');
-        const time = new Date(m.timestamp).toLocaleTimeString([], {
+        const msgDate = new Date(m.timestamp);
+        const dateStr = msgDate.toLocaleDateString([], { month: 'short', day: 'numeric' });
+        const timeStr = msgDate.toLocaleTimeString([], {
           hour: '2-digit',
           minute: '2-digit',
         });
-        return `[${time}] ${sender}: ${m.content}`;
+        return `[${dateStr} ${timeStr}] ${sender}: ${m.content}`;
       })
       .join('\n');
 
@@ -402,8 +440,8 @@ CURRENT WORKSPACE CONTEXT:
 - Currently Focused Channel/Chat: ${targetChannel ? '#' + targetChannel.name : currentTargetName}
 ${extraChannelContext}
 ================================================================================
-WORKSPACE CONVERSATION MESSAGES TO ANALYZE / SUMMARIZE (${targetChannel ? '#' + targetChannel.name : currentTargetName}):
-${formattedTarget || '(No messages in this channel/conversation yet)'}
+WORKSPACE CONVERSATION MESSAGES TO ANALYZE / SUMMARIZE (${targetChannel ? '#' + targetChannel.name : currentTargetName}${scopeLabel}):
+${formattedTarget || '(No messages in this channel/conversation matching the requested timeframe or count)'}
 ================================================================================
 
 CAPABILITIES & REAL-TIME ACTIONS:
@@ -418,10 +456,12 @@ You have native tools available to perform real workspace actions:
 - translate_message: Translate a message to another language
 
 CRITICAL OPERATING RULES:
-1. SUMMARIZATION RULE: When the user asks to summarize a channel, recap discussions, or explain what happened in a channel:
-   - You MUST summarize ONLY the messages listed under "WORKSPACE CONVERSATION MESSAGES TO ANALYZE / SUMMARIZE" above.
+1. SUMMARIZATION & TIMEFRAME RULES:
+   - When asked to summarize or recap discussions, summarize ONLY the messages listed under "WORKSPACE CONVERSATION MESSAGES TO ANALYZE / SUMMARIZE".
    - You must NEVER summarize this assistant conversation history or your own past answers.
-   - If the channel has 0 messages, state clearly: "The channel #${targetChannel?.name || 'selected'} does not have any messages yet to summarize."
+   - Message format: [Date Time] User: Message text.
+   - If the user specifies a count (e.g. "past 10 messages", "last 5 messages") or timeframe (e.g. "today", "yesterday", "between 10 AM and 12 PM", "after 3 PM", "morning"), adhere strictly to the messages matching that timeframe or count.
+   - If 0 messages match the criteria, state clearly: "No messages found in #${targetChannel?.name || 'this channel'} for the requested timeframe or criteria."
    - Structure summaries clearly: Main Topics Discussed, Key Decisions, and Action Items.
 2. MESSAGE SENDING RULE: When the user asks to send a message to a channel or personal chat, inform the user you have prepared the message and require their confirmation before posting.
 3. Keep all responses focused, helpful, and directly relevant to PulseChat and team discussions. Use clean Markdown formatting.`;
@@ -991,39 +1031,7 @@ CRITICAL OPERATING RULES:
         </div>
       )}
 
-      {/* Suggested Quick Prompt Chips tailored for workspace */}
-      <div className="px-2.5 py-1.5 border-b border-slate-200 dark:border-[#252B36] bg-slate-50 dark:bg-[#0B0D12]/70 flex items-center space-x-1.5 overflow-x-auto text-[11px] no-scrollbar flex-shrink-0">
-        <button
-          onClick={() => handleSendPrompt('Hello! How can you help me in this workspace?')}
-          className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-[#181C25] dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF]/50 text-slate-700 dark:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-        >
-          👋 Say hello
-        </button>
-        <button
-          onClick={() => handleSendPrompt('Summarize the recent conversation messages in this channel')}
-          className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-[#181C25] dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF]/50 text-slate-700 dark:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-        >
-          📋 Summarize channel
-        </button>
-        <button
-          onClick={() => handleSendPrompt('Create a new channel called announcements')}
-          className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-[#181C25] dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF]/50 text-slate-700 dark:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-        >
-          ⚡ Create channel
-        </button>
-        <button
-          onClick={() => handleSendPrompt('Create a new workspace named Project Launch')}
-          className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-[#181C25] dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF]/50 text-slate-700 dark:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-        >
-          🏢 New workspace
-        </button>
-        <button
-          onClick={() => handleSendPrompt('Help me draft a friendly check-in message for my team')}
-          className="px-2.5 py-1 bg-white hover:bg-slate-100 dark:bg-[#181C25] dark:hover:bg-[#252B36] border border-slate-200 dark:border-[#252B36] hover:border-[#4F8CFF]/50 text-slate-700 dark:text-[#F5F7FA] rounded-full whitespace-nowrap transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
-        >
-          ✍️ Draft message
-        </button>
-      </div>
+
 
       {/* Messages Feed */}
       <div ref={containerRef} className="flex-1 overflow-y-auto p-2.5 space-y-2 bg-[#F8FAFC] dark:bg-[#0B0D12]">

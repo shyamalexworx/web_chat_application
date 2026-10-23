@@ -629,35 +629,44 @@ export const RightInfoPanel: React.FC = () => {
                 </div>
 
                 {/* WhatsApp-style Block / Unblock Contact Option */}
-                {otherUser && (
+                {(otherUser || otherUserId) && (
                   <div className="p-2.5 bg-[#181C25] border border-[#252B36] rounded-lg space-y-1.5">
                     <div className="text-[10px] font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
                       <ShieldAlert className="w-3.5 h-3.5 text-amber-400" /> Privacy & Safety
                     </div>
-                    <p className="text-[#929BAA] text-xs">
-                      {isUserBlocked(otherUser.id)
-                        ? `You have blocked ${otherUser.name}. They cannot send you messages or view presence.`
-                        : `Block ${otherUser.name} to stop receiving messages or notifications from them.`}
-                    </p>
-                    {isUserBlocked(otherUser.id) ? (
-                      <button
-                        type="button"
-                        onClick={() => unblockUser(otherUser.id)}
-                        className="px-2.5 py-1 bg-[#32C48D]/15 hover:bg-[#32C48D]/25 border border-[#32C48D]/40 text-[#32C48D] text-xs font-semibold rounded transition-colors cursor-pointer flex items-center gap-1.5"
-                      >
-                        <UserCheck className="w-3.5 h-3.5" />
-                        <span>Unblock {otherUser.name}</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => blockUser(otherUser.id)}
-                        className="px-2.5 py-1 bg-[#F05D6C]/15 hover:bg-[#F05D6C]/25 border border-[#F05D6C]/40 text-[#F05D6C] text-xs font-semibold rounded transition-colors cursor-pointer flex items-center gap-1.5"
-                      >
-                        <Ban className="w-3.5 h-3.5" />
-                        <span>Block {otherUser.name}</span>
-                      </button>
-                    )}
+                    {(() => {
+                      const dmTargetId = otherUser?.id || otherUserId!;
+                      const dmTargetName = otherUser?.name || 'Contact';
+                      const isBlocked = isUserBlocked(dmTargetId);
+                      return (
+                        <>
+                          <p className="text-[#929BAA] text-xs">
+                            {isBlocked
+                              ? `You have blocked ${dmTargetName}. Messages cannot be sent or received from them.`
+                              : `Block ${dmTargetName} to stop receiving messages or notifications from them.`}
+                          </p>
+                          {isBlocked ? (
+                            <button
+                              type="button"
+                              onClick={() => unblockUser(dmTargetId)}
+                              className="px-2.5 py-1 bg-[#32C48D]/15 hover:bg-[#32C48D]/25 border border-[#32C48D]/40 text-[#32C48D] text-xs font-semibold rounded transition-colors cursor-pointer flex items-center gap-1.5"
+                            >
+                              <UserCheck className="w-3.5 h-3.5" />
+                              <span>Unblock {dmTargetName}</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => blockUser(dmTargetId)}
+                              className="px-2.5 py-1 bg-[#F05D6C]/15 hover:bg-[#F05D6C]/25 border border-[#F05D6C]/40 text-[#F05D6C] text-xs font-semibold rounded transition-colors cursor-pointer flex items-center gap-1.5"
+                            >
+                              <Ban className="w-3.5 h-3.5" />
+                              <span>Block {dmTargetName}</span>
+                            </button>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 )}
 

@@ -29,6 +29,8 @@ export const ChatHeader: React.FC = () => {
     setIsRightPanelOpen,
     setRightPanelTab,
     toggleSidebarCollapsed,
+    isUserBlocked,
+    isChannelBlocked,
     selectedLanguage,
     t,
   } = useChat();
@@ -95,6 +97,11 @@ export const ChatHeader: React.FC = () => {
                 <Hash className="w-4 h-4 text-[#929BAA]" />
               )}
               <h2 className="text-sm font-bold text-[#F5F7FA]">{translateText(activeChannel.name, selectedLanguage)}</h2>
+              {isChannelBlocked(activeChannel.id) && (
+                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 rounded-md">
+                  Blocked
+                </span>
+              )}
               <button
                 onClick={() => toggleStarChannel(activeChannel.id)}
                 className={`p-1 rounded hover:bg-[#181C25] transition-colors ${
@@ -153,6 +160,11 @@ export const ChatHeader: React.FC = () => {
                   ? (activeDM.groupName ? translateText(activeDM.groupName, selectedLanguage) : 'Group')
                   : (dmPartner?.name ? translateText(dmPartner.name, selectedLanguage) : 'User')}
               </h2>
+              {((dmPartner && isUserBlocked(dmPartner.id)) || isChannelBlocked(activeDM.id)) && (
+                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 rounded-md">
+                  Blocked
+                </span>
+              )}
               {activeDM.status === 'pending' && (
                 <span className="flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold bg-[#F5A623]/20 text-[#F5A623] border border-[#F5A623]/30 rounded-md">
                   <Clock className="w-3 h-3" />

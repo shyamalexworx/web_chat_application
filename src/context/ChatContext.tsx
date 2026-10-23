@@ -510,17 +510,55 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const activeViewRef = useRef<ActiveView>(activeView);
   const currentUserIdRef = useRef<string>(currentUserId);
 
+  // Safe helper to parse string arrays from localStorage
+  const loadBlockedList = (key: string): string[] => {
+    try {
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {}
+    return [];
+  };
+
   // Blocked Users State (WhatsApp style)
   const [blockedUserIds, setBlockedUserIds] = useState<string[]>(() => {
-    try {
-      const uid = localStorage.getItem('pulsechat_current_user') || 'default';
-      const saved = localStorage.getItem('pulsechat_blocked_users_' + uid);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
+    const uid = localStorage.getItem('pulsechat_current_user') || 'default';
+    return loadBlockedList('pulsechat_blocked_users_' + uid);
   });
   const blockedUserIdsRef = useRef<string[]>(blockedUserIds);
+
+  // Blocked Channels State
+  const [blockedChannelIds, setBlockedChannelIds] = useState<string[]>(() => {
+    const uid = localStorage.getItem('pulsechat_current_user') || 'default';
+    return loadBlockedList('pulsechat_blocked_channels_' + uid);
+  });
+  const blockedChannelIdsRef = useRef<string[]>(blockedChannelIds);
+
+  // Blocked Workspaces State
+  const [blockedWorkspaceIds, setBlockedWorkspaceIds] = useState<string[]>(() => {
+    const uid = localStorage.getItem('pulsechat_current_user') || 'default';
+    return loadBlockedList('pulsechat_blocked_workspaces_' + uid);
+  });
+  const blockedWorkspaceIdsRef = useRef<string[]>(blockedWorkspaceIds);
+
+  // Hydrate blocked lists whenever currentUserId resolves/changes without wiping storage
+  useEffect(() => {
+    if (!currentUserId) return;
+    const loadedUsers = loadBlockedList('pulsechat_blocked_users_' + currentUserId);
+    setBlockedUserIds(loadedUsers);
+    blockedUserIdsRef.current = loadedUsers;
+
+    const loadedChannels = loadBlockedList('pulsechat_blocked_channels_' + currentUserId);
+    setBlockedChannelIds(loadedChannels);
+    blockedChannelIdsRef.current = loadedChannels;
+
+    const loadedWorkspaces = loadBlockedList('pulsechat_blocked_workspaces_' + currentUserId);
+    setBlockedWorkspaceIds(loadedWorkspaces);
+    blockedWorkspaceIdsRef.current = loadedWorkspaces;
+  }, [currentUserId]);
+
   useEffect(() => {
     blockedUserIdsRef.current = blockedUserIds;
     const uid = currentUserId || 'default';
@@ -529,17 +567,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {}
   }, [blockedUserIds, currentUserId]);
 
-  // Blocked Channels State
-  const [blockedChannelIds, setBlockedChannelIds] = useState<string[]>(() => {
-    try {
-      const uid = localStorage.getItem('pulsechat_current_user') || 'default';
-      const saved = localStorage.getItem('pulsechat_blocked_channels_' + uid);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-  const blockedChannelIdsRef = useRef<string[]>(blockedChannelIds);
   useEffect(() => {
     blockedChannelIdsRef.current = blockedChannelIds;
     const uid = currentUserId || 'default';
@@ -548,17 +575,6 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e) {}
   }, [blockedChannelIds, currentUserId]);
 
-  // Blocked Workspaces State
-  const [blockedWorkspaceIds, setBlockedWorkspaceIds] = useState<string[]>(() => {
-    try {
-      const uid = localStorage.getItem('pulsechat_current_user') || 'default';
-      const saved = localStorage.getItem('pulsechat_blocked_workspaces_' + uid);
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-  const blockedWorkspaceIdsRef = useRef<string[]>(blockedWorkspaceIds);
   useEffect(() => {
     blockedWorkspaceIdsRef.current = blockedWorkspaceIds;
     const uid = currentUserId || 'default';
@@ -566,6 +582,91 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
       localStorage.setItem('pulsechat_blocked_workspaces_' + uid, JSON.stringify(blockedWorkspaceIds));
     } catch (e) {}
   }, [blockedWorkspaceIds, currentUserId]);
+
+  // Robust check to drop or filter messages belonging to blocked channels, senders, or DM chats
+  const isMessageBlocked = useCallback(
+    (msg: Partial<Message> | null | undefined, myId?: string): boolean => {
+      if (!msg) return false;
+      const currentMyId = myId || currentUserIdRef.current;
+
+      // Messages sent by myself are never blocked for me
+      if (msg.senderId && currentMyId && msg.senderId === currentMyId) {
+        return false;
+      }
+
+      // 1. Channel Block Check
+      if (msg.conversationType === 'channel' && msg.conversationId) {
+        if (blockedChannelIdsRef.current.includes(msg.conversationId)) {
+          return true;
+        }
+        const chan = channelsRef.current.find((c) => c.id === msg.conversationId);
+        if (chan && blockedWorkspaceIdsRef.current.includes(chan.workspaceId)) {
+          return true;
+        }
+      }
+
+      // 2. Direct Message Block Check
+      if (msg.conversationType === 'dm') {
+        // Conversation ID itself is explicitly blocked
+        if (
+          msg.conversationId &&
+          (blockedChannelIdsRef.current.includes(msg.conversationId) ||
+            blockedUserIdsRef.current.includes(msg.conversationId))
+        ) {
+          return true;
+        }
+
+        // Check if other participant in the DM is blocked
+        const matchingDM = dmsRef.current.find(
+          (d) =>
+            d.id === msg.conversationId ||
+            (!d.isGroup &&
+              Array.isArray(d.participantIds) &&
+              currentMyId &&
+              msg.senderId &&
+              d.participantIds.includes(currentMyId) &&
+              d.participantIds.includes(msg.senderId))
+        );
+
+        if (matchingDM && !matchingDM.isGroup && Array.isArray(matchingDM.participantIds)) {
+          const otherPartId = matchingDM.participantIds.find((id) => id !== currentMyId);
+          if (otherPartId && blockedUserIdsRef.current.includes(otherPartId)) {
+            return true;
+          }
+        }
+
+        // Check canonical DM ID pattern with any blocked user
+        if (currentMyId) {
+          for (const blockedUid of blockedUserIdsRef.current) {
+            const canonId = getCanonicalDMId(blockedUid, currentMyId);
+            if (msg.conversationId === canonId) {
+              return true;
+            }
+          }
+        }
+      }
+
+      // 3. Sender Block Check (by direct user ID, email, or username)
+      if (msg.senderId) {
+        if (blockedUserIdsRef.current.includes(msg.senderId)) {
+          return true;
+        }
+        const senderObj = usersRef.current.find(
+          (u) =>
+            u.id === msg.senderId ||
+            (u.email && u.email.toLowerCase() === msg.senderId?.toLowerCase()) ||
+            (u.username && u.username.toLowerCase() === msg.senderId?.toLowerCase())
+        );
+        if (senderObj) {
+          if (blockedUserIdsRef.current.includes(senderObj.id)) return true;
+          if (senderObj.email && blockedUserIdsRef.current.includes(senderObj.email.toLowerCase())) return true;
+        }
+      }
+
+      return false;
+    },
+    []
+  );
 
   useEffect(() => { usersRef.current = users; }, [users]);
   useEffect(() => { channelsRef.current = channels; }, [channels]);
@@ -1059,14 +1160,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
-        // 5. Fetch Messages for active view
+        // 5. Fetch Messages for active view (drop messages from blocked senders/channels)
         const remoteMsgs = await fetchMessagesFromSupabase(activeView.type, activeView.id);
         if (isMounted && remoteMsgs.length > 0) {
-          setMessages((prev) => {
-            const map = new Map(prev.map((m) => [m.id, m]));
-            remoteMsgs.forEach((m) => map.set(m.id, m));
-            return Array.from(map.values());
-          });
+          const filteredRemote = remoteMsgs.filter((m) => !isMessageBlocked(m, uid));
+          if (filteredRemote.length > 0) {
+            setMessages((prev) => {
+              const map = new Map(prev.map((m) => [m.id, m]));
+              filteredRemote.forEach((m) => map.set(m.id, m));
+              return Array.from(map.values());
+            });
+          }
         }
       } catch (err) {
         console.warn('Initial Supabase sync error:', err);
@@ -1085,6 +1189,32 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { type, payload } = event.data || {};
           if (type === 'new_message' && payload) {
             handleIncomingMessage(payload);
+          } else if (type === 'block_sync' && payload) {
+            if (payload.blockType === 'user') {
+              setBlockedUserIds((prev) => {
+                const next = payload.isBlocked
+                  ? Array.from(new Set([...prev, payload.id]))
+                  : prev.filter((id) => id !== payload.id);
+                blockedUserIdsRef.current = next;
+                return next;
+              });
+            } else if (payload.blockType === 'channel') {
+              setBlockedChannelIds((prev) => {
+                const next = payload.isBlocked
+                  ? Array.from(new Set([...prev, payload.id]))
+                  : prev.filter((id) => id !== payload.id);
+                blockedChannelIdsRef.current = next;
+                return next;
+              });
+            } else if (payload.blockType === 'workspace') {
+              setBlockedWorkspaceIds((prev) => {
+                const next = payload.isBlocked
+                  ? Array.from(new Set([...prev, payload.id]))
+                  : prev.filter((id) => id !== payload.id);
+                blockedWorkspaceIdsRef.current = next;
+                return next;
+              });
+            }
           } else if (type === 'update_message' && payload) {
             handleUpdateMessage(payload);
           } else if (type === 'delete_message' && payload?.id) {
@@ -1188,8 +1318,8 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const handleIncomingMessage = (incomingMsg: Message) => {
       if (!isMounted || !incomingMsg?.id) return;
 
-      // WhatsApp Block check: drop incoming messages from blocked users
-      if (incomingMsg.senderId && blockedUserIdsRef.current.includes(incomingMsg.senderId)) {
+      // WhatsApp / Telegram Block check: drop incoming messages from blocked chats or blocked users
+      if (isMessageBlocked(incomingMsg, currentUserIdRef.current)) {
         return;
       }
 
@@ -1392,6 +1522,10 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         (myId && targetId === myId.toLowerCase()) ||
         (myEmail && (targetId === myEmail || targetEmail === myEmail));
 
+      // Drop invite if sender or target channel is blocked
+      if (inv.senderId && blockedUserIdsRef.current.includes(inv.senderId)) return;
+      if (inv.channelId && blockedChannelIdsRef.current.includes(inv.channelId)) return;
+
       if (isForMe && inv.senderId !== myId) {
         setInvites((prev) => [inv, ...prev.filter((i) => i.id !== inv.id)]);
         soundFX.playMessageReceived();
@@ -1542,6 +1676,35 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 : m
             )
           );
+        }
+      })
+      .on('broadcast', { event: 'block_sync' }, (payload) => {
+        const data = payload?.payload;
+        if (!data || !data.id) return;
+        if (data.blockType === 'user') {
+          setBlockedUserIds((prev) => {
+            const next = data.isBlocked
+              ? Array.from(new Set([...prev, data.id]))
+              : prev.filter((id) => id !== data.id);
+            blockedUserIdsRef.current = next;
+            return next;
+          });
+        } else if (data.blockType === 'channel') {
+          setBlockedChannelIds((prev) => {
+            const next = data.isBlocked
+              ? Array.from(new Set([...prev, data.id]))
+              : prev.filter((id) => id !== data.id);
+            blockedChannelIdsRef.current = next;
+            return next;
+          });
+        } else if (data.blockType === 'workspace') {
+          setBlockedWorkspaceIds((prev) => {
+            const next = data.isBlocked
+              ? Array.from(new Set([...prev, data.id]))
+              : prev.filter((id) => id !== data.id);
+            blockedWorkspaceIdsRef.current = next;
+            return next;
+          });
         }
       })
       .on(
@@ -1889,10 +2052,11 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const remoteMsgs = await fetchMessagesFromSupabase(activeView.type, convIds);
         if (isMounted && remoteMsgs.length > 0) {
+          const allowedRemote = remoteMsgs.filter((m) => !isMessageBlocked(m, currentUserIdRef.current));
           setMessages((prev) => {
             const map = new Map(prev.map((m) => [m.id, m]));
             let hasChanges = false;
-            remoteMsgs.forEach((m) => {
+            allowedRemote.forEach((m) => {
               const normalizedM = convIds.includes(m.conversationId)
                 ? { ...m, conversationId: activeView.id }
                 : m;
@@ -1970,8 +2134,22 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
               remoteDMs.forEach((d) => {
                 const existing = map.get(d.id);
                 const isStarred = starredDMs.has(d.id) || (existing ? existing.isStarred : Boolean(d.isStarred));
-                if (!existing || existing.lastActivity !== d.lastActivity || existing.unreadCount !== d.unreadCount || existing.isStarred !== isStarred) {
-                  map.set(d.id, { ...existing, ...d, isStarred });
+                const otherUid = !d.isGroup && Array.isArray(d.participantIds)
+                  ? d.participantIds.find((id) => id !== currentUserId)
+                  : null;
+                const isBlockedDM = Boolean(
+                  (otherUid && (blockedUserIdsRef.current.includes(otherUid) || isUserBlocked(otherUid))) ||
+                  blockedChannelIdsRef.current.includes(d.id)
+                );
+                const effectiveUnread = isBlockedDM ? 0 : d.unreadCount;
+
+                if (
+                  !existing ||
+                  existing.lastActivity !== d.lastActivity ||
+                  existing.unreadCount !== effectiveUnread ||
+                  existing.isStarred !== isStarred
+                ) {
+                  map.set(d.id, { ...existing, ...d, unreadCount: effectiveUnread, isStarred });
                   changed = true;
                 }
               });
@@ -2713,48 +2891,176 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const blockUser = useCallback((userIdToBlock: string) => {
     if (!userIdToBlock || userIdToBlock === currentUserId) return;
+    const targetUser = users.find(
+      (u) =>
+        u.id === userIdToBlock ||
+        (u.email && u.email.toLowerCase() === userIdToBlock.toLowerCase()) ||
+        (u.username && u.username.toLowerCase() === userIdToBlock.toLowerCase())
+    );
+    const resolvedId = targetUser?.id || userIdToBlock;
+    const targetName = targetUser?.name || 'Contact';
+
     setBlockedUserIds((prev) => {
-      if (prev.includes(userIdToBlock)) return prev;
-      return [...prev, userIdToBlock];
+      const next = prev.includes(resolvedId) ? prev : [...prev, resolvedId];
+      blockedUserIdsRef.current = next;
+      const uid = currentUserId || 'default';
+      try {
+        localStorage.setItem('pulsechat_blocked_users_' + uid, JSON.stringify(next));
+      } catch (e) {}
+      return next;
     });
-    const targetUser = users.find((u) => u.id === userIdToBlock);
-    const targetName = targetUser?.name || 'User';
+
+    // Mute/clear unread counts for DM with this user
+    setDms((prev) =>
+      prev.map((d) =>
+        !d.isGroup && d.participantIds?.includes(resolvedId)
+          ? { ...d, unreadCount: 0 }
+          : d
+      )
+    );
+
+    // Broadcast block event over BroadcastChannel and Supabase Realtime
+    try {
+      localBroadcastRef.current?.postMessage({
+        type: 'block_sync',
+        payload: { blockType: 'user', id: resolvedId, isBlocked: true },
+      });
+      if (isSupabaseConfigured && realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'block_sync',
+          payload: { blockType: 'user', id: resolvedId, isBlocked: true },
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
     soundFX.play('chime');
     addToast(`${targetName} has been blocked. They cannot message you.`, 'info');
-  }, [currentUserId, users, addToast]);
+  }, [currentUserId, users, isSupabaseConfigured, addToast]);
 
   const unblockUser = useCallback((userIdToUnblock: string) => {
     if (!userIdToUnblock) return;
-    setBlockedUserIds((prev) => prev.filter((id) => id !== userIdToUnblock));
-    const targetUser = users.find((u) => u.id === userIdToUnblock);
-    const targetName = targetUser?.name || 'User';
+    const targetUser = users.find(
+      (u) =>
+        u.id === userIdToUnblock ||
+        (u.email && u.email.toLowerCase() === userIdToUnblock.toLowerCase()) ||
+        (u.username && u.username.toLowerCase() === userIdToUnblock.toLowerCase())
+    );
+    const resolvedId = targetUser?.id || userIdToUnblock;
+    const targetName = targetUser?.name || 'Contact';
+
+    setBlockedUserIds((prev) => {
+      const next = prev.filter((id) => id !== resolvedId && id !== userIdToUnblock);
+      blockedUserIdsRef.current = next;
+      const uid = currentUserId || 'default';
+      try {
+        localStorage.setItem('pulsechat_blocked_users_' + uid, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    try {
+      localBroadcastRef.current?.postMessage({
+        type: 'block_sync',
+        payload: { blockType: 'user', id: resolvedId, isBlocked: false },
+      });
+      if (isSupabaseConfigured && realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'block_sync',
+          payload: { blockType: 'user', id: resolvedId, isBlocked: false },
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
     addToast(`${targetName} has been unblocked.`, 'success');
-  }, [users, addToast]);
+  }, [users, currentUserId, isSupabaseConfigured, addToast]);
 
   const isUserBlocked = useCallback((userIdToCheck: string) => {
     if (!userIdToCheck) return false;
-    return blockedUserIds.includes(userIdToCheck);
-  }, [blockedUserIds]);
+    if (blockedUserIds.includes(userIdToCheck)) return true;
+    const target = users.find(
+      (u) =>
+        u.id === userIdToCheck ||
+        (u.email && u.email.toLowerCase() === userIdToCheck.toLowerCase()) ||
+        (u.username && u.username.toLowerCase() === userIdToCheck.toLowerCase())
+    );
+    if (target) {
+      if (blockedUserIds.includes(target.id)) return true;
+      if (target.email && blockedUserIds.includes(target.email.toLowerCase())) return true;
+    }
+    return false;
+  }, [blockedUserIds, users]);
 
   const blockChannel = useCallback((channelIdToBlock: string) => {
     if (!channelIdToBlock) return;
-    setBlockedChannelIds((prev) => {
-      if (prev.includes(channelIdToBlock)) return prev;
-      return [...prev, channelIdToBlock];
-    });
     const targetChannel = channels.find((c) => c.id === channelIdToBlock);
     const targetName = targetChannel?.name || 'Channel';
+
+    setBlockedChannelIds((prev) => {
+      const next = prev.includes(channelIdToBlock) ? prev : [...prev, channelIdToBlock];
+      blockedChannelIdsRef.current = next;
+      const uid = currentUserId || 'default';
+      try {
+        localStorage.setItem('pulsechat_blocked_channels_' + uid, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    // Clear unread count for this channel
+    setChannels((prev) =>
+      prev.map((c) => (c.id === channelIdToBlock ? { ...c, unreadCount: 0 } : c))
+    );
+
+    try {
+      localBroadcastRef.current?.postMessage({
+        type: 'block_sync',
+        payload: { blockType: 'channel', id: channelIdToBlock, isBlocked: true },
+      });
+      if (isSupabaseConfigured && realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'block_sync',
+          payload: { blockType: 'channel', id: channelIdToBlock, isBlocked: true },
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
     soundFX.play('chime');
     addToast(`#${targetName} has been blocked. Messaging and alerts are restricted.`, 'info');
-  }, [channels, addToast]);
+  }, [channels, currentUserId, isSupabaseConfigured, addToast]);
 
   const unblockChannel = useCallback((channelIdToUnblock: string) => {
     if (!channelIdToUnblock) return;
-    setBlockedChannelIds((prev) => prev.filter((id) => id !== channelIdToUnblock));
     const targetChannel = channels.find((c) => c.id === channelIdToUnblock);
     const targetName = targetChannel?.name || 'Channel';
+
+    setBlockedChannelIds((prev) => {
+      const next = prev.filter((id) => id !== channelIdToUnblock);
+      blockedChannelIdsRef.current = next;
+      const uid = currentUserId || 'default';
+      try {
+        localStorage.setItem('pulsechat_blocked_channels_' + uid, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    try {
+      localBroadcastRef.current?.postMessage({
+        type: 'block_sync',
+        payload: { blockType: 'channel', id: channelIdToUnblock, isBlocked: false },
+      });
+      if (isSupabaseConfigured && realtimeChannelRef.current) {
+        realtimeChannelRef.current.send({
+          type: 'broadcast',
+          event: 'block_sync',
+          payload: { blockType: 'channel', id: channelIdToUnblock, isBlocked: false },
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
     addToast(`#${targetName} has been unblocked.`, 'success');
-  }, [channels, addToast]);
+  }, [channels, currentUserId, isSupabaseConfigured, addToast]);
 
   const isChannelBlocked = useCallback((channelIdToCheck: string) => {
     if (!channelIdToCheck) return false;
@@ -2764,22 +3070,51 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const blockWorkspace = useCallback((workspaceIdToBlock: string) => {
     if (!workspaceIdToBlock) return;
     setBlockedWorkspaceIds((prev) => {
-      if (prev.includes(workspaceIdToBlock)) return prev;
-      return [...prev, workspaceIdToBlock];
+      const next = prev.includes(workspaceIdToBlock) ? prev : [...prev, workspaceIdToBlock];
+      blockedWorkspaceIdsRef.current = next;
+      const uid = currentUserId || 'default';
+      try {
+        localStorage.setItem('pulsechat_blocked_workspaces_' + uid, JSON.stringify(next));
+      } catch (e) {}
+      return next;
     });
     const targetWorkspace = workspaces.find((w) => w.id === workspaceIdToBlock);
     const targetName = targetWorkspace?.name || 'Workspace';
+
+    try {
+      localBroadcastRef.current?.postMessage({
+        type: 'block_sync',
+        payload: { blockType: 'workspace', id: workspaceIdToBlock, isBlocked: true },
+      });
+    } catch (e) {}
+
     soundFX.play('chime');
     addToast(`"${targetName}" workspace has been blocked. Background notifications are silenced.`, 'info');
-  }, [workspaces, addToast]);
+  }, [workspaces, currentUserId, addToast]);
 
   const unblockWorkspace = useCallback((workspaceIdToUnblock: string) => {
     if (!workspaceIdToUnblock) return;
-    setBlockedWorkspaceIds((prev) => prev.filter((id) => id !== workspaceIdToUnblock));
+    setBlockedWorkspaceIds((prev) => {
+      const next = prev.filter((id) => id !== workspaceIdToUnblock);
+      blockedWorkspaceIdsRef.current = next;
+      const uid = currentUserId || 'default';
+      try {
+        localStorage.setItem('pulsechat_blocked_workspaces_' + uid, JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
     const targetWorkspace = workspaces.find((w) => w.id === workspaceIdToUnblock);
     const targetName = targetWorkspace?.name || 'Workspace';
+
+    try {
+      localBroadcastRef.current?.postMessage({
+        type: 'block_sync',
+        payload: { blockType: 'workspace', id: workspaceIdToUnblock, isBlocked: false },
+      });
+    } catch (e) {}
+
     addToast(`"${targetName}" workspace has been unblocked.`, 'success');
-  }, [workspaces, addToast]);
+  }, [workspaces, currentUserId, addToast]);
 
   const isWorkspaceBlocked = useCallback((workspaceIdToCheck: string) => {
     if (!workspaceIdToCheck) return false;
@@ -3474,17 +3809,33 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const activeConversationMessages = React.useMemo(() => {
     let dmParticipantIds: string[] | null = null;
     let canonicalDMId: string | null = null;
+    let dmOtherUserId: string | null = null;
+
     if (activeView.type === 'dm') {
       const activeDM = dms.find((d) => d.id === activeView.id);
       if (activeDM && !activeDM.isGroup && activeDM.participantIds?.length === 2) {
         dmParticipantIds = activeDM.participantIds;
         canonicalDMId = getCanonicalDMId(activeDM.participantIds[0], activeDM.participantIds[1]);
+        dmOtherUserId = activeDM.participantIds.find((id) => id !== currentUserId) || null;
       }
     }
+
+    const isCurrentChanBlocked = activeView.type === 'channel' && isChannelBlocked(activeView.id);
+    const isCurrentDMPartnerBlocked = Boolean(dmOtherUserId && isUserBlocked(dmOtherUserId));
 
     const raw = messages.filter((m) => {
       if (m.parentId) return false;
       if (m.hiddenForUserIds?.includes(currentUserId)) return false;
+
+      // Drop messages from other participants if the contact, channel, or DM is blocked
+      if (m.senderId !== currentUserId) {
+        if (isUserBlocked(m.senderId)) return false;
+        if (isCurrentChanBlocked) return false;
+        if (isCurrentDMPartnerBlocked) return false;
+        if (m.conversationType === 'channel' && isChannelBlocked(m.conversationId)) return false;
+        if (m.conversationType === 'dm' && isChannelBlocked(m.conversationId)) return false;
+      }
+
       if (activeView.type === 'channel') {
         return m.conversationType === 'channel' && m.conversationId === activeView.id;
       } else {
@@ -3525,7 +3876,18 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         translatedLanguage: selectedLanguage,
       };
     });
-  }, [messages, activeView, dms, selectedLanguage, currentUserId, translationTick]);
+  }, [
+    messages,
+    activeView,
+    dms,
+    blockedUserIds,
+    blockedChannelIds,
+    isUserBlocked,
+    isChannelBlocked,
+    selectedLanguage,
+    currentUserId,
+    translationTick,
+  ]);
 
   const activeThreadMessage = React.useMemo(() => {
     if (!activeThreadMessageId) return null;
@@ -3592,14 +3954,19 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
     (content: string, attachments?: Attachment[]) => {
       if (!content.trim() && (!attachments || attachments.length === 0)) return;
 
-      // WhatsApp Block Check: prevent sending to a blocked contact
+      // Block Check: prevent sending in a blocked chat or to a blocked contact
       if (activeView.type === 'dm') {
         const activeDM = dms.find((d) => d.id === activeView.id);
         const otherId = activeDM && !activeDM.isGroup
           ? activeDM.participantIds.find((id) => id !== currentUserId)
           : null;
-        if (otherId && blockedUserIds.includes(otherId)) {
+        if (otherId && (blockedUserIds.includes(otherId) || isUserBlocked(otherId))) {
           addToast('You cannot send messages to a blocked contact. Unblock them first.', 'warning');
+          return;
+        }
+      } else if (activeView.type === 'channel') {
+        if (blockedChannelIds.includes(activeView.id) || isChannelBlocked(activeView.id)) {
+          addToast('This channel is blocked. Unblock it first to send messages.', 'warning');
           return;
         }
       }
@@ -3694,7 +4061,17 @@ export const ChatProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
       }
     },
-    [activeView, currentUserId, activeWorkspaceId, dms, blockedUserIds, addToast]
+    [
+      activeView,
+      currentUserId,
+      activeWorkspaceId,
+      dms,
+      blockedUserIds,
+      blockedChannelIds,
+      isUserBlocked,
+      isChannelBlocked,
+      addToast,
+    ]
   );
 
   // Edit Message

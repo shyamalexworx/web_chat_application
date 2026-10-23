@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useChat } from '../../context/ChatContext';
 import { supabaseResetPassword, supabaseSignInWithOAuth, isSupabaseConfigured } from '../../lib/supabase';
 import { Eye, EyeOff, ArrowLeft, CheckCircle2, UserPlus, Trash2, ChevronRight, X, ExternalLink } from 'lucide-react';
@@ -37,7 +37,7 @@ export const AuthPage: React.FC = () => {
   const [customEmail, setCustomEmail] = useState('');
   const [customName, setCustomName] = useState('');
 
-  const refreshSavedAccounts = () => {
+  const refreshSavedAccounts = useCallback(() => {
     const map = new Map<string, SavedAccount>();
 
     // 1. Saved accounts from localStorage
@@ -83,11 +83,11 @@ export const AuthPage: React.FC = () => {
     });
 
     setSavedAccounts(Array.from(map.values()));
-  };
+  }, [users]);
 
   useEffect(() => {
     refreshSavedAccounts();
-  }, [users]);
+  }, [refreshSavedAccounts]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

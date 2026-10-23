@@ -67,15 +67,13 @@ export const MessageComposer: React.FC = () => {
   // Fallback to active workspace channel so composer NEVER vanishes during transitions or on mobile
   const currentChannel = activeChannel || (!activeDM ? (channels.find((c) => c.workspaceId === activeWorkspace?.id) || channels[0] || null) : null);
 
-  const dmPartner = activeDM && !activeDM.isGroup
-    ? users.find((u) => {
-        const parts = Array.isArray(activeDM.participantIds) ? activeDM.participantIds : [];
-        const otherUserId = parts.find((id) => id !== currentUser.id) || parts[0];
-        return u.id === otherUserId;
-      })
+  const dmParts = activeDM && Array.isArray(activeDM.participantIds) ? activeDM.participantIds : [];
+  const otherUserId = activeDM && !activeDM.isGroup
+    ? dmParts.find((id) => id !== currentUser.id) || dmParts[0]
     : null;
+  const dmPartner = otherUserId ? users.find((u) => u.id === otherUserId) || null : null;
 
-  const isOtherUserBlocked = dmPartner ? isUserBlocked(dmPartner.id) : false;
+  const isOtherUserBlocked = Boolean(otherUserId && isUserBlocked(otherUserId));
   const isCurrentChannelBlocked = currentChannel ? isChannelBlocked(currentChannel.id) : false;
 
   const placeholderText = currentChannel
@@ -89,6 +87,10 @@ export const MessageComposer: React.FC = () => {
     if (!content.trim() && attachments.length === 0) return;
     if (isCurrentChannelBlocked) {
       addToast('This channel is blocked. Unblock it to send messages.', 'error');
+      return;
+    }
+    if (isOtherUserBlocked) {
+      addToast('This contact is blocked. Unblock them to send messages.', 'error');
       return;
     }
     sendMessage(content, attachments);
@@ -248,25 +250,37 @@ export const MessageComposer: React.FC = () => {
       const secs = actualDuration % 60;
       const formattedDuration = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 
-      let audioUrl = res.url;
+      // Start with universal Base64 audio so it is IMMEDIATELY playable on ANY device (phone, laptop, tablet)
+      let audioUrl = res.base64 || res.url;
+
+      // Determine proper file extension matching actual recorded format
+      const mime = res.mimeType || res.blob.type || '';
+      let fileExt = 'webm';
+      if (mime.includes('mp4')) fileExt = 'mp4';
+      else if (mime.includes('aac')) fileExt = 'aac';
+      else if (mime.includes('ogg')) fileExt = 'ogg';
+      else if (mime.includes('wav')) fileExt = 'wav';
+
+      const fileName = `voice_${Date.now()}.${fileExt}`;
+
       if (isSupabaseConfigured) {
         try {
           const uploaded = await uploadChatMedia(
             res.blob,
-            `voice_${Date.now()}.webm`,
+            fileName,
             'voice'
           );
-          if (uploaded) {
+          if (uploaded && uploaded.url) {
             audioUrl = uploaded.url;
           }
         } catch (err) {
-          console.warn('Cloud voice upload failed, using local audio:', err);
+          console.warn('Cloud voice upload notice (using portable audio):', err);
         }
       }
 
       const voiceAtt: Attachment = {
         id: 'voice-' + Date.now(),
-        name: `voice_message_${formattedDuration}.wav`,
+        name: `voice_message_${formattedDuration}.${fileExt}`,
         size: `${Math.max(12, Math.round(res.blob.size / 1024))} KB`,
         type: 'audio',
         url: audioUrl,
@@ -441,7 +455,7 @@ export const MessageComposer: React.FC = () => {
           </div>
           <button
             type="button"
-            onClick={() => dmPartner && unblockUser(dmPartner.id)}
+            onClick={() => (otherUserId ? unblockUser(otherUserId) : dmPartner && unblockUser(dmPartner.id))}
             className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 font-semibold rounded-lg transition-colors cursor-pointer"
           >
             Unblock
